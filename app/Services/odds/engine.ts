@@ -4,9 +4,8 @@ import type { SportRow } from '../ingest/resolve'
 import type { FeedEvent } from './provider'
 import type { BookAdapter, BookContext, Subscription } from './books/adapter'
 import { bucketFor, cadenceFor, oddsConfig, sportEnabled } from '../../../config/odds'
-import { ingestOdds } from '../ingest/odds'
+import { ingestOdds, nativeFirstOddsProvider } from '../ingest/odds'
 import { adaptersForSport } from './books/adapter'
-import { NativeProvider } from './native'
 
 /**
  * The realtime price loop.
@@ -120,6 +119,8 @@ export interface EngineOptions {
   settings?: OddsSettings
   /** Overridable for tests; defaults to the real clock. */
   now?: () => number
+  /** A configured paid fallback can schedule leagues no native adapter covers. */
+  fallbackAvailable?: boolean
 }
 
 export interface PassResult {
@@ -227,7 +228,7 @@ export class OddsEngine {
       // A league no adapter covers cannot be polled natively, whatever its
       // cadence says. Scheduling it anyway would burn a pass discovering
       // there is nothing to ask.
-      if (adaptersForSport(this.options.adapters, sport.slug).length === 0)
+      if (adaptersForSport(this.options.adapters, sport.slug).length === 0 && !this.options.fallbackAvailable)
         continue
 
       const intervalMs = intervalForSport(sport.slug, events, now, this.settings)
@@ -273,7 +274,7 @@ export class OddsEngine {
     for (const schedule of due)
       schedule.lastPolledAt = now
 
-    const provider = new NativeProvider(this.options.adapters, sports, this.options.contextFor)
+    const provider = nativeFirstOddsProvider(sports, this.options.adapters, this.options.contextFor)
 
     try {
       const result = await ingestOdds(this.options.db, provider)

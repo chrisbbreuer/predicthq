@@ -61,7 +61,8 @@ export default function (cli: CLI) {
       // the process down before the logger flushes, so the operator gets a
       // bare exit code and no explanation — which is precisely the failure
       // this branch exists to prevent.
-      if (adapters.length === 0) {
+      const fallbackAvailable = Boolean(process.env.ODDS_API_KEY)
+      if (adapters.length === 0 && !fallbackAvailable) {
         log.error('No book adapters are active, so there is nothing to poll.')
 
         const missing = booksWithoutAdapters()
@@ -80,6 +81,7 @@ export default function (cli: CLI) {
         sports,
         contextFor: (adapter, tracker) => bookContextFor(adapter, tracker),
         loadEvents: () => loadScheduledEvents(db),
+        fallbackAvailable,
         tickMs: Number(options.tick) || 250,
         onChange: ({ sports: polled, changed }) => {
           log.info(`${changed} price${changed === 1 ? '' : 's'} moved across ${polled.join(', ')}`)

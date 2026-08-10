@@ -149,6 +149,50 @@ describe('dueSports', () => {
   })
 })
 
+describe('fallback scheduling', () => {
+  const sport = {
+    id: 1,
+    slug: 'nfl',
+    title: 'NFL',
+    grouping: 'Football',
+    espn_path: 'football/nfl',
+    odds_api_key: 'americanfootball_nfl',
+    non_sporting: 0,
+  }
+
+  it('schedules a league with no native adapter when the paid backup exists', async () => {
+    const engine = new OddsEngine({
+      db: {} as any,
+      adapters: [],
+      sports: [sport],
+      contextFor: () => ({}) as any,
+      loadEvents: async () => [event('nfl', 2)],
+      fallbackAvailable: true,
+      now: () => NOW,
+    })
+
+    await engine.refreshSchedule()
+
+    expect(engine.snapshot().map(schedule => schedule.slug)).toEqual(['nfl'])
+  })
+
+  it('does not schedule an unreachable league without any provider', async () => {
+    const engine = new OddsEngine({
+      db: {} as any,
+      adapters: [],
+      sports: [sport],
+      contextFor: () => ({}) as any,
+      loadEvents: async () => [event('nfl', 2)],
+      fallbackAvailable: false,
+      now: () => NOW,
+    })
+
+    await engine.refreshSchedule()
+
+    expect(engine.snapshot()).toEqual([])
+  })
+})
+
 describe('push subscriptions', () => {
   function adapter(slug: string, sports: string[], pushes = false) {
     return {

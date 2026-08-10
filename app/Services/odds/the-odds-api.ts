@@ -1,6 +1,7 @@
 import type { SportRow } from '../ingest/resolve'
 import type { IngestRunTracker } from '../ingest/run'
 import type { FeedBook, FeedEvent, FeedMarket, FeedOutcome, OddsProvider } from './provider'
+import process from 'node:process'
 import { norm, toIso } from '../../Support/keys'
 import { fetchWithRetry } from '../ingest/run'
 
@@ -24,17 +25,18 @@ import { fetchWithRetry } from '../ingest/run'
  * swallowed.
  *
  * ### Quota
- * The free tier is 500 requests a month and each region-and-market
- * combination is billed separately, so requests are batched per sport
- * across all regions and markets in one call — the API supports this, and
- * doing otherwise multiplies the bill by roughly fifteen for identical
- * data.
+ * Each region-and-market combination consumes one quota credit. When native
+ * adapters exist we ask for those exact bookmakers, which The Odds API bills
+ * as one region per ten books; that makes the backup carry the same books and
+ * featured markets without paying for unrelated regional coverage. Requests
+ * are also cached per league so a one-second native outage cannot spend paid
+ * quota once a second.
  */
 
 const BASE = 'https://api.the-odds-api.com/v4'
 
 /** Bet types we request. Ordered by how much they are actually used. */
-const MARKETS = ['h2h', 'spreads', 'totals'] as const
+export const FEATURED_MARKETS = ['h2h', 'spreads', 'totals'] as const
 
 /**
  * Regions to pull.
@@ -43,19 +45,43 @@ const MARKETS = ['h2h', 'spreads', 'totals'] as const
  * — costs nothing extra beyond the single per-request charge, because the
  * API bills per request rather than per book returned.
  */
-const REGIONS = 'us,us2,uk,eu,au'
+const DEFAULT_REGIONS = 'us,uk,eu'
+const DEFAULT_MIN_REQUEST_INTERVAL_MS = 5 * 60 * 1000
+const MIN_SAFE_REQUEST_INTERVAL_MS = 60 * 1000
+
+interface CachedSport {
+  attemptedAt: number
+  events: FeedEvent[]
+}
+
+/** Shared by every provider instance in this process, including cron and API calls. */
+const fallbackCache = new Map<string, CachedSport>()
+
+export interface TheOddsApiOptions {
+  /** Native bookmaker slugs to mirror for one league. Empty uses regional coverage. */
+  bookmakersForSport?: (sportSlug: string) => string[]
+  /** Paid-feed floor; native polling remains on its own faster cadence. */
+  minRequestIntervalMs?: number
+  now?: () => number
+  request?: typeof fetchWithRetry
+}
 
 interface ApiOutcome {
   name?: string
   price?: number
   point?: number
   description?: string
+  link?: string | null
+  sid?: string | null
+  bet_limit?: number
 }
 
 interface ApiMarket {
   key?: string
   last_update?: string
   outcomes?: ApiOutcome[]
+  link?: string | null
+  sid?: string | null
 }
 
 interface ApiBookmaker {
@@ -63,6 +89,8 @@ interface ApiBookmaker {
   title?: string
   last_update?: string
   markets?: ApiMarket[]
+  link?: string | null
+  sid?: string | null
 }
 
 interface ApiEvent {
@@ -80,6 +108,7 @@ export class TheOddsApiProvider implements OddsProvider {
   constructor(
     private readonly apiKey: string,
     private readonly sports: SportRow[],
+    private readonly options: TheOddsApiOptions = {},
   ) {}
 
   async fetchEvents(tracker: IngestRunTracker): Promise<FeedEvent[]> {
@@ -89,17 +118,44 @@ export class TheOddsApiProvider implements OddsProvider {
       if (!sport.odds_api_key)
         continue
 
+      const bookmakers = [...new Set(this.options.bookmakersForSport?.(sport.slug) ?? [])]
+        .map(value => value.trim().toLowerCase())
+        .filter(Boolean)
+        .sort()
+      const selector = bookmakers.length > 0
+        ? `bookmakers=${encodeURIComponent(bookmakers.join(','))}`
+        : `regions=${encodeURIComponent(process.env.ODDS_API_REGIONS?.trim() || DEFAULT_REGIONS)}`
+      const cacheKey = `${sport.odds_api_key}:${selector}`
+      const now = this.options.now?.() ?? Date.now()
+      const cached = fallbackCache.get(cacheKey)
+      const configuredMinimum = Number(process.env.ODDS_FALLBACK_MIN_INTERVAL_MS)
+      const minimum = positiveMilliseconds(
+        this.options.minRequestIntervalMs ?? configuredMinimum,
+        DEFAULT_MIN_REQUEST_INTERVAL_MS,
+      )
+
+      if (cached && now - cached.attemptedAt < minimum) {
+        out.push(...cached.events)
+        continue
+      }
+
+      // Reserve the attempt before the request so two overlapping passes in
+      // one process cannot both decide the fallback is due.
+      fallbackCache.set(cacheKey, { attemptedAt: now, events: cached?.events ?? [] })
+
       const url = `${BASE}/sports/${sport.odds_api_key}/odds`
         + `?apiKey=${encodeURIComponent(this.apiKey)}`
-        + `&regions=${REGIONS}`
-        + `&markets=${MARKETS.join(',')}`
+        + `&${selector}`
+        + `&markets=${FEATURED_MARKETS.join(',')}`
         + `&oddsFormat=decimal`
+        + `&includeLinks=true&includeSids=true&includeBetLimits=true`
 
       tracker.requestCount++
-      const res = await fetchWithRetry(url, { timeoutMs: 15_000 })
+      const res = await (this.options.request ?? fetchWithRetry)(url, { timeoutMs: 15_000 })
 
       if (!res) {
         tracker.fail(`${sport.slug}: network failure`)
+        out.push(...(cached?.events ?? []))
         continue
       }
 
@@ -110,6 +166,7 @@ export class TheOddsApiProvider implements OddsProvider {
 
       if (!res.ok) {
         tracker.fail(`${sport.slug}: HTTP ${res.status}`)
+        out.push(...(cached?.events ?? []))
         continue
       }
 
@@ -119,17 +176,22 @@ export class TheOddsApiProvider implements OddsProvider {
       }
       catch {
         tracker.fail(`${sport.slug}: unparseable body`)
+        out.push(...(cached?.events ?? []))
         continue
       }
 
       if (!Array.isArray(payload))
         continue
 
+      const translatedEvents: FeedEvent[] = []
       for (const event of payload) {
-        const translated = translateEvent(event, sport.slug)
+        const translated = translateTheOddsApiEvent(event, sport.slug)
         if (translated)
-          out.push(translated)
+          translatedEvents.push(translated)
       }
+
+      fallbackCache.set(cacheKey, { attemptedAt: now, events: translatedEvents })
+      out.push(...translatedEvents)
     }
 
     return out
@@ -137,7 +199,7 @@ export class TheOddsApiProvider implements OddsProvider {
 }
 
 /** Translate one API event, or null when it is unusable. */
-function translateEvent(event: ApiEvent, sportSlug: string): FeedEvent | null {
+export function translateTheOddsApiEvent(event: ApiEvent, sportSlug: string): FeedEvent | null {
   const externalId = String(event.id ?? '')
   const homeTeam = String(event.home_team ?? '')
   const awayTeam = String(event.away_team ?? '')
@@ -154,7 +216,7 @@ function translateEvent(event: ApiEvent, sportSlug: string): FeedEvent | null {
 
     const markets: FeedMarket[] = []
     for (const market of book.markets ?? []) {
-      const translatedMarket = translateMarket(market, homeTeam, awayTeam)
+      const translatedMarket = translateMarket(market, homeTeam, awayTeam, String(book.link ?? ''))
       if (translatedMarket)
         markets.push(translatedMarket)
     }
@@ -185,9 +247,9 @@ function translateEvent(event: ApiEvent, sportSlug: string): FeedEvent | null {
  * rather than guessed at — a mis-sided price grades backwards, which is
  * worse than a missing one.
  */
-function translateMarket(market: ApiMarket, homeTeam: string, awayTeam: string): FeedMarket | null {
+function translateMarket(market: ApiMarket, homeTeam: string, awayTeam: string, eventLink: string): FeedMarket | null {
   const key = String(market.key ?? '')
-  if (!MARKETS.includes(key as typeof MARKETS[number]))
+  if (!FEATURED_MARKETS.includes(key as typeof FEATURED_MARKETS[number]))
     return null
 
   const home = norm(homeTeam)
@@ -227,7 +289,16 @@ function translateMarket(market: ApiMarket, homeTeam: string, awayTeam: string):
     if (side === 'home')
       homePoint = point
 
-    outcomes.push({ side, label: name, point, price })
+    const limitAmount = Number(outcome.bet_limit)
+    outcomes.push({
+      side,
+      label: name,
+      point,
+      price,
+      link: String(outcome.link ?? market.link ?? eventLink) || undefined,
+      sid: String(outcome.sid ?? '') || undefined,
+      limitAmount: Number.isFinite(limitAmount) && limitAmount >= 0 ? limitAmount : undefined,
+    })
   }
 
   if (outcomes.length === 0)
@@ -249,4 +320,13 @@ function translateMarket(market: ApiMarket, homeTeam: string, awayTeam: string):
     period: 'full_game',
     outcomes,
   }
+}
+
+function positiveMilliseconds(value: number | undefined, fallback: number): number {
+  return Number.isFinite(value) && Number(value) >= MIN_SAFE_REQUEST_INTERVAL_MS ? Number(value) : fallback
+}
+
+/** Test isolation for the process-scoped quota cache. */
+export function clearTheOddsApiCache(): void {
+  fallbackCache.clear()
 }

@@ -120,17 +120,16 @@ describe('enabledBooks', () => {
     process.env.ODDS_BOOKS_DISABLED = 'draftkings'
     const slugs = enabledBooks().map(b => b.slug)
     expect(slugs).not.toContain('draftkings')
-    expect(slugs).toContain('circa')
+    expect(slugs).toContain('pinnacle')
   })
 
   it('tolerates whitespace and casing in the kill switch', () => {
     // Set under pressure, in a hurry, probably on a phone.
-    process.env.ODDS_BOOKS_DISABLED = ' Pinnacle , DraftKings '
+    process.env.ODDS_BOOKS_DISABLED = ' Pinnacle '
     const slugs = enabledBooks().map(b => b.slug)
     expect(slugs).not.toContain('pinnacle')
-    expect(slugs).not.toContain('draftkings')
     // The books it did not name keep running.
-    expect(slugs).toContain('circa')
+    expect(slugs).toContain('draftkings')
   })
 
   it('every budgeted book names a real bookmaker slug', async () => {

@@ -141,8 +141,10 @@ const BOOKS: BookBudget[] = [
   // covers NBA and NHL where DraftKings had nothing, and it publishes stake
   // limits that almost no book does.
   { slug: 'pinnacle', enabled: true, transport: 'json', requestsPerSecond: 4, regions: ['eu'] },
-  { slug: 'circa', enabled: true, transport: 'json', requestsPerSecond: 2, regions: ['us'] },
-  { slug: 'betonlineag', enabled: true, transport: 'json', requestsPerSecond: 2, regions: ['us'] },
+  // Planned sharp-book adapters. They stay declared for their budgets and
+  // region metadata, but disabled until an adapter can actually serve them.
+  { slug: 'circa', enabled: false, transport: 'json', requestsPerSecond: 2, regions: ['us'] },
+  { slug: 'betonlineag', enabled: false, transport: 'json', requestsPerSecond: 2, regions: ['us'] },
 
   // US majors. Deep coverage of the four leagues plus college, and the
   // books our own users are most likely to hold an account with.

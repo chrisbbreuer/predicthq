@@ -1,10 +1,15 @@
 import type { Database } from '../../Support/db'
 import type { FeedEvent, OddsProvider } from '../odds/provider'
+import type { BookAdapter, BookContext } from '../odds/books/adapter'
 import type { CoverageWrite, PriceWrite } from './prices'
 import type { SportRow } from './resolve'
 import process from 'node:process'
 import { sportEnabled } from '../../../config/odds'
 import { SyntheticProvider } from '../odds/synthetic'
+import { activeAdapters } from '../odds/books'
+import { bookContextFor } from '../odds/context'
+import { CompositeProvider } from '../odds/composite'
+import { NativeProvider } from '../odds/native'
 import { TheOddsApiProvider } from '../odds/the-odds-api'
 import { loadBookmakerIndex, writeCoverage, writePrices } from './prices'
 import { loadSports, resolveEvent, resolveMarket, resolveSelection, resolveTeam } from './resolve'
@@ -41,8 +46,10 @@ export async function pollableSports(db: Database): Promise<SportRow[]> {
 }
 
 /**
- * Pick the active provider: the real feed when `ODDS_API_KEY` is set,
- * otherwise the simulator over real fixtures.
+ * One provider graph for every runtime path: native books first, paid feed
+ * only for leagues that produced no native events. The scheduler and the
+ * realtime watcher both call this logic, so one cannot quietly invert the
+ * priority of the other.
  *
  * The fallback is recorded loudly in the run row rather than hidden. A
  * synthetic board that looks live is exactly how the previous system
@@ -55,15 +62,51 @@ export async function pollableSports(db: Database): Promise<SportRow[]> {
  */
 export async function resolveProvider(db: Database): Promise<OddsProvider> {
   const key = process.env.ODDS_API_KEY
-  if (!key)
-    return new SyntheticProvider(db)
+  const sports = await pollableSports(db)
+  const adapters = activeAdapters()
 
-  const sports = (await pollableSports(db)).filter(s => s.odds_api_key)
-  return new TheOddsApiProvider(key, sports)
+  if (adapters.length > 0 || key) {
+    return nativeFirstOddsProvider(
+      sports,
+      adapters,
+      (adapter, tracker) => bookContextFor(adapter, tracker),
+      key,
+    )
+  }
+
+  return new SyntheticProvider(db)
+}
+
+/** Build the native-first/fallback graph for a specific set of due leagues. */
+export function nativeFirstOddsProvider(
+  sports: SportRow[],
+  adapters: BookAdapter[],
+  contextFor: (adapter: BookAdapter, tracker: IngestRunTracker) => BookContext,
+  apiKey: string | undefined = process.env.ODDS_API_KEY,
+): OddsProvider {
+  const native = new NativeProvider(adapters, sports, contextFor)
+  if (!apiKey)
+    return native
+
+  return new CompositeProvider(native, sports, (missing) => {
+    const supported = missing.filter(sport => sport.odds_api_key)
+    if (supported.length === 0)
+      return null
+
+    return new TheOddsApiProvider(apiKey, supported, {
+      // Request the books whose direct adapters failed. This both mirrors
+      // native coverage and is cheaper than buying every regional book.
+      bookmakersForSport: sportSlug => adapters
+        .filter(adapter => adapter.sports.includes(sportSlug))
+        .map(adapter => adapter.slug),
+    })
+  })
 }
 
 export interface OddsIngestResult {
   provider: string
+  /** Leagues that produced no native events and invoked the paid backup. */
+  fallbackSports: string[]
   status: string
   events: number
   markets: number
@@ -185,11 +228,14 @@ export async function ingestOdds(db: Database, provider?: OddsProvider): Promise
     })
     tracker.rowsWritten = result.written
 
-    const summary = `${feed.length} events · ${markets} markets · ${result.written} prices (${result.changed} moved)`
+    const fallbackSports = active instanceof CompositeProvider ? active.fallbackSports() : []
+    const fallbackSummary = fallbackSports.length > 0 ? ` · fallback ${fallbackSports.join(', ')}` : ''
+    const summary = `${feed.length} events · ${markets} markets · ${result.written} prices (${result.changed} moved)${fallbackSummary}`
     const { status, errors } = await tracker.finish(summary)
 
     return {
       provider: active.name,
+      fallbackSports,
       status,
       events: feed.length,
       markets,
@@ -207,6 +253,7 @@ export async function ingestOdds(db: Database, provider?: OddsProvider): Promise
     const { status, errors } = await tracker.finish('failed')
     return {
       provider: active.name,
+      fallbackSports: active instanceof CompositeProvider ? active.fallbackSports() : [],
       status,
       events: feed.length,
       markets: 0,

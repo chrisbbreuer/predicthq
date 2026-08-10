@@ -230,6 +230,8 @@ describe('CompositeProvider', () => {
     expect(paid.calls()).toBe(1)
     expect(askedAbout).toEqual(['nfl'])
     expect(events).toHaveLength(1)
+    // Source switching must not change the provider id used downstream.
+    expect(events[0]!.externalId).toBe(mergeFeedEvents([event({ bookKey: 'pinnacle' })])[0]!.externalId)
   })
 
   it('only pays for the leagues that are actually missing', async () => {

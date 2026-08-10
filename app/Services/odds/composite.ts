@@ -1,6 +1,7 @@
 import type { SportRow } from '../ingest/resolve'
 import type { IngestRunTracker } from '../ingest/run'
 import type { FeedEvent, OddsProvider } from './provider'
+import { mergeFeedEvents } from './native'
 
 /**
  * Our own feed first, a paid one only for what it missed.
@@ -65,7 +66,11 @@ export class CompositeProvider implements OddsProvider {
       // does, letting it through would put two providers' prices on one
       // game under two different external ids — a duplicate card, which is
       // the exact failure the composite exists to avoid.
-      return [...events, ...filled.filter(event => !covered.has(event.sportSlug))]
+      // Canonicalize both sources to the native team/day id. Without this,
+      // a league that fell back on one pass and recovered natively on the
+      // next would present two provider ids for the same fixture and create
+      // a duplicate card.
+      return mergeFeedEvents([...events, ...filled.filter(event => !covered.has(event.sportSlug))])
     }
     catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
