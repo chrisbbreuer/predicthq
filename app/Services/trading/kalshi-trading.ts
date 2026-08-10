@@ -9,7 +9,21 @@ import type {
 import { createSign } from 'node:crypto'
 import { isAuthFailure, isRetryableStatus, VenueError } from './venue'
 
-const BASE = 'https://api.elections.kalshi.com/trade-api/v2'
+const BASE = process.env.KALSHI_API_BASE_URL || 'https://external-api.kalshi.com/trade-api/v2'
+
+interface KalshiOrder {
+  order_id: string
+  status?: string
+  side?: 'yes' | 'no'
+  outcome_side?: 'yes' | 'no'
+  fill_count_fp?: string
+  remaining_count_fp?: string
+  initial_count_fp?: string
+  taker_fill_cost_dollars?: string
+  maker_fill_cost_dollars?: string
+  yes_price_dollars?: string
+  no_price_dollars?: string
+}
 
 /**
  * Kalshi's authenticated trading API.
@@ -20,11 +34,12 @@ const BASE = 'https://api.elections.kalshi.com/trade-api/v2'
  * it wrong. Salt length must equal the digest length (32 for SHA-256);
  * Node's default is different, so it is set explicitly.
  *
- * Prices cross the wire in whole cents. Everything above this file works
- * in probabilities, so the conversion lives here and nowhere else.
+ * The current order API uses fixed-point strings. Everything above this
+ * file works in probabilities, so that conversion lives here.
  */
 export class KalshiTradingClient implements TradingClient {
   readonly venue = 'kalshi' as const
+  readonly supportsIdempotentReplay = true
 
   constructor(private readonly credentials: KalshiCredentials) {}
 
@@ -49,12 +64,13 @@ export class KalshiTradingClient implements TradingClient {
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     const timestamp = Date.now().toString()
+    const signedPath = path.split('?')[0]
 
     const response = await fetch(`${BASE}${path}`, {
       method,
       headers: {
         'KALSHI-ACCESS-KEY': this.credentials.apiKeyId,
-        'KALSHI-ACCESS-SIGNATURE': this.sign(method, `/trade-api/v2${path}`, timestamp),
+        'KALSHI-ACCESS-SIGNATURE': this.sign(method, `/trade-api/v2${signedPath}`, timestamp),
         'KALSHI-ACCESS-TIMESTAMP': timestamp,
         'Content-Type': 'application/json',
       },
@@ -79,7 +95,8 @@ export class KalshiTradingClient implements TradingClient {
 
   async fetchBalance(): Promise<VenueBalance> {
     // `balance` is in cents.
-    const data = await this.request<{ balance: number }>('GET', '/portfolio/balance')
+    const suffix = this.credentials.subaccount === undefined ? '' : `?subaccount=${this.credentials.subaccount}`
+    const data = await this.request<{ balance: number }>('GET', `/portfolio/balance${suffix}`)
     return { available: (data.balance ?? 0) / 100 }
   }
 
@@ -87,24 +104,25 @@ export class KalshiTradingClient implements TradingClient {
     const data = await this.request<{
       market_positions?: Array<{
         ticker: string
-        position: number
-        market_exposure: number
+        position_fp?: string
+        market_exposure_dollars?: string
       }>
-    }>('GET', '/portfolio/positions')
+    }>('GET', `/portfolio/positions${this.credentials.subaccount === undefined ? '' : `?subaccount=${this.credentials.subaccount}`}`)
 
     const positions: VenuePosition[] = []
     for (const p of data.market_positions ?? []) {
-      if (!p.position)
+      const signedPosition = Number(p.position_fp ?? 0)
+      if (!signedPosition)
         continue
 
       // Kalshi signs the position rather than naming a side: positive is
       // long yes, negative is long no. Size is the magnitude either way.
-      const size = Math.abs(p.position)
+      const size = Math.abs(signedPosition)
       positions.push({
         marketExternalId: p.ticker,
-        side: p.position > 0 ? 'yes' : 'no',
+        side: signedPosition > 0 ? 'yes' : 'no',
         size,
-        avgPrice: size > 0 ? Math.abs(p.market_exposure ?? 0) / 100 / size : 0,
+        avgPrice: size > 0 ? Math.abs(Number(p.market_exposure_dollars ?? 0)) / size : 0,
       })
     }
 
@@ -112,59 +130,59 @@ export class KalshiTradingClient implements TradingClient {
   }
 
   async placeOrder(request: PlaceOrderRequest): Promise<PlaceOrderResult> {
-    const side = request.side === 'no' ? 'no' : 'yes'
-    // Kalshi prices in whole cents, so the limit has to land on one. Round
-    // DOWN: rounding a buy limit up would pay more than the decision
-    // authorized, which is the one direction that must never happen.
-    const cents = Math.max(1, Math.min(99, Math.floor(request.limitPrice * 100)))
-
+    const buyNo = request.side === 'no'
     const data = await this.request<{
-      order: {
-        order_id: string
-        status: string
-        taker_fill_count?: number
-        taker_fill_cost?: number
-      }
-    }>('POST', '/portfolio/orders', {
-      action: 'buy',
+      order_id: string
+      fill_count?: string
+      remaining_count?: string
+    }>('POST', '/portfolio/events/orders', {
       client_order_id: request.clientOrderId,
-      count: Math.floor(request.size),
-      side,
+      count: fixedContracts(request.size),
+      // The V2 book quotes only YES. Selling YES is buying NO at 1-price.
+      side: buyNo ? 'ask' : 'bid',
+      price: fixedYesPrice(request.limitPrice, buyNo),
       ticker: request.marketExternalId,
-      type: 'limit',
-      // Kalshi names the limit after the side being bought.
-      [side === 'yes' ? 'yes_price' : 'no_price']: cents,
+      time_in_force: 'good_till_canceled',
+      self_trade_prevention_type: 'taker_at_cross',
+      post_only: false,
+      cancel_order_on_pause: true,
+      reduce_only: false,
+      ...(this.credentials.subaccount === undefined ? {} : { subaccount: this.credentials.subaccount }),
     })
 
-    const filled = data.order.taker_fill_count ?? 0
+    const canonical = await this.fetchOrder(data.order_id)
+    if (canonical)
+      return canonical
+
+    const filled = Number(data.fill_count ?? 0)
+    const remaining = Number(data.remaining_count ?? 0)
 
     return {
-      externalOrderId: data.order.order_id,
-      status: normalizeStatus(data.order.status, filled, Math.floor(request.size)),
+      externalOrderId: data.order_id,
+      status: normalizeStatus(undefined, filled, filled + remaining),
       filledSize: filled,
-      avgFillPrice: filled > 0 ? (data.order.taker_fill_cost ?? 0) / 100 / filled : 0,
+      avgFillPrice: filled > 0 ? request.limitPrice : 0,
     }
   }
 
   async fetchOrder(externalOrderId: string): Promise<PlaceOrderResult | null> {
     try {
       const data = await this.request<{
-        order: {
-          order_id: string
-          status: string
-          initial_count?: number
-          taker_fill_count?: number
-          taker_fill_cost?: number
-        }
+        order: KalshiOrder
       }>('GET', `/portfolio/orders/${encodeURIComponent(externalOrderId)}`)
 
-      const filled = data.order.taker_fill_count ?? 0
+      const filled = Number(data.order.fill_count_fp ?? 0)
+      const requested = Number(data.order.initial_count_fp ?? filled)
+      const side = data.order.outcome_side ?? data.order.side ?? 'yes'
+      const totalCost = Number(data.order.taker_fill_cost_dollars ?? 0)
+        + Number(data.order.maker_fill_cost_dollars ?? 0)
+      const quotedPrice = Number(side === 'no' ? data.order.no_price_dollars : data.order.yes_price_dollars)
 
       return {
         externalOrderId: data.order.order_id,
-        status: normalizeStatus(data.order.status, filled, data.order.initial_count ?? filled),
+        status: normalizeStatus(data.order.status ?? '', filled, requested),
         filledSize: filled,
-        avgFillPrice: filled > 0 ? (data.order.taker_fill_cost ?? 0) / 100 / filled : 0,
+        avgFillPrice: filled > 0 ? (totalCost > 0 ? totalCost / filled : quotedPrice) : 0,
       }
     }
     catch (error) {
@@ -178,7 +196,8 @@ export class KalshiTradingClient implements TradingClient {
 
   async cancelOrder(externalOrderId: string): Promise<boolean> {
     try {
-      await this.request('DELETE', `/portfolio/orders/${encodeURIComponent(externalOrderId)}`)
+      const suffix = this.credentials.subaccount === undefined ? '' : `?subaccount=${this.credentials.subaccount}`
+      await this.request('DELETE', `/portfolio/events/orders/${encodeURIComponent(externalOrderId)}${suffix}`)
       return true
     }
     catch (error) {
@@ -192,12 +211,25 @@ export class KalshiTradingClient implements TradingClient {
   }
 }
 
+/** Never round a requested outcome limit in the direction that pays more. */
+export function fixedYesPrice(limitPrice: number, buyNo: boolean): string {
+  const clamped = Math.max(0.0001, Math.min(0.9999, limitPrice))
+  const scaled = buyNo
+    ? Math.ceil((1 - clamped) * 10_000 - Number.EPSILON)
+    : Math.floor(clamped * 10_000 + Number.EPSILON)
+  return (scaled / 10_000).toFixed(4)
+}
+
+export function fixedContracts(size: number): string {
+  return Math.max(0.01, Math.floor(size * 100) / 100).toFixed(2)
+}
+
 /**
  * Kalshi's order statuses onto ours. `resting` is a live limit order,
  * which is 'open' here; a `canceled` order that filled part way is still
  * a partial fill and has to be reported as one or the position is lost.
  */
-function normalizeStatus(status: string, filled: number, requested: number): string {
+function normalizeStatus(status: string | undefined, filled: number, requested: number): string {
   if (filled >= requested && requested > 0)
     return 'filled'
   if (status === 'canceled' || status === 'cancelled')

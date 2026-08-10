@@ -1,7 +1,7 @@
 import type { PredictionMarketProvider, VenueMarket, VenueTrade } from './provider'
 import { chunk, fetchJson } from './provider'
 
-const BASE = 'https://api.elections.kalshi.com/trade-api/v2'
+const BASE = process.env.KALSHI_API_BASE_URL || 'https://external-api.kalshi.com/trade-api/v2'
 
 interface KalshiTrade {
   trade_id: string

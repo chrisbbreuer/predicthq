@@ -1,7 +1,7 @@
 {
   "name": "predicthq",
   "type": "module",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "description": "PredictHQ — Prediction Intel. Signals and automated positions across Kalshi and Polymarket.",
   "author": "Chris Breuer <chris@stacksjs.org>",
@@ -10,13 +10,13 @@
   ],
   "license": "MIT",
   "funding": "https://github.com/sponsors/chrisbbreuer",
-  "homepage": "https://github.com/chrisbbreuer/oddsbeacon#readme",
+  "homepage": "https://predicthq.org",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/chrisbbreuer/oddsbeacon.git"
+    "url": "git+https://github.com/chrisbbreuer/predicthq.git"
   },
   "bugs": {
-    "url": "https://github.com/chrisbbreuer/oddsbeacon/issues"
+    "url": "https://github.com/chrisbbreuer/predicthq/issues"
   },
   "scripts": {
     "build:reset": "rm -rf node_modules pantry.lock && bun install && ./buddy generate:types && ./buddy lint:fix",
@@ -69,6 +69,7 @@
     "sqlite": "^3.47.2"
   },
   "dependencies": {
+    "@polymarket/clob-client-v2": "^1.1.0",
     "@stacksjs/stx": "^0.2.153",
     "bun-plugin-stx": "^0.2.153",
     "bun-query-builder": "^0.2.22",
@@ -79,6 +80,9 @@
   },
   "devDependencies": {
     "better-dx": "^0.2.15"
+  },
+  "overrides": {
+    "ws": "8.21.3"
   },
   "workspaces": [
     "storage/framework",

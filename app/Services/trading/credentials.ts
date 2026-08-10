@@ -22,6 +22,8 @@ export interface KalshiCredentials {
   venue: 'kalshi'
   apiKeyId: string
   privateKeyPem: string
+  /** 0 is the primary account; 1-32 isolates a dedicated trading bankroll. */
+  subaccount?: number
 }
 
 /**
@@ -38,6 +40,8 @@ export interface PolymarketCredentials {
   privateKey: string
   /** Proxy wallet the orders are attributed to. */
   funderAddress: string
+  /** EOA=0, proxy=1, Safe=2, EIP-1271 contract=3. */
+  signatureType?: 0 | 1 | 2 | 3
 }
 
 export type VenueCredentials = KalshiCredentials | PolymarketCredentials
@@ -103,6 +107,8 @@ export function assertUsable(credentials: VenueCredentials): void {
       missing.push('apiKeyId')
     if (!credentials.privateKeyPem.includes('PRIVATE KEY'))
       missing.push('privateKeyPem (expected a PEM block)')
+    if (credentials.subaccount !== undefined && (!Number.isInteger(credentials.subaccount) || credentials.subaccount < 0 || credentials.subaccount > 32))
+      missing.push('subaccount (expected an integer from 0 to 32)')
   }
   else {
     if (!credentials.apiKey.trim())
@@ -115,6 +121,8 @@ export function assertUsable(credentials: VenueCredentials): void {
       missing.push('privateKey (expected 0x + 64 hex characters)')
     if (!/^0x[0-9a-f]{40}$/i.test(credentials.funderAddress))
       missing.push('funderAddress (expected a 0x address)')
+    if (credentials.signatureType !== undefined && ![0, 1, 2, 3].includes(credentials.signatureType))
+      missing.push('signatureType (expected 0, 1, 2, or 3)')
   }
 
   if (missing.length > 0)
