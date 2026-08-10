@@ -1,6 +1,5 @@
 import type { Database } from '../../Support/db'
 import type { ExecutionOutcome, Strategy } from './execute'
-import { randomUUID } from 'node:crypto'
 import { bookOrderFill } from './positions'
 
 /**
@@ -75,18 +74,18 @@ export async function executePaper(
     ).get(decision.prediction_market_id)
 
     if (!market) {
-      outcomes.push(await record(db, decision, 'cancelled', 0, 0, 'market no longer in our database'))
+      outcomes.push(await record(db, strategy.id, decision, 'cancelled', 0, 0, 'market no longer in our database'))
       continue
     }
 
     const fillPrice = Math.min(decision.limit_price, Number(market.last_price) + ASSUMED_SLIPPAGE)
 
     if (Number(market.last_price) > decision.limit_price) {
-      outcomes.push(await record(db, decision, 'cancelled', 0, 0, 'the market never traded down to the limit'))
+      outcomes.push(await record(db, strategy.id, decision, 'cancelled', 0, 0, 'the market never traded down to the limit'))
       continue
     }
 
-    outcomes.push(await record(db, decision, 'filled', decision.size, fillPrice, '', strategy.id))
+    outcomes.push(await record(db, strategy.id, decision, 'filled', decision.size, fillPrice, ''))
   }
 
   return outcomes
@@ -103,44 +102,59 @@ export async function executePaper(
  */
 async function record(
   db: Database,
+  strategyId: number,
   decision: PaperDecision,
   status: string,
   filledSize: number,
   fillPrice: number,
   note: string,
-  strategyId?: number,
 ): Promise<ExecutionOutcome> {
   const now = new Date().toISOString()
 
   const market = await db.prepare<{ external_id: string }>('SELECT external_id FROM prediction_markets WHERE id = ?')
     .get(decision.prediction_market_id)
 
-  const insert = await db.prepare(`
-    INSERT INTO exchange_orders (
-      trade_decision_id, exchange_account_id, venue, client_order_id, external_order_id,
-      market_external_id, side, limit_price, size, filled_size, avg_fill_price,
-      accrued_size, accrued_cost, status, error, placed_at, created_at, updated_at
-    ) VALUES (?, NULL, ?, ?, '', ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?)
-  `).run(
-    decision.id,
-    `paper:${decision.venue}`,
-    randomUUID(),
-    market?.external_id ?? '',
-    decision.side,
-    decision.limit_price,
-    decision.size,
-    filledSize,
-    fillPrice,
+  const claim = await db.upsert('exchange_orders', [{
+    trade_decision_id: decision.id,
+    exchange_account_id: null,
+    venue: `paper:${decision.venue}`,
+    client_order_id: `paper-${strategyId}-${decision.id}`,
+    external_order_id: '',
+    market_external_id: market?.external_id ?? '',
+    side: decision.side,
+    limit_price: decision.limit_price,
+    size: decision.size,
+    filled_size: filledSize,
+    avg_fill_price: fillPrice,
+    accrued_size: 0,
+    accrued_cost: 0,
     status,
-    note,
-    now,
-    now,
-    now,
-  )
+    error: note,
+    placed_at: now,
+    created_at: now,
+    updated_at: now,
+  }], ['trade_decision_id'])
 
-  if (filledSize > 0 && strategyId) {
+  const order = await db.prepare<{ id: number, status: string, avg_fill_price: number, error: string }>(
+    'SELECT id, status, avg_fill_price, error FROM exchange_orders WHERE trade_decision_id = ?',
+  ).get(decision.id)
+
+  if (!order)
+    return { decisionId: decision.id, placed: false, reason: 'could not create a paper order claim' }
+
+  if (claim.changes === 0) {
+    return {
+      decisionId: decision.id,
+      placed: order.status === 'filled',
+      reason: order.status === 'filled'
+        ? `already filled on paper at ${(Number(order.avg_fill_price) * 100).toFixed(1)}`
+        : order.error || `paper order already ${order.status}`,
+    }
+  }
+
+  if (filledSize > 0) {
     await bookOrderFill(db, {
-      orderId: Number(insert.lastInsertRowid),
+      orderId: Number(order.id),
       tradingStrategyId: strategyId,
       exchangeAccountId: null,
       predictionMarketId: decision.prediction_market_id,

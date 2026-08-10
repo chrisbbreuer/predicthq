@@ -57,11 +57,7 @@ export default {
         return { id: decisionId, status: 'rejected' }
       }
 
-      const strategy = await db.prepare<Strategy>(`
-        SELECT id, user_id, venue, bankroll, max_stake, min_edge, min_confidence,
-              max_open_positions, daily_loss_limit, auto_execute, status
-        FROM trading_strategies WHERE id = ?
-      `).get(decision.trading_strategy_id)
+      const strategy = await loadStrategyForReview(db, decision.trading_strategy_id)
 
       if (!strategy)
         return response.error('The strategy behind this decision no longer exists.', 404)
@@ -83,4 +79,14 @@ export default {
       db.close()
     }
   },
+}
+
+/** Kept separate so the paper/live boundary has a direct regression test. */
+export async function loadStrategyForReview(db: Database, strategyId: number): Promise<Strategy | null> {
+  return await db.prepare<Strategy>(`
+    SELECT id, user_id, venue, bankroll, max_stake, min_edge, min_confidence,
+          max_open_positions, daily_loss_limit, cumulative_loss_limit,
+          auto_execute, status, mode
+    FROM trading_strategies WHERE id = ?
+  `).get(strategyId)
 }

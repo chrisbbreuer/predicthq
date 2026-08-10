@@ -37,7 +37,7 @@ export interface RunSummary {
 export async function activeStrategies(db: Database): Promise<Strategy[]> {
   return await db.prepare<Strategy>(`
     SELECT id, user_id, venue, mode, bankroll, max_stake, min_edge, min_confidence,
-          max_open_positions, daily_loss_limit, auto_execute, status
+          max_open_positions, daily_loss_limit, cumulative_loss_limit, auto_execute, status
     FROM trading_strategies
     WHERE status = 'active'
     ORDER BY id

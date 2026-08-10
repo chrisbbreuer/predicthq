@@ -87,12 +87,14 @@ describe('the global stop', () => {
     dir = mkdtempSync(join(tmpdir(), 'predicthq-halt-'))
     db = schemaFor(join(dir, 'test.sqlite'), ['trading_halts'])
     delete process.env.TRADING_ENABLED
+    process.env.APP_ENV = 'test'
   })
 
   afterEach(() => {
     db.close()
     rmSync(dir, { recursive: true, force: true })
     delete process.env.TRADING_ENABLED
+    process.env.APP_ENV = 'test'
   })
 
   it('allows trading when nothing has been said', async () => {
@@ -142,5 +144,15 @@ describe('the global stop', () => {
 
     process.env.TRADING_ENABLED = 'true'
     expect((await haltState(db as any)).halted).toBe(false)
+  })
+
+  it('fails closed when production never explicitly enabled trading', async () => {
+    process.env.APP_ENV = 'production'
+    delete process.env.TRADING_ENABLED
+
+    const state = await haltState(db as any)
+
+    expect(state.halted).toBe(true)
+    expect(state.reason).toContain('explicit TRADING_ENABLED=true')
   })
 })

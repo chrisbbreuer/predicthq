@@ -41,6 +41,15 @@ const ALLOWED = { halted: false, reason: '', actor: '', since: '' } as const
  */
 export async function haltState(db: Database): Promise<HaltState> {
   const configured = process.env.TRADING_ENABLED
+  if (process.env.APP_ENV === 'production' && configured === undefined) {
+    return {
+      halted: true,
+      reason: 'trading is disabled because production has no explicit TRADING_ENABLED=true',
+      actor: 'environment',
+      since: '',
+    }
+  }
+
   if (configured !== undefined && !truthy(configured)) {
     return {
       halted: true,

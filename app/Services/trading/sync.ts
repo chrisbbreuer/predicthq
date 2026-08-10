@@ -172,6 +172,12 @@ async function syncOne(
   now: Date,
   summary: SyncSummary,
 ): Promise<void> {
+  if (!order.external_order_id && client.supportsIdempotentReplay === false) {
+    await markUncertain(db, order, 'venue response was lost; refusing to replay a non-idempotent order')
+    summary.advanced++
+    return
+  }
+
   let result = order.external_order_id
     ? await client.fetchOrder(order.external_order_id)
     : await recover(client, order, summary)
@@ -208,6 +214,18 @@ async function syncOne(
 
   await writeStatus(db, order, result.status, result.filledSize, result.avgFillPrice, '', result.externalOrderId)
   summary.advanced++
+}
+
+async function markUncertain(db: Database, order: OrderRow, note: string): Promise<void> {
+  const now = new Date().toISOString()
+  await db.transaction(async (transaction) => {
+    await transaction.prepare(`
+      UPDATE exchange_orders SET status = 'uncertain', error = ?, updated_at = ? WHERE id = ?
+    `).run(note, now, order.id)
+    await transaction.prepare(`
+      UPDATE trade_decisions SET status = 'review', status_reason = ?, updated_at = ? WHERE id = ?
+    `).run(note, now, order.trade_decision_id)
+  })
 }
 
 /**

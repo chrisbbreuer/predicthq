@@ -25,7 +25,10 @@ export default defineModel({
   },
 
   indexes: [
-    { name: 'decision', columns: ['tradeDecisionId'] },
+    // One decision may create exactly one order. The unique constraint is
+    // the database half of placement idempotency: concurrent workers can
+    // race all the way to the insert and only one receives the claim.
+    { name: 'trade_decision_id', columns: ['tradeDecisionId'], unique: true },
     { name: 'account', columns: ['exchangeAccountId'] },
     { name: 'status', columns: ['status'] },
     // The idempotency key. Unique so a retry cannot create a second row

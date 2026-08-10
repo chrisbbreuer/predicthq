@@ -100,6 +100,15 @@ export default defineModel({
       validation: { rule: schema.float().min(0) },
       factory: faker => faker.number.int({ min: 50, max: 1000 }),
     },
+    // All-time realized losses allowed for this run of the strategy.
+    // Unlike `bankroll`, which limits concurrent exposure, this is a true
+    // campaign loss ceiling. Zero leaves it disabled for legacy strategies.
+    cumulativeLossLimit: {
+      type: 'number',
+      fillable: true,
+      validation: { rule: schema.float().min(0) },
+      factory: () => 0,
+    },
     // 'paper' | 'live'
     //
     // Paper runs the identical decision path and books simulated fills

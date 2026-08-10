@@ -37,6 +37,7 @@ let db: Database
 /** A venue that answers exactly what a test tells it to. */
 class StubVenue implements TradingClient {
   readonly venue = 'kalshi' as const
+  readonly supportsIdempotentReplay: boolean
 
   placed: PlaceOrderRequest[] = []
   cancelled: string[] = []
@@ -49,7 +50,10 @@ class StubVenue implements TradingClient {
       filledSize: 0,
       avgFillPrice: 0,
     }),
-  ) {}
+    supportsIdempotentReplay = true,
+  ) {
+    this.supportsIdempotentReplay = supportsIdempotentReplay
+  }
 
   async fetchBalance(): Promise<VenueBalance> {
     return { available: 1000 }
@@ -183,6 +187,18 @@ describe('reconciliation', () => {
     expect(venue.placed[0]!.clientOrderId).toBe('client-1')
     expect(readOrder(id).external_order_id).toBe('venue-7')
     expect(readOrder(id).status).toBe('open')
+  })
+
+  it('does not replay an uncertain order when the venue has no idempotency key', async () => {
+    const id = order({ status: 'pending' })
+    const venue = new StubVenue(() => null, undefined, false)
+
+    const summary = await sync(venue)
+
+    expect(summary.recovered).toBe(0)
+    expect(venue.placed).toHaveLength(0)
+    expect(readOrder(id).status).toBe('uncertain')
+    expect((db.prepare('SELECT status FROM trade_decisions WHERE id = 1').get() as any).status).toBe('review')
   })
 
   it('advances a resting order that has filled, and books the position', async () => {

@@ -1,15 +1,15 @@
 import type { Database } from '../../Support/db'
 import type { Candidate } from './evidence'
 import type { TradingClient } from './venue'
-import { randomUUID } from 'node:crypto'
 import { log } from '@stacksjs/logging'
 import { resolveEntitlements } from '../billing/entitlements'
 import { openCredentials } from './credentials'
+import { jurisdictionObjection } from './eligibility'
 import { haltState } from './halt'
 import { KalshiTradingClient } from './kalshi-trading'
 import { executePaper } from './paper'
 import { PolymarketTradingClient } from './polymarket-trading'
-import { bookOrderFill, openExposure, openPositionCount, realizedPnlSince } from './positions'
+import { accountOpenExposure, bookOrderFill, cumulativeRealizedLoss, openExposure, openPositionCount, realizedPnlSince } from './positions'
 import { VenueError, isAuthFailure } from './venue'
 
 /**
@@ -37,6 +37,7 @@ export interface Strategy {
   min_confidence: number
   max_open_positions: number
   daily_loss_limit: number
+  cumulative_loss_limit: number
   auto_execute: number
   status: string
 }
@@ -154,6 +155,12 @@ interface AccountRow {
   credentials: string
   status: string
   balance: number
+  jurisdiction: string
+}
+
+export interface ExecutionOptions {
+  /** Injectable for venue contract and concurrency tests. */
+  clientFor?: (sealedCredentials: string) => Promise<TradingClient>
 }
 
 /**
@@ -168,20 +175,12 @@ export async function executeStrategy(
   db: Database,
   strategy: Strategy,
   decisionIds: number[],
+  options: ExecutionOptions = {},
 ): Promise<ExecutionOutcome[]> {
   const outcomes: ExecutionOutcome[] = []
 
   if (decisionIds.length === 0)
     return outcomes
-
-  // The global stop comes first. It is the one check that is not about
-  // this strategy, and a strategy-level reason must never be recorded
-  // over a system-level one — a user reading "at the position cap" when
-  // the real answer was "trading is halted" will go looking in exactly
-  // the wrong place.
-  const global = await haltState(db)
-  if (global.halted)
-    return await Promise.all(decisionIds.map(id => skip(db, id, global.reason)))
 
   const halted = await haltReason(db, strategy)
   if (halted) {
@@ -204,6 +203,17 @@ export async function executeStrategy(
   if (isPaper(strategy))
     return await executePaper(db, strategy, decisionIds)
 
+  // The deployment switch governs venue contact, not simulation. Keeping
+  // paper strategies running while live placement is disabled is how a
+  // read-only launch can still build a comparable track record.
+  const global = await haltState(db)
+  if (global.halted)
+    return await Promise.all(decisionIds.map(id => skip(db, id, global.reason)))
+
+  const accessObjection = liveAccessReason(strategy.user_id)
+  if (accessObjection)
+    return await Promise.all(decisionIds.map(id => skip(db, id, accessObjection)))
+
   const entitlements = await resolveEntitlements(db, strategy.user_id)
   if (!entitlements.canAutoExecute)
     return await Promise.all(decisionIds.map(id => skip(db, id, `plan ${entitlements.tier} does not include automated execution`)))
@@ -218,7 +228,8 @@ export async function executeStrategy(
 
   // Cache one client per venue: constructing a Polymarket client derives
   // an account from the private key, which is not free per order.
-  const clients = new Map<string, { client: TradingClient, account: AccountRow }>()
+  const clients = new Map<string, { client: TradingClient, account: AccountRow, available: number }>()
+  const openClient = options.clientFor ?? clientFor
 
   for (const decision of decisions) {
     const openPositions = await openPositionCount(db, strategy.id)
@@ -236,7 +247,7 @@ export async function executeStrategy(
     let resolved = clients.get(decision.venue)
     if (!resolved) {
       const account = await db.prepare<AccountRow>(`
-        SELECT id, credentials, status, balance
+        SELECT id, credentials, status, balance, jurisdiction
         FROM exchange_accounts
         WHERE user_id = ? AND venue = ?
       `).get(strategy.user_id, decision.venue)
@@ -251,9 +262,23 @@ export async function executeStrategy(
         continue
       }
 
+      const jurisdictionError = jurisdictionObjection(decision.venue, account.jurisdiction)
+      if (jurisdictionError) {
+        outcomes.push(await skip(db, decision.id, jurisdictionError))
+        continue
+      }
+
       try {
-        resolved = { client: await clientFor(account.credentials), account }
+        const client = await openClient(account.credentials)
+        const balance = await client.fetchBalance()
+        resolved = { client, account, available: balance.available }
         clients.set(decision.venue, resolved)
+
+        await db.prepare(`
+          UPDATE exchange_accounts
+          SET balance = ?, last_synced_at = ?, last_error = '', updated_at = ?
+          WHERE id = ?
+        `).run(balance.available, new Date().toISOString(), new Date().toISOString(), account.id)
       }
       catch (error) {
         outcomes.push(await skip(db, decision.id, error instanceof Error ? error.message : String(error)))
@@ -261,10 +286,53 @@ export async function executeStrategy(
       }
     }
 
-    outcomes.push(await placeOne(db, strategy, decision, resolved.client, resolved.account))
+    if (decision.notional > resolved.available) {
+      outcomes.push(await skip(db, decision.id, `venue has $${round(resolved.available)} available, below this order's $${round(decision.notional)} notional`))
+      continue
+    }
+
+    const testCap = positiveNumber(process.env.TRADING_BANKROLL_CAP_USD)
+    if (testCap > 0) {
+      const accountCommitted = await accountOpenExposure(db, resolved.account.id)
+      if (accountCommitted + decision.notional > testCap) {
+        outcomes.push(await skip(db, decision.id, `would commit $${round(accountCommitted + decision.notional)} against the deployment's $${round(testCap)} live bankroll cap`))
+        continue
+      }
+    }
+
+    const outcome = await placeOne(db, strategy, decision, resolved.client, resolved.account)
+    outcomes.push(outcome)
+
+    // A resting order reserves its full limit notional at the venue. Keep
+    // the in-pass balance conservative so a batch cannot spend the same
+    // available dollar twice before the next venue balance refresh.
+    if (outcome.placed)
+      resolved.available = Math.max(0, resolved.available - decision.notional)
   }
 
   return outcomes
+}
+
+function positiveNumber(value: string | undefined): number {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+}
+
+/** Keep a private $20 validation from silently becoming a public rollout. */
+export function liveAccessReason(userId: number, env: Record<string, string | undefined> = process.env): string {
+  if (env.APP_ENV !== 'production')
+    return ''
+  if (['true', '1'].includes((env.PUBLIC_LIVE_TRADING_ENABLED ?? '').toLowerCase()))
+    return ''
+
+  const allowlist = (env.LIVE_TRADING_USER_ALLOWLIST ?? '')
+    .split(',')
+    .map(value => Number(value.trim()))
+    .filter(value => Number.isInteger(value) && value > 0)
+
+  return allowlist.includes(userId)
+    ? ''
+    : 'live trading is limited to the controlled launch allowlist; paper trading remains available'
 }
 
 /**
@@ -283,7 +351,7 @@ async function placeOne(
   account: AccountRow,
 ): Promise<ExecutionOutcome> {
   const now = new Date().toISOString()
-  const clientOrderId = randomUUID()
+  const clientOrderId = clientOrderIdFor(strategy.id, decision.id)
 
   const market = await db.prepare<{
     external_id: string
@@ -300,27 +368,61 @@ async function placeOne(
   if (stale)
     return await skip(db, decision.id, stale)
 
-  const insert = await db.prepare(`
-    INSERT INTO exchange_orders (
-      trade_decision_id, exchange_account_id, venue, client_order_id, external_order_id,
-      market_external_id, side, limit_price, size, filled_size, avg_fill_price,
-      status, error, placed_at, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, '', ?, ?, ?, ?, 0, 0, 'pending', '', ?, ?, ?)
-  `).run(
-    decision.id,
-    account.id,
-    decision.venue,
-    clientOrderId,
-    market.external_id,
-    decision.side,
-    decision.limit_price,
-    decision.size,
-    now,
-    now,
-    now,
-  )
+  const claim = await db.upsert('exchange_orders', [{
+    trade_decision_id: decision.id,
+    exchange_account_id: account.id,
+    venue: decision.venue,
+    client_order_id: clientOrderId,
+    external_order_id: '',
+    market_external_id: market.external_id,
+    side: decision.side,
+    limit_price: decision.limit_price,
+    size: decision.size,
+    filled_size: 0,
+    avg_fill_price: 0,
+    accrued_size: 0,
+    accrued_cost: 0,
+    status: 'pending',
+    error: '',
+    placed_at: now,
+    created_at: now,
+    updated_at: now,
+  }], ['trade_decision_id'])
 
-  const orderId = Number(insert.lastInsertRowid)
+  const claimed = await db.prepare<{ id: number, status: string }>(
+    'SELECT id, status FROM exchange_orders WHERE trade_decision_id = ?',
+  ).get(decision.id)
+
+  if (!claimed)
+    return await skip(db, decision.id, 'could not create an idempotent order claim')
+
+  // Another request already owns this decision. It either placed the
+  // order or left a pending row that reconciliation will replay under the
+  // same deterministic venue key. Never contact the venue from both.
+  if (claim.changes === 0) {
+    return {
+      decisionId: decision.id,
+      placed: ['pending', 'open', 'partial', 'filled'].includes(claimed.status),
+      reason: `order already ${claimed.status}`,
+    }
+  }
+
+  const orderId = Number(claimed.id)
+
+  // Re-check the deployment cap after the pending row exists. The row is
+  // the reservation, so concurrent decisions see one another before either
+  // contacts the venue. Two racing orders may conservatively reject both;
+  // they can never both pass by reading the same pre-reservation total.
+  const testCap = positiveNumber(process.env.TRADING_BANKROLL_CAP_USD)
+  if (testCap > 0) {
+    const reserved = await accountOpenExposure(db, account.id)
+    if (reserved > testCap) {
+      const reason = `would reserve $${round(reserved)} against the deployment's $${round(testCap)} live bankroll cap`
+      await db.prepare(`UPDATE exchange_orders SET status = 'failed', error = ?, updated_at = ? WHERE id = ?`)
+        .run(reason, new Date().toISOString(), orderId)
+      return await skip(db, decision.id, reason)
+    }
+  }
 
   try {
     const result = await client.placeOrder({
@@ -445,6 +547,12 @@ async function haltReason(db: Database, strategy: Strategy): Promise<string> {
       return `daily loss limit reached (down $${round(Math.abs(realized))} of $${round(strategy.daily_loss_limit)} today)`
   }
 
+  if (strategy.cumulative_loss_limit > 0) {
+    const lost = await cumulativeRealizedLoss(db, strategy.id)
+    if (lost >= strategy.cumulative_loss_limit)
+      return `cumulative loss limit reached (lost $${round(lost)} of $${round(strategy.cumulative_loss_limit)})`
+  }
+
   return ''
 }
 
@@ -457,4 +565,9 @@ async function skip(db: Database, decisionId: number, reason: string): Promise<E
 
 function round(value: number): string {
   return value.toFixed(2)
+}
+
+/** Stable at every retry and short enough for both venues. */
+export function clientOrderIdFor(strategyId: number, decisionId: number): string {
+  return `predicthq-${strategyId}-${decisionId}`
 }

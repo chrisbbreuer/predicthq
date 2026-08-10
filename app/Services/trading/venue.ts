@@ -45,6 +45,8 @@ export interface VenuePosition {
 
 export interface TradingClient {
   readonly venue: Venue
+  /** Whether replaying placeOrder after an unknown response is venue-idempotent. */
+  readonly supportsIdempotentReplay?: boolean
   /** Reads the balance. Doubles as the credential health check. */
   fetchBalance: () => Promise<VenueBalance>
   fetchPositions: () => Promise<VenuePosition[]>

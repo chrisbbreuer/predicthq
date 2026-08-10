@@ -39,6 +39,7 @@ const strategy = {
   min_confidence: 0.6,
   max_open_positions: 10,
   daily_loss_limit: 250,
+  cumulative_loss_limit: 0,
   auto_execute: 1,
   status: 'active',
 }

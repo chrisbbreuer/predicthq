@@ -246,6 +246,21 @@ export async function openExposure(db: Database, strategyId: number): Promise<nu
   return round(Number(positions?.total ?? 0) + Number(working?.total ?? 0))
 }
 
+/** USD currently committed through one real-money venue account. */
+export async function accountOpenExposure(db: Database, accountId: number): Promise<number> {
+  const positions = await db.prepare<{ total: number }>(
+    'SELECT COALESCE(SUM(cost_basis), 0) AS total FROM exchange_positions WHERE exchange_account_id = ? AND status = \'open\'',
+  ).get(accountId)
+
+  const working = await db.prepare<{ total: number }>(`
+    SELECT COALESCE(SUM(limit_price * (size - COALESCE(accrued_size, 0))), 0) AS total
+    FROM exchange_orders
+    WHERE exchange_account_id = ? AND status IN ('pending', 'open', 'partial')
+  `).get(accountId)
+
+  return round(Number(positions?.total ?? 0) + Number(working?.total ?? 0))
+}
+
 /** Realized profit or loss booked on or after `since`, in USD. */
 export async function realizedPnlSince(db: Database, strategyId: number, since: string): Promise<number> {
   const row = await db.prepare<{ total: number }>(`
@@ -253,6 +268,17 @@ export async function realizedPnlSince(db: Database, strategyId: number, since: 
     FROM exchange_positions
     WHERE trading_strategy_id = ? AND status = 'settled' AND settled_at >= ?
   `).get(strategyId, since)
+
+  return round(Number(row?.total ?? 0))
+}
+
+/** Gross realized losses over the lifetime of a strategy. Wins never refill this budget. */
+export async function cumulativeRealizedLoss(db: Database, strategyId: number): Promise<number> {
+  const row = await db.prepare<{ total: number }>(`
+    SELECT COALESCE(SUM(CASE WHEN realized_pnl < 0 THEN -realized_pnl ELSE 0 END), 0) AS total
+    FROM exchange_positions
+    WHERE trading_strategy_id = ? AND status = 'settled'
+  `).get(strategyId)
 
   return round(Number(row?.total ?? 0))
 }
