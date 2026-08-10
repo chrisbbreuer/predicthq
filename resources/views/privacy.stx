@@ -1,0 +1,24 @@
+<script server>
+const navActive = 'privacy'
+</script>
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="PredictHQ privacy policy."><title>PredictHQ: Privacy</title>@include('../partials/tokens')
+  </head>
+  <body><div class="min-h-screen app">
+    <header class="border-b bd"><div class="flex items-center justify-between mx-auto px-4 h-16 sm:px-6 max-w-4xl"><a href="/" class="font-extrabold text-lg">Predict<span class="accent">HQ</span></a><a href="/account" class="font-bold text-sm accent">Account</a></div></header>
+    <main class="mx-auto px-4 py-12 sm:px-6 max-w-4xl">
+      <p class="font-bold text-xs tracking-widest uppercase accent">Effective August 8, 2026</p><h1 class="mt-2 display font-black text-4xl tracking-tight">Privacy Policy</h1>
+      <div class="mt-8 space-y-8 leading-relaxed muted">
+        <section><h2 class="font-black text-xl" style="color:var(--text)">What we collect</h2><p class="mt-2">We collect account identity supplied by your sign-in provider, subscription and entitlement records, strategies, decisions, performance, jurisdiction attestations, service logs, and support messages. If you connect a venue, we store an encrypted credential envelope, a masked identifier, balance, and order/position records.</p></section>
+        <section><h2 class="font-black text-xl" style="color:var(--text)">How we use it</h2><p class="mt-2">We use data to authenticate you, provide and secure the service, enforce risk and plan limits, send your directed venue requests, reconcile results, process subscriptions, diagnose failures, and meet legal obligations. We do not sell personal information or venue credentials.</p></section>
+        <section><h2 class="font-black text-xl" style="color:var(--text)">Credential security</h2><p class="mt-2">Venue secrets are encrypted before database storage and are not returned by account APIs. They must be decrypted by the application to sign venue requests, so use dedicated least-privilege keys and a separately funded subaccount or wallet. Disconnecting a venue erases the stored credential envelope and disables the connection.</p></section>
+        <section><h2 class="font-black text-xl" style="color:var(--text)">Service providers and transfers</h2><p class="mt-2">We share only what is needed with infrastructure, authentication, payment, model, monitoring, data, and connected-venue providers. Those providers may process data in other countries under their own terms and appropriate contractual safeguards.</p></section>
+        <section><h2 class="font-black text-xl" style="color:var(--text)">Retention and choices</h2><p class="mt-2">We retain account and trading records while your account is active and as needed for security, disputes, tax, accounting, and legal requirements. You may disconnect venue credentials from the account page and request access, correction, export, or deletion by email. Some transaction and billing records may need to be retained.</p></section>
+        <section><h2 class="font-black text-xl" style="color:var(--text)">Contact</h2><p class="mt-2">Privacy requests: <a class="underline accent" href="mailto:hello@predicthq.org">hello@predicthq.org</a>.</p></section>
+      </div>
+    </main>
+  </div></body>
+</html>

@@ -2,11 +2,6 @@
 // Source: resources/views/
 
 export const routes = [
-  { pattern: '/checkout/contact', filePath: 'storage/framework/defaults/resources/views/checkout/contact.stx', isDynamic: false, params: [] },
-  { pattern: '/checkout/payment', filePath: 'storage/framework/defaults/resources/views/checkout/payment.stx', isDynamic: false, params: [] },
-  { pattern: '/checkout/shipping', filePath: 'storage/framework/defaults/resources/views/checkout/shipping.stx', isDynamic: false, params: [] },
-  { pattern: '/emails/welcome', filePath: 'storage/framework/defaults/resources/views/emails/welcome.stx', isDynamic: false, params: [] },
-  { pattern: '/errors/tester', filePath: 'storage/framework/defaults/resources/views/errors/tester.stx', isDynamic: false, params: [] },
   { pattern: '/features/api', filePath: 'resources/views/features/api.stx', isDynamic: false, params: [] },
   { pattern: '/features/automation', filePath: 'resources/views/features/automation.stx', isDynamic: false, params: [] },
   { pattern: '/features/evidence', filePath: 'resources/views/features/evidence.stx', isDynamic: false, params: [] },
@@ -16,22 +11,22 @@ export const routes = [
   { pattern: '/features/sheets', filePath: 'resources/views/features/sheets.stx', isDynamic: false, params: [] },
   { pattern: '/features/smart-money', filePath: 'resources/views/features/smart-money.stx', isDynamic: false, params: [] },
   { pattern: '/', filePath: 'resources/views/index.stx', isDynamic: false, params: [] },
-  { pattern: '/cart', filePath: 'storage/framework/defaults/resources/views/cart.stx', isDynamic: false, params: [] },
-  { pattern: '/coming-soon', filePath: 'storage/framework/defaults/resources/views/coming-soon.stx', isDynamic: false, params: [] },
+  { pattern: '/account', filePath: 'resources/views/account.stx', isDynamic: false, params: [] },
   { pattern: '/community', filePath: 'resources/views/community.stx', isDynamic: false, params: [] },
   { pattern: '/compare', filePath: 'resources/views/compare.stx', isDynamic: false, params: [] },
-  { pattern: '/dashboard', filePath: 'storage/framework/defaults/resources/views/dashboard/index.stx', isDynamic: false, params: [] },
   { pattern: '/features', filePath: 'resources/views/features.stx', isDynamic: false, params: [] },
   { pattern: '/live', filePath: 'resources/views/live.stx', isDynamic: false, params: [] },
   { pattern: '/login', filePath: 'resources/views/login.stx', isDynamic: false, params: [] },
   { pattern: '/markets', filePath: 'resources/views/markets.stx', isDynamic: false, params: [] },
   { pattern: '/pipeline', filePath: 'resources/views/pipeline.stx', isDynamic: false, params: [] },
   { pattern: '/pricing', filePath: 'resources/views/pricing.stx', isDynamic: false, params: [] },
+  { pattern: '/privacy', filePath: 'resources/views/privacy.stx', isDynamic: false, params: [] },
+  { pattern: '/risk', filePath: 'resources/views/risk.stx', isDynamic: false, params: [] },
   { pattern: '/signup', filePath: 'resources/views/signup.stx', isDynamic: false, params: [] },
+  { pattern: '/terms', filePath: 'resources/views/terms.stx', isDynamic: false, params: [] },
   { pattern: '/scores/:league/game/:id', filePath: 'resources/views/scores/[league]/game/[id].stx', isDynamic: true, params: ["league","id"] },
   { pattern: '/scores/:league/:day', filePath: 'resources/views/scores/[league]/[day].stx', isDynamic: true, params: ["league","day"] },
   { pattern: '/compare/:competitor', filePath: 'resources/views/compare/[competitor].stx', isDynamic: true, params: ["competitor"] },
-  { pattern: '/orders/:id', filePath: 'storage/framework/defaults/resources/views/orders/[id].stx', isDynamic: true, params: ["id"] },
 ] as const
 
 export type RouteName = typeof routes[number]['pattern']

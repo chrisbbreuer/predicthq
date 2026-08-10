@@ -35,6 +35,9 @@
         <a href="/pricing" data-no-router class="hover:opacity-70">Pricing</a>
         {{-- Where the data comes from, and what it has been worth. --}}
         <a href="/pipeline" data-no-router class="hover:opacity-70">Pipeline health</a>
+        <a href="/terms" data-no-router class="hover:opacity-70">Terms</a>
+        <a href="/privacy" data-no-router class="hover:opacity-70">Privacy</a>
+        <a href="/risk" data-no-router class="hover:opacity-70">Risk disclosure</a>
         <a href="https://stacksjs.com" class="hover:opacity-70">Built with Stacks</a>
       </div>
     </div>

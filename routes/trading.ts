@@ -23,9 +23,6 @@ import { route } from '@stacksjs/router'
 route.group({ middleware: ['throttle:120,1'] }, () => {
   // What the engine is looking at right now.
   route.get('/trading/candidates', 'Actions/Trading/GetCandidates')
-
-  // The decision feed, each row carrying the evidence that produced it.
-  route.get('/trading/decisions', 'Actions/Trading/GetDecisions')
 })
 
 /**
@@ -36,8 +33,13 @@ route.group({ middleware: ['throttle:120,1'] }, () => {
  * venue under our credentials, so it is not.
  */
 route.group({ middleware: ['auth', 'throttle:60,1'] }, () => {
+  route.get('/trading/accounts', 'Actions/Trading/GetExchangeAccounts')
   route.get('/trading/strategies', 'Actions/Trading/GetStrategies')
   route.post('/trading/strategies', 'Actions/Trading/SaveStrategy')
+
+  // Decisions carry user-authored strategy names, sizes, and outcomes.
+  // They are private to their owner, even when the underlying market is public.
+  route.get('/trading/decisions', 'Actions/Trading/GetDecisions')
 
   // What the strategies actually returned. Every other endpoint here
   // describes intent; this one describes outcome.
@@ -56,4 +58,5 @@ route.group({ middleware: ['auth', 'throttle:60,1'] }, () => {
 // five times a minute legitimately.
 route.group({ middleware: ['auth', 'throttle:5,1'] }, () => {
   route.post('/trading/accounts', 'Actions/Trading/ConnectExchangeAccount')
+  route.delete('/trading/accounts/{venue}', 'Actions/Trading/DisconnectExchangeAccount')
 })

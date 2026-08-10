@@ -3,6 +3,7 @@ import { Database } from '../../Support/db'
 import { response } from '@stacksjs/router'
 import { assertUsable, CredentialError, maskIdentifier, sealCredentials } from '../../Services/trading/credentials'
 import { clientFor } from '../../Services/trading/execute'
+import { jurisdictionObjection } from '../../Services/trading/eligibility'
 
 /**
  * POST /api/trading/accounts — connect a venue account.
@@ -29,11 +30,28 @@ export default {
     if (venue !== 'kalshi' && venue !== 'polymarket')
       return response.error(`Unknown venue: ${venue || '(missing)'}. Expected kalshi or polymarket.`, 422)
 
+    const accepted = (key: string) => ['1', 'true', 'yes', 'on'].includes((request?.get?.(key) ?? '').toLowerCase())
+    if (!accepted('termsAccepted') || !accepted('riskAccepted') || !accepted('ageConfirmed')) {
+      return response.error(
+        'You must accept the Terms, acknowledge the risk disclosure, and confirm you meet the venue age requirement before connecting an account.',
+        422,
+      )
+    }
+
+    const jurisdiction = (request?.get?.('jurisdiction') ?? '').trim().toUpperCase()
+    if (!/^[A-Z]{2}(-[A-Z0-9]{1,3})?$/.test(jurisdiction))
+      return response.error('Enter your country code (for example US or CA-BC).', 422)
+
+    const jurisdictionError = jurisdictionObjection(venue, jurisdiction)
+    if (jurisdictionError)
+      return response.error(jurisdictionError, 451)
+
     const credentials: VenueCredentials = venue === 'kalshi'
       ? {
           venue: 'kalshi',
           apiKeyId: request?.get?.('apiKeyId') ?? '',
           privateKeyPem: request?.get?.('privateKeyPem') ?? '',
+          subaccount: optionalInteger(request?.get?.('subaccount')),
         }
       : {
           venue: 'polymarket',
@@ -42,6 +60,7 @@ export default {
           apiPassphrase: request?.get?.('apiPassphrase') ?? '',
           privateKey: request?.get?.('privateKey') ?? '',
           funderAddress: request?.get?.('funderAddress') ?? '',
+          signatureType: optionalSignatureType(request?.get?.('signatureType')),
         }
 
     try {
@@ -81,6 +100,10 @@ export default {
         balance,
         last_error: '',
         last_synced_at: now,
+        terms_accepted_at: now,
+        risk_accepted_at: now,
+        age_confirmed_at: now,
+        jurisdiction,
         updated_at: now,
       })
 
@@ -96,4 +119,16 @@ export default {
       db.close()
     }
   },
+}
+
+function optionalInteger(value: string | undefined): number | undefined {
+  if (!value?.trim())
+    return undefined
+  return Number(value)
+}
+
+function optionalSignatureType(value: string | undefined): 0 | 1 | 2 | 3 | undefined {
+  if (!value?.trim())
+    return undefined
+  return Number(value) as 0 | 1 | 2 | 3
 }

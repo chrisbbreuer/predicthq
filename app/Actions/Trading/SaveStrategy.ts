@@ -38,16 +38,17 @@ export default {
 
     try {
       const entitlements = await resolveEntitlements(db, userId)
-
-      if (entitlements.tier === 'none')
-        return response.error('An active subscription is required to create a strategy.', 402)
-
       const id = Number(request?.get?.('id') ?? 0) || 0
       const autoExecute = request?.get?.('autoExecute') === 'true'
       // Anything that is not explicitly 'live' is paper. Going live is
       // the consequential direction, so it is the one that has to be
       // asked for, and a typo lands on the harmless side.
       const mode = request?.get?.('mode') === 'live' ? 'live' : 'paper'
+
+      // A signed-in user can prove the workflow with one paper strategy
+      // before subscribing. Live strategies remain a paid capability.
+      if (entitlements.tier === 'none' && mode === 'live')
+        return response.error('An active subscription is required to create a live strategy.', 402)
 
       // Paper needs no plan: it places no orders and touches no venue,
       // and a user who cannot try a strategy has no way to find out
@@ -59,13 +60,16 @@ export default {
         )
       }
 
-      if (!id && entitlements.maxStrategies !== null) {
+      const maxStrategies = entitlements.tier === 'none' ? 1 : entitlements.maxStrategies
+      if (!id && maxStrategies !== null) {
         const existing = await db.prepare<{ n: number }>('SELECT COUNT(*) AS n FROM trading_strategies WHERE user_id = ?')
           .get(userId)
 
-        if (Number(existing?.n ?? 0) >= entitlements.maxStrategies) {
+        if (Number(existing?.n ?? 0) >= maxStrategies) {
           return response.error(
-            `The ${entitlements.tier} plan includes ${entitlements.maxStrategies} strategy${entitlements.maxStrategies === 1 ? '' : 'ies'}. Upgrade for more.`,
+            entitlements.tier === 'none'
+              ? 'The free paper test includes one strategy. Subscribe to create more.'
+              : `The ${entitlements.tier} plan includes ${maxStrategies} strategy${maxStrategies === 1 ? '' : 'ies'}. Upgrade for more.`,
             402,
           )
         }
@@ -86,6 +90,7 @@ export default {
         minConfidence: clamp(Number(request?.get?.('minConfidence') ?? 0.65), 0, 1),
         maxOpenPositions: Math.floor(clamp(Number(request?.get?.('maxOpenPositions') ?? 10), 1, MAX_POSITIONS)),
         dailyLossLimit: clamp(Number(request?.get?.('dailyLossLimit') ?? 250), 0, MAX_BANKROLL),
+        cumulativeLossLimit: clamp(Number(request?.get?.('cumulativeLossLimit') ?? 0), 0, MAX_BANKROLL),
         autoExecute: autoExecute ? 1 : 0,
         // Arming a strategy is what 'active' means, so the two move
         // together: a user who turns off auto-execution has paused it,
@@ -111,12 +116,12 @@ export default {
           UPDATE trading_strategies SET
             name = ?, venue = ?, mode = ?, categories = ?, bankroll = ?, max_stake = ?,
             min_edge = ?, min_confidence = ?, max_open_positions = ?, daily_loss_limit = ?,
-            auto_execute = ?, status = ?, halted_reason = '', updated_at = ?
+            cumulative_loss_limit = ?, auto_execute = ?, status = ?, halted_reason = '', updated_at = ?
           WHERE id = ?
         `).run(
           fields.name, fields.venue, fields.mode, fields.categories, fields.bankroll, fields.maxStake,
           fields.minEdge, fields.minConfidence, fields.maxOpenPositions, fields.dailyLossLimit,
-          fields.autoExecute, fields.status, now, id,
+          fields.cumulativeLossLimit, fields.autoExecute, fields.status, now, id,
         )
 
         return { id, ...fields }
@@ -126,12 +131,12 @@ export default {
         INSERT INTO trading_strategies (
           user_id, name, venue, mode, categories, bankroll, max_stake, min_edge, min_confidence,
           max_open_positions, daily_loss_limit, auto_execute, status, halted_reason,
-          last_run_at, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', ?, ?)
+          cumulative_loss_limit, last_run_at, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, '', ?, ?)
       `).run(
         userId, fields.name, fields.venue, fields.mode, fields.categories, fields.bankroll, fields.maxStake,
         fields.minEdge, fields.minConfidence, fields.maxOpenPositions, fields.dailyLossLimit,
-        fields.autoExecute, fields.status, now, now,
+        fields.autoExecute, fields.status, fields.cumulativeLossLimit, now, now,
       )
 
       return { id: Number(insert.lastInsertRowid), ...fields }

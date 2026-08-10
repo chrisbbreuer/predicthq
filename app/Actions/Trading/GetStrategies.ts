@@ -14,6 +14,7 @@ interface StrategyRow {
   min_confidence: number
   max_open_positions: number
   daily_loss_limit: number
+  cumulative_loss_limit: number
   auto_execute: number
   status: string
   halted_reason: string
@@ -47,7 +48,7 @@ export default {
         SELECT
           s.id, s.name, s.venue, s.mode, s.categories, s.bankroll, s.max_stake, s.min_edge,
           s.min_confidence, s.max_open_positions, s.daily_loss_limit, s.auto_execute,
-          s.status, s.halted_reason, s.last_run_at,
+          s.cumulative_loss_limit, s.status, s.halted_reason, s.last_run_at,
           COALESCE(o.working_orders, 0) AS working_orders,
           COALESCE(p.open_positions, 0) AS open_positions,
           COALESCE(o.working, 0) + COALESCE(p.at_risk, 0) AS committed
@@ -82,6 +83,7 @@ export default {
       const entitlements = await resolveEntitlements(db, userId)
 
       return {
+        userId,
         entitlements,
         count: strategies.length,
         strategies: strategies.map(s => ({
@@ -97,6 +99,7 @@ export default {
           minConfidence: s.min_confidence,
           maxOpenPositions: s.max_open_positions,
           dailyLossLimit: s.daily_loss_limit,
+          cumulativeLossLimit: s.cumulative_loss_limit,
           autoExecute: s.auto_execute === 1,
           status: s.status,
           haltedReason: s.halted_reason,

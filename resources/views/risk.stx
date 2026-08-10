@@ -1,0 +1,26 @@
+<script server>
+const navActive = 'risk'
+</script>
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Prediction-market and automated trading risk disclosure."><title>PredictHQ: Risk Disclosure</title>@include('../partials/tokens')
+  </head>
+  <body><div class="min-h-screen app">
+    <header class="border-b bd"><div class="flex items-center justify-between mx-auto px-4 h-16 sm:px-6 max-w-4xl"><a href="/" class="font-extrabold text-lg">Predict<span class="accent">HQ</span></a><a href="/account" class="font-bold text-sm accent">Account</a></div></header>
+    <main class="mx-auto px-4 py-12 sm:px-6 max-w-4xl">
+      <p class="font-bold text-xs tracking-widest uppercase accent">Read before enabling live mode</p><h1 class="mt-2 display font-black text-4xl tracking-tight">Risk Disclosure</h1>
+      <div class="p-5 mt-8 rounded-2xl card"><p class="font-black text-lg">You can lose all money committed to a prediction-market position.</p><p class="mt-2 leading-relaxed muted">A $0 settlement can make a contract bought above $0 a total loss. Only use funds you can afford to lose.</p></div>
+      <div class="grid gap-5 md:grid-cols-2 mt-6 leading-relaxed muted">
+        <section class="p-5 rounded-2xl card"><h2 class="font-black" style="color:var(--text)">Model risk</h2><p class="mt-2 text-sm">Fair values and confidence scores are estimates. Historical calibration, backtests, simulated fills, and paper performance can fail to represent future or live results.</p></section>
+        <section class="p-5 rounded-2xl card"><h2 class="font-black" style="color:var(--text)">Execution risk</h2><p class="mt-2 text-sm">Quotes move, liquidity disappears, partial fills occur, orders rest, venue APIs fail, and a limit order may never execute. Reconciliation is not instantaneous.</p></section>
+        <section class="p-5 rounded-2xl card"><h2 class="font-black" style="color:var(--text)">Automation risk</h2><p class="mt-2 text-sm">An active live strategy can submit orders without asking again. Configuration errors, stale data, or software defects can create unwanted trades despite safeguards.</p></section>
+        <section class="p-5 rounded-2xl card"><h2 class="font-black" style="color:var(--text)">Venue and legal risk</h2><p class="mt-2 text-sm">Venues can pause markets, change APIs, reject orders, settle disputes, restrict regions, or suspend accounts. Laws and tax treatment vary by location and may change.</p></section>
+        <section class="p-5 rounded-2xl card"><h2 class="font-black" style="color:var(--text)">Custody and key risk</h2><p class="mt-2 text-sm">PredictHQ must decrypt connected keys to sign requests. A compromised app, wallet, venue account, or infrastructure provider could cause loss. Use dedicated limited-fund credentials.</p></section>
+        <section class="p-5 rounded-2xl card"><h2 class="font-black" style="color:var(--text)">Controls reduce, not remove, risk</h2><p class="mt-2 text-sm">Bankroll, stake, exposure, daily-loss, campaign-loss, geoblock, manual-review, and global-stop controls can fail or act after a loss. Monitor venue accounts directly.</p></section>
+      </div>
+      <div class="mt-8"><a href="/account" class="inline-flex items-center px-5 h-11 font-bold rounded-lg btn btn-primary">Return to account setup</a></div>
+    </main>
+  </div></body>
+</html>

@@ -1,4 +1,5 @@
 import { Database } from '../../Support/db'
+import { response } from '@stacksjs/router'
 
 interface DecisionRow {
   id: number
@@ -44,15 +45,19 @@ export default {
   name: 'GetDecisions',
   description: 'Recent trade decisions, each with the evidence that produced it.',
 
-  async handle(request?: { get?: (key: string) => string | undefined }) {
+  async handle(request?: { get?: (key: string) => string | undefined, user?: { id?: number } }) {
+    const userId = request?.user?.id
+    if (!userId)
+      return response.error('Sign in to view decisions.', 401)
+
     const status = request?.get?.('status') ?? ''
     const limit = Math.min(200, Number(request?.get?.('limit') ?? 50) || 50)
 
     const db = new Database()
 
     try {
-      const where = status ? 'WHERE d.status = ?' : ''
-      const params: unknown[] = status ? [status, limit] : [limit]
+      const where = status ? 'WHERE s.user_id = ? AND d.status = ?' : 'WHERE s.user_id = ?'
+      const params: unknown[] = status ? [userId, status, limit] : [userId, limit]
 
       const decisions = await db.prepare<DecisionRow>(`
         SELECT

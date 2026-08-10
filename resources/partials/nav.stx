@@ -20,6 +20,7 @@ const NAV_LINKS = [
   { href: '/features', key: 'features', label: 'Features', router: false },
   { href: '/compare', key: 'compare', label: 'Compare', router: false },
   { href: '/pricing', key: 'pricing', label: 'Pricing', router: false },
+  { href: '/account', key: 'account', label: 'Account', router: false },
 ]
 </script>
 

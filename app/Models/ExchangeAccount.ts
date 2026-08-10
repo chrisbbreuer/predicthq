@@ -95,6 +95,30 @@ export default defineModel({
       validation: { rule: schema.string().max(40) },
       factory: faker => faker.date.recent().toISOString(),
     },
+    termsAcceptedAt: {
+      type: 'string',
+      fillable: false,
+      validation: { rule: schema.string().max(40) },
+      factory: faker => faker.date.recent().toISOString(),
+    },
+    riskAcceptedAt: {
+      type: 'string',
+      fillable: false,
+      validation: { rule: schema.string().max(40) },
+      factory: faker => faker.date.recent().toISOString(),
+    },
+    ageConfirmedAt: {
+      type: 'string',
+      fillable: false,
+      validation: { rule: schema.string().max(40) },
+      factory: faker => faker.date.recent().toISOString(),
+    },
+    jurisdiction: {
+      type: 'string',
+      fillable: false,
+      validation: { rule: schema.string().max(8) },
+      factory: () => 'US',
+    },
   },
 
   hasMany: ['ExchangeOrder'],

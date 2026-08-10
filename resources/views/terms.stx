@@ -1,0 +1,27 @@
+<script server>
+const navActive = 'terms'
+</script>
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="PredictHQ terms of service."><title>PredictHQ: Terms</title>@include('../partials/tokens')
+  </head>
+  <body><div class="min-h-screen app">
+    <header class="border-b bd"><div class="flex items-center justify-between mx-auto px-4 h-16 sm:px-6 max-w-4xl"><a href="/" class="font-extrabold text-lg">Predict<span class="accent">HQ</span></a><a href="/account" class="font-bold text-sm accent">Account</a></div></header>
+    <main class="mx-auto px-4 py-12 sm:px-6 max-w-4xl">
+      <p class="font-bold text-xs tracking-widest uppercase accent">Effective August 8, 2026</p>
+      <h1 class="mt-2 display font-black text-4xl tracking-tight">Terms of Service</h1>
+      <div class="mt-8 space-y-8 leading-relaxed muted">
+        <section><h2 class="font-black text-xl" style="color:var(--text)">1. The service</h2><p class="mt-2">PredictHQ provides market data, analysis, simulated strategies, and user-directed automation for supported third-party venues. PredictHQ is not a broker, exchange, investment adviser, or fiduciary. Venue accounts, custody, eligibility, settlement, and execution remain governed by the venue's own terms.</p></section>
+        <section><h2 class="font-black text-xl" style="color:var(--text)">2. Eligibility and lawful use</h2><p class="mt-2">You must be at least the minimum age required by each venue, may use the service only where prediction-market trading is lawful for you, and must provide accurate jurisdiction information. You may not evade geoblocks, sanctions, identity checks, venue limits, or other controls. We may refuse or disable automation when eligibility cannot be established.</p></section>
+        <section><h2 class="font-black text-xl" style="color:var(--text)">3. Your directions and credentials</h2><p class="mt-2">You choose every strategy, limit, venue connection, and live/paper setting. Live automation can place binding orders without another confirmation when your strategy is active. Use restricted, dedicated venue credentials and revoke them if you suspect compromise. You remain responsible for your venue account and sufficient funds.</p></section>
+        <section><h2 class="font-black text-xl" style="color:var(--text)">4. Risk and no advice</h2><p class="mt-2">Probabilities, signals, model output, backtests, and paper results are informational and may be delayed, incomplete, or wrong. They are not financial, legal, tax, or gambling advice and do not guarantee future performance. The <a href="/risk" class="underline accent">Risk Disclosure</a> is part of these Terms.</p></section>
+        <section><h2 class="font-black text-xl" style="color:var(--text)">5. Subscriptions</h2><p class="mt-2">Paid plans renew according to the interval shown at checkout until canceled. Fees, taxes, refunds, and payment processing are shown at checkout and managed through the billing portal, subject to applicable law. Losing a paid entitlement stops new automated execution; it does not cancel orders already accepted by a venue.</p></section>
+        <section><h2 class="font-black text-xl" style="color:var(--text)">6. Availability and liability</h2><p class="mt-2">The service is provided “as is” and “as available.” Networks, data providers, models, and venues can fail independently. To the fullest extent permitted by law, PredictHQ is not liable for trading losses, missed orders, venue actions, indirect damages, or lost profits. Nothing here excludes liability that cannot lawfully be excluded.</p></section>
+        <section><h2 class="font-black text-xl" style="color:var(--text)">7. Suspension and changes</h2><p class="mt-2">We may pause trading globally, suspend an account for security or compliance reasons, and update these Terms prospectively. Material changes will be identified by a new effective date. Continued use after notice means acceptance where permitted by law.</p></section>
+        <section><h2 class="font-black text-xl" style="color:var(--text)">8. Contact</h2><p class="mt-2">Questions or legal notices: <a class="underline accent" href="mailto:hello@predicthq.org">hello@predicthq.org</a>.</p></section>
+      </div>
+    </main>
+  </div></body>
+</html>

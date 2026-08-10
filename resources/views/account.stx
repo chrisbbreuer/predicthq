@@ -1,0 +1,258 @@
+<script server>
+const navActive = 'account'
+</script>
+
+<script client>
+const venue = state('kalshi')
+const mode = state('paper')
+const strategyId = state(0)
+const strategyName = state('$20 launch test')
+const bankroll = state(20)
+const maxStake = state(2)
+const dailyLossLimit = state(5)
+const cumulativeLossLimit = state(10)
+const jurisdiction = state('US')
+const termsAccepted = state(false)
+const riskAccepted = state(false)
+const ageConfirmed = state(false)
+const apiKeyId = state('')
+const privateKeyPem = state('')
+const subaccount = state('')
+const apiKey = state('')
+const apiSecret = state('')
+const apiPassphrase = state('')
+const privateKey = state('')
+const funderAddress = state('')
+const signatureType = state('1')
+const busy = state(false)
+const disconnectTarget = state('')
+const message = state('')
+const snapshot = state('Loading your private trading dashboard…')
+
+async function api(path: string, options: RequestInit = {}): Promise<any> {
+  const response = await fetch(path, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+  })
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok)
+    throw new Error(data.message || data.error || `Request failed (${response.status})`)
+  return data
+}
+
+async function refresh(): Promise<void> {
+  try {
+    const [accounts, strategies, performance, decisions] = await Promise.all([
+      api('/api/trading/accounts'),
+      api('/api/trading/strategies'),
+      api('/api/trading/performance'),
+      api('/api/trading/decisions?limit=10'),
+    ])
+    snapshot.set(JSON.stringify({ accounts, strategies, performance, decisions }, null, 2))
+  }
+  catch (error) {
+    snapshot.set(error instanceof Error ? error.message : String(error))
+  }
+}
+
+async function saveStrategy(): Promise<void> {
+  busy.set(true)
+  message.set('')
+  try {
+    const data = await api('/api/trading/strategies', {
+      method: 'POST',
+      body: JSON.stringify({
+        id: strategyId() || undefined,
+        name: strategyName(),
+        venue: venue(),
+        mode: mode(),
+        bankroll: bankroll(),
+        maxStake: maxStake(),
+        minEdge: 0.04,
+        minConfidence: 0.65,
+        maxOpenPositions: 4,
+        dailyLossLimit: dailyLossLimit(),
+        cumulativeLossLimit: cumulativeLossLimit(),
+        autoExecute: true,
+        status: 'active',
+      }),
+    })
+    strategyId.set(data.id)
+    message.set(`${mode() === 'paper' ? 'Paper' : 'Live'} strategy saved.`)
+    await refresh()
+  }
+  catch (error) {
+    message.set(error instanceof Error ? error.message : String(error))
+  }
+  finally {
+    busy.set(false)
+  }
+}
+
+async function connectAccount(): Promise<void> {
+  busy.set(true)
+  message.set('')
+  try {
+    const common = {
+      venue: venue(),
+      label: '$20 launch account',
+      jurisdiction: jurisdiction(),
+      termsAccepted: termsAccepted(),
+      riskAccepted: riskAccepted(),
+      ageConfirmed: ageConfirmed(),
+    }
+    const credentials = venue() === 'kalshi'
+      ? { apiKeyId: apiKeyId(), privateKeyPem: privateKeyPem(), subaccount: subaccount() }
+      : {
+          apiKey: apiKey(),
+          apiSecret: apiSecret(),
+          apiPassphrase: apiPassphrase(),
+          privateKey: privateKey(),
+          funderAddress: funderAddress(),
+          signatureType: signatureType(),
+        }
+    await api('/api/trading/accounts', {
+      method: 'POST',
+      body: JSON.stringify({ ...common, ...credentials }),
+    })
+    message.set(`${venue()} account verified and connected. Credential values are never returned.`)
+    apiKeyId.set('')
+    privateKeyPem.set('')
+    apiKey.set('')
+    apiSecret.set('')
+    apiPassphrase.set('')
+    privateKey.set('')
+    await refresh()
+  }
+  catch (error) {
+    message.set(error instanceof Error ? error.message : String(error))
+  }
+  finally {
+    busy.set(false)
+  }
+}
+
+async function disconnectAccount(target: string): Promise<void> {
+  if (disconnectTarget() !== target) {
+    disconnectTarget.set(target)
+    message.set(`Click disconnect ${target} again to erase its stored credentials.`)
+    return
+  }
+
+  busy.set(true)
+  message.set('')
+  try {
+    await api(`/api/trading/accounts/${target}`, { method: 'DELETE' })
+    disconnectTarget.set('')
+    message.set(`${target} credentials erased and connection disabled.`)
+    await refresh()
+  }
+  catch (error) {
+    message.set(error instanceof Error ? error.message : String(error))
+  }
+  finally {
+    busy.set(false)
+  }
+}
+
+onMounted(() => void refresh())
+</script>
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Manage private PredictHQ trading connections, strategies, decisions, and performance.">
+    <title>PredictHQ: account</title>
+    @include('../partials/tokens')
+  </head>
+  <body>
+    <div class="min-h-screen app">
+      <header class="border-b bd">
+        <div class="flex items-center justify-between mx-auto px-4 h-16 sm:px-6 max-w-6xl">
+          <a href="/" class="font-extrabold text-lg tracking-tight">Predict<span class="accent">HQ</span></a>
+          <nav class="flex gap-5 items-center text-sm font-semibold muted">
+            <a href="/markets">Markets</a><a href="/pricing">Pricing</a><a href="/risk">Risk</a>
+          </nav>
+        </div>
+      </header>
+
+      <main class="mx-auto px-4 py-10 sm:px-6 max-w-6xl">
+        <div class="max-w-3xl">
+          <p class="font-bold text-xs tracking-widest uppercase accent">Private dashboard</p>
+          <h1 class="mt-2 display font-black text-4xl tracking-tight">Paper first. Then a capped $20 live test.</h1>
+          <p class="mt-4 leading-relaxed muted">Production refuses live venue contact until the deployment switch is explicitly enabled. The first release also caps aggregate live exposure at $20 per connected account.</p>
+        </div>
+
+        <p :if="message" class="p-4 mt-6 rounded-xl card" role="status">{{ message }}</p>
+
+        <div class="grid gap-6 lg:grid-cols-2 mt-8">
+          <section class="p-6 rounded-2xl card">
+            <h2 class="display font-black text-xl">1. Connect a venue</h2>
+            <p class="mt-2 text-sm muted">Keys are encrypted before storage. Use a dedicated Kalshi subaccount or wallet funded only with the amount you intend to test.</p>
+
+            <label class="block mt-5 text-sm font-bold">Venue
+              <select x-model="venue" class="px-3 mt-2 w-full h-11 rounded-lg input">
+                <option value="kalshi">Kalshi</option>
+                <option value="polymarket">Polymarket</option>
+              </select>
+            </label>
+
+            <template :if="venue === 'kalshi'">
+              <div>
+                <label class="block mt-4 text-sm font-bold">API key ID<input x-model.trim="apiKeyId" autocomplete="off" class="px-3 mt-2 w-full h-11 rounded-lg input"></label>
+                <label class="block mt-4 text-sm font-bold">RSA private key PEM<textarea x-model.trim="privateKeyPem" autocomplete="off" rows="5" class="p-3 mt-2 w-full rounded-lg input"></textarea></label>
+                <label class="block mt-4 text-sm font-bold">Subaccount (optional)<input x-model.trim="subaccount" inputmode="numeric" class="px-3 mt-2 w-full h-11 rounded-lg input" placeholder="0–32"></label>
+              </div>
+            </template>
+
+            <template :if="venue === 'polymarket'">
+              <div>
+                <p class="p-3 mt-4 text-sm rounded-lg soft">Polymarket blocks order placement from the United States and other restricted regions. PredictHQ checks Polymarket's geoblock endpoint before every order.</p>
+                <label class="block mt-4 text-sm font-bold">API key<input x-model.trim="apiKey" autocomplete="off" class="px-3 mt-2 w-full h-11 rounded-lg input"></label>
+                <label class="block mt-4 text-sm font-bold">API secret<input x-model.trim="apiSecret" autocomplete="off" type="password" class="px-3 mt-2 w-full h-11 rounded-lg input"></label>
+                <label class="block mt-4 text-sm font-bold">Passphrase<input x-model.trim="apiPassphrase" autocomplete="off" type="password" class="px-3 mt-2 w-full h-11 rounded-lg input"></label>
+                <label class="block mt-4 text-sm font-bold">Wallet private key<input x-model.trim="privateKey" autocomplete="off" type="password" class="px-3 mt-2 w-full h-11 rounded-lg input"></label>
+                <label class="block mt-4 text-sm font-bold">Funder address<input x-model.trim="funderAddress" autocomplete="off" class="px-3 mt-2 w-full h-11 rounded-lg input"></label>
+                <label class="block mt-4 text-sm font-bold">Signature type<select x-model="signatureType" class="px-3 mt-2 w-full h-11 rounded-lg input"><option value="0">EOA</option><option value="1">Proxy</option><option value="2">Safe</option><option value="3">EIP-1271</option></select></label>
+              </div>
+            </template>
+
+            <label class="block mt-4 text-sm font-bold">Country / region code<input x-model.trim="jurisdiction" class="px-3 mt-2 w-full h-11 rounded-lg input" placeholder="US or CA-BC"></label>
+            <label class="flex gap-3 mt-4 text-sm"><input x-model="ageConfirmed" type="checkbox"><span>I meet the venue's age and eligibility requirements.</span></label>
+            <label class="flex gap-3 mt-3 text-sm"><input x-model="riskAccepted" type="checkbox"><span>I read and accept the <a class="underline accent" href="/risk">risk disclosure</a>.</span></label>
+            <label class="flex gap-3 mt-3 text-sm"><input x-model="termsAccepted" type="checkbox"><span>I accept the <a class="underline accent" href="/terms">Terms</a> and <a class="underline accent" href="/privacy">Privacy Policy</a>.</span></label>
+            <button type="button" class="px-5 mt-5 h-11 font-bold rounded-lg btn btn-primary" :disabled="busy" @click="connectAccount()">Verify and connect</button>
+          </section>
+
+          <section class="p-6 rounded-2xl card">
+            <h2 class="display font-black text-xl">2. Configure the test</h2>
+            <p class="mt-2 text-sm muted">Run paper mode until the decision record and settlements look right. Changing this form to live still cannot bypass the production deployment stop or $20 cap.</p>
+            <label class="block mt-5 text-sm font-bold">Name<input x-model.trim="strategyName" class="px-3 mt-2 w-full h-11 rounded-lg input"></label>
+            <label class="block mt-4 text-sm font-bold">Mode<select x-model="mode" class="px-3 mt-2 w-full h-11 rounded-lg input"><option value="paper">Paper (recommended)</option><option value="live">Live</option></select></label>
+            <div class="grid grid-cols-2 gap-4 mt-4">
+              <label class="text-sm font-bold">Bankroll<input x-model.number="bankroll" type="number" min="1" max="20" class="px-3 mt-2 w-full h-11 rounded-lg input"></label>
+              <label class="text-sm font-bold">Max order<input x-model.number="maxStake" type="number" min="1" max="20" class="px-3 mt-2 w-full h-11 rounded-lg input"></label>
+              <label class="text-sm font-bold">Daily stop<input x-model.number="dailyLossLimit" type="number" min="0" max="20" class="px-3 mt-2 w-full h-11 rounded-lg input"></label>
+              <label class="text-sm font-bold">Campaign stop<input x-model.number="cumulativeLossLimit" type="number" min="0" max="20" class="px-3 mt-2 w-full h-11 rounded-lg input"></label>
+            </div>
+            <button type="button" class="px-5 mt-5 h-11 font-bold rounded-lg btn btn-primary" :disabled="busy" @click="saveStrategy()">Save active strategy</button>
+          </section>
+        </div>
+
+        <section class="p-6 mt-6 rounded-2xl card">
+          <div class="flex gap-4 items-center justify-between">
+            <div><h2 class="display font-black text-xl">Accounts, strategies, decisions, performance</h2><p class="mt-1 text-sm muted">This feed is scoped to your signed-in user.</p></div>
+            <button type="button" class="px-4 h-10 font-bold text-sm rounded-lg btn" @click="refresh()">Refresh</button>
+          </div>
+          <pre class="p-4 mt-5 overflow-auto max-h-[620px] text-xs rounded-xl soft">{{ snapshot }}</pre>
+          <div class="flex flex-wrap gap-3 mt-4">
+            <button type="button" class="px-4 h-10 font-bold text-sm rounded-lg btn" :disabled="busy" @click="disconnectAccount('kalshi')">{{ disconnectTarget === 'kalshi' ? 'Confirm disconnect Kalshi' : 'Disconnect Kalshi' }}</button>
+            <button type="button" class="px-4 h-10 font-bold text-sm rounded-lg btn" :disabled="busy" @click="disconnectAccount('polymarket')">{{ disconnectTarget === 'polymarket' ? 'Confirm disconnect Polymarket' : 'Disconnect Polymarket' }}</button>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
