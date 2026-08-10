@@ -3,6 +3,44 @@ import type { CloudConfig as TsCloudConfig } from '@stacksjs/ts-cloud'
 import { servers } from '~/cloud/servers'
 import { env } from '@stacksjs/env'
 
+const productionRuntimeEnv = {
+  APP_ENV: 'production',
+  NODE_ENV: 'production',
+  APP_URL: String(env.APP_URL || 'https://predicthq.org'),
+  APP_KEY: String(env.APP_KEY || ''),
+  DEBUG: 'false',
+  DB_CONNECTION: 'vitess',
+  DB_HOST: '127.0.0.1',
+  DB_PORT: '15306',
+  DB_DATABASE: 'predicthq',
+  DB_USERNAME: 'predicthq',
+  DB_PASSWORD: String(env.DB_PASSWORD || ''),
+  DB_VITESS_SHARDED: 'false',
+  QUEUE_DRIVER: 'database',
+  QUEUE_FAILED_DRIVER: 'database',
+  ODDS_API_KEY: String(env.ODDS_API_KEY || ''),
+  ODDS_FALLBACK_MIN_INTERVAL_MS: String(env.ODDS_FALLBACK_MIN_INTERVAL_MS || '300000'),
+  ODDS_API_REGIONS: String(env.ODDS_API_REGIONS || 'us,uk,eu'),
+  ANTHROPIC_API_KEY: String(env.ANTHROPIC_API_KEY || ''),
+  GOOGLE_CLIENT_ID: String(env.GOOGLE_CLIENT_ID || ''),
+  GOOGLE_CLIENT_SECRET: String(env.GOOGLE_CLIENT_SECRET || ''),
+  APPLE_CLIENT_ID: String(env.APPLE_CLIENT_ID || ''),
+  APPLE_TEAM_ID: String(env.APPLE_TEAM_ID || ''),
+  APPLE_KEY_ID: String(env.APPLE_KEY_ID || ''),
+  APPLE_PRIVATE_KEY: String(env.APPLE_PRIVATE_KEY || ''),
+  STRIPE_SECRET_KEY: String(env.STRIPE_SECRET_KEY || ''),
+  STRIPE_PUBLISHABLE_KEY: String(env.STRIPE_PUBLISHABLE_KEY || ''),
+  STRIPE_WEBHOOK_SECRET: String(env.STRIPE_WEBHOOK_SECRET || ''),
+  TRADING_ENABLED: String(env.TRADING_ENABLED || 'false'),
+  // Version 1 launches under a hard aggregate cap per connected account.
+  // Raising it is an explicit configuration change after the $20 trial.
+  TRADING_BANKROLL_CAP_USD: String(env.TRADING_BANKROLL_CAP_USD || '20'),
+  PUBLIC_LIVE_TRADING_ENABLED: String(env.PUBLIC_LIVE_TRADING_ENABLED || 'false'),
+  LIVE_TRADING_USER_ALLOWLIST: String(env.LIVE_TRADING_USER_ALLOWLIST || ''),
+  KALSHI_API_BASE_URL: String(env.KALSHI_API_BASE_URL || 'https://external-api.kalshi.com/trade-api/v2'),
+  POLYMARKET_BUILDER_CODE: String(env.POLYMARKET_BUILDER_CODE || ''),
+}
+
 /**
  * Stacks Cloud Configuration
  *
@@ -699,6 +737,7 @@ export const tsCloud: TsCloudConfig = {
       port: 3070,
       preStart: [
         'bun install',
+        'bun node_modules/@stacksjs/buddy/dist/cli.js preflight --production',
         // The main service owns schema migration. Both processes connect to
         // the same vtgate keyspace, so the API must never race this step.
         'bun node_modules/@stacksjs/buddy/dist/cli.js migrate',
@@ -708,15 +747,7 @@ export const tsCloud: TsCloudConfig = {
         'bun node_modules/@stacksjs/buddy/dist/cli.js seed --only Sport,Bookmaker',
       ],
       env: {
-        APP_ENV: 'production',
-        NODE_ENV: 'production',
-        DB_CONNECTION: 'vitess',
-        DB_HOST: '127.0.0.1',
-        DB_PORT: '15306',
-        DB_DATABASE: 'predicthq',
-        DB_USERNAME: 'predicthq',
-        DB_PASSWORD: env.DB_PASSWORD || '',
-        DB_VITESS_SHARDED: 'false',
+        ...productionRuntimeEnv,
         // Where `main` proxies /api. On a shared host the server refuses to
         // guess a port, and rightly so: guessing would forward this app's API
         // traffic to whichever neighbour happened to hold the default. Must
@@ -735,17 +766,37 @@ export const tsCloud: TsCloudConfig = {
       preStart: ['bun install'],
       // Same keyspace as `main`, and no migrate step: one schema owner.
       env: {
+        ...productionRuntimeEnv,
         HOST: '127.0.0.1',
-        APP_ENV: 'production',
-        NODE_ENV: 'production',
-        DB_CONNECTION: 'vitess',
-        DB_HOST: '127.0.0.1',
-        DB_PORT: '15306',
-        DB_DATABASE: 'predicthq',
-        DB_USERNAME: 'predicthq',
-        DB_PASSWORD: env.DB_PASSWORD || '',
-        DB_VITESS_SHARDED: 'false',
       },
+    },
+
+    // Long-lived runtime roles. They intentionally have no public domain;
+    // ts-cloud manages them as systemd services, but rpx exposes neither a
+    // route nor a firewall port for them.
+    scheduler: {
+      root: '.',
+      start: 'bun node_modules/@stacksjs/buddy/dist/cli.js schedule:run',
+      port: 3072,
+      sharedPaths: ['storage/ingest'],
+      preStart: ['bun install'],
+      env: productionRuntimeEnv,
+    },
+    worker: {
+      root: '.',
+      start: 'bun node_modules/@stacksjs/buddy/dist/cli.js queue:work --concurrency 2',
+      port: 3073,
+      sharedPaths: ['storage/ingest'],
+      preStart: ['bun install'],
+      env: productionRuntimeEnv,
+    },
+    oddsWatcher: {
+      root: '.',
+      start: 'bun node_modules/@stacksjs/buddy/dist/cli.js odds:watch',
+      port: 3074,
+      sharedPaths: ['storage/ingest'],
+      preStart: ['bun install'],
+      env: productionRuntimeEnv,
     },
   },
 }
