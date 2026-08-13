@@ -1,4 +1,5 @@
 import { Database } from '../../Support/db'
+import { authenticatedUserId } from '../../Support/request-auth'
 import { response } from '@stacksjs/router'
 
 export default {
@@ -6,7 +7,7 @@ export default {
   description: 'Erase stored venue credentials and disable the connection.',
 
   async handle(request?: { get?: (key: string) => string | undefined, user?: { id?: number } }) {
-    const userId = request?.user?.id
+    const userId = await authenticatedUserId(request)
     if (!userId)
       return response.error('Sign in to disconnect a trading account.', 401)
 

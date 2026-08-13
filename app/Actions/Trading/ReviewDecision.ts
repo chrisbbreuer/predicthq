@@ -1,4 +1,5 @@
 import { Database } from '../../Support/db'
+import { authenticatedUserId } from '../../Support/request-auth'
 import { response } from '@stacksjs/router'
 import { executeStrategy, type Strategy } from '../../Services/trading/execute'
 
@@ -20,7 +21,7 @@ export default {
     param?: (key: string) => string | undefined
     user?: { id?: number }
   }) {
-    const userId = request?.user?.id
+    const userId = await authenticatedUserId(request)
     if (!userId)
       return response.error('Sign in to review decisions.', 401)
 

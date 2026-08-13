@@ -1,4 +1,5 @@
 import { Database } from '../../Support/db'
+import { authenticatedUserId } from '../../Support/request-auth'
 import { response } from '@stacksjs/router'
 
 interface DecisionRow {
@@ -46,7 +47,7 @@ export default {
   description: 'Recent trade decisions, each with the evidence that produced it.',
 
   async handle(request?: { get?: (key: string) => string | undefined, user?: { id?: number } }) {
-    const userId = request?.user?.id
+    const userId = await authenticatedUserId(request)
     if (!userId)
       return response.error('Sign in to view decisions.', 401)
 

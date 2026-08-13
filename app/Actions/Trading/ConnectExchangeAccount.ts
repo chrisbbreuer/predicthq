@@ -1,5 +1,6 @@
 import type { VenueCredentials } from '../../Services/trading/credentials'
 import { Database } from '../../Support/db'
+import { authenticatedUserId } from '../../Support/request-auth'
 import { response } from '@stacksjs/router'
 import { assertUsable, CredentialError, maskIdentifier, sealCredentials } from '../../Services/trading/credentials'
 import { clientFor } from '../../Services/trading/execute'
@@ -22,7 +23,7 @@ export default {
   description: 'Store venue API credentials and verify them against the venue.',
 
   async handle(request?: { get?: (key: string) => string | undefined, user?: { id?: number } }) {
-    const userId = request?.user?.id
+    const userId = await authenticatedUserId(request)
     if (!userId)
       return response.error('Sign in to connect a trading account.', 401)
 

@@ -1,4 +1,5 @@
 import { Database } from '../../Support/db'
+import { authenticatedUserId } from '../../Support/request-auth'
 import { response } from '@stacksjs/router'
 import { issueKey } from '../../Services/api-keys'
 
@@ -18,7 +19,7 @@ export default {
   description: 'Issue a new API key for the signed-in user.',
 
   async handle(request?: { get?: (key: string) => string | undefined, user?: { id?: number } }) {
-    const userId = request?.user?.id
+    const userId = await authenticatedUserId(request)
     if (!userId)
       return response.error('Sign in to manage API keys.', 401)
 

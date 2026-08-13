@@ -1,4 +1,5 @@
 import { Database } from '../../Support/db'
+import { authenticatedUserId } from '../../Support/request-auth'
 import { response } from '@stacksjs/router'
 
 export default {
@@ -6,7 +7,7 @@ export default {
   description: 'List a user\'s connected venue accounts without credential material.',
 
   async handle(request?: { user?: { id?: number } }) {
-    const userId = request?.user?.id
+    const userId = await authenticatedUserId(request)
     if (!userId)
       return response.error('Sign in to view trading accounts.', 401)
 

@@ -1,4 +1,5 @@
 import { Database } from '../../Support/db'
+import { authenticatedUserId } from '../../Support/request-auth'
 import { response } from '@stacksjs/router'
 import { performanceForUser, strategyPerformance } from '../../Services/trading/performance'
 
@@ -20,7 +21,7 @@ export default {
   description: 'Realized results, hit rate, and drawdown per trading strategy.',
 
   async handle(request?: { get?: (key: string) => string | undefined, user?: { id?: number } }) {
-    const userId = request?.user?.id
+    const userId = await authenticatedUserId(request)
     if (!userId)
       return response.error('Sign in to view strategy performance.', 401)
 

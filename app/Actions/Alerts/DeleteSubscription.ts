@@ -1,4 +1,5 @@
 import { Database } from '../../Support/db'
+import { authenticatedUserId } from '../../Support/request-auth'
 import { response } from '@stacksjs/router'
 
 /**
@@ -13,7 +14,7 @@ export default {
   description: 'Remove one of the signed-in user\'s alert subscriptions.',
 
   async handle(request?: { param?: (key: string) => string | undefined, user?: { id?: number } }) {
-    const userId = request?.user?.id
+    const userId = await authenticatedUserId(request)
     if (!userId)
       return response.error('Sign in to manage alerts.', 401)
 

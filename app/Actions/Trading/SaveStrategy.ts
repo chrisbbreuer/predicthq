@@ -1,4 +1,5 @@
 import { Database } from '../../Support/db'
+import { authenticatedUserId } from '../../Support/request-auth'
 import { response } from '@stacksjs/router'
 import { resolveEntitlements } from '../../Services/billing/entitlements'
 
@@ -30,7 +31,7 @@ export default {
   description: 'Create or update a trading strategy within the user plan limits.',
 
   async handle(request?: { get?: (key: string) => string | undefined, user?: { id?: number } }) {
-    const userId = request?.user?.id
+    const userId = await authenticatedUserId(request)
     if (!userId)
       return response.error('Sign in to manage strategies.', 401)
 
