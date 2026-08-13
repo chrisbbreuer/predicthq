@@ -1,0 +1,1 @@
+ALTER TABLE `notifications` MODIFY COLUMN `id` bigint NOT NULL AUTO_INCREMENT;
