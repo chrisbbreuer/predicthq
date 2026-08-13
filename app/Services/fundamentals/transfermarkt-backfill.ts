@@ -558,21 +558,21 @@ async function claimTask(): Promise<TaskRow | undefined> {
   const staleBefore = databaseTimestamp(new Date(Date.now() - 30 * 60_000))
   await db.unsafe(
     `UPDATE backfill_tasks SET status = 'pending', locked_at = '', lock_token = '', available_at = '', updated_at = ?
-     WHERE provider = ? AND status = 'running' AND locked_at <> '' AND locked_at < ?`,
+    WHERE provider = ? AND status = 'running' AND locked_at <> '' AND locked_at < ?`,
     [timestamp, PROVIDER, staleBefore],
   ).execute()
   const candidates = await rows<TaskRow>(
     `SELECT id, kind, external_id, url, attempts, payload
-     FROM backfill_tasks
-     WHERE provider = ? AND status IN ('pending', 'failed') AND attempts < ? AND (available_at = '' OR available_at <= ?)
-     ORDER BY priority ASC, id ASC LIMIT 10`,
+    FROM backfill_tasks
+    WHERE provider = ? AND status IN ('pending', 'failed') AND attempts < ? AND (available_at = '' OR available_at <= ?)
+    ORDER BY priority ASC, id ASC LIMIT 10`,
     [PROVIDER, Math.max(1, Number(process.env.TRANSFERMARKT_MAX_ATTEMPTS || 8)), timestamp],
   )
   for (const candidate of candidates) {
     const token = randomUUID()
     await db.unsafe(
       `UPDATE backfill_tasks SET status = 'running', locked_at = ?, lock_token = ?, attempts = attempts + 1, updated_at = ?
-       WHERE id = ? AND status IN ('pending', 'failed')`,
+      WHERE id = ? AND status IN ('pending', 'failed')`,
       [timestamp, token, timestamp, candidate.id],
     ).execute()
     const claimed = await first<TaskRow>(
