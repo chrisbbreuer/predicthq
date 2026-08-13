@@ -92,4 +92,6 @@ storage/framework/cache/
 # regenerated on every dev boot, so a commit of them is noise that
 # conflicts on every branch.
 storage/framework/stx/cache/
+storage/framework/stx/bundle-cache/
+storage/framework/stx/ssg-cache/
 storage/framework/runtime/model-sources/
