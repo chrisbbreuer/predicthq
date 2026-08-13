@@ -71,6 +71,7 @@
   "dependencies": {
     "@polymarket/clob-client-v2": "^1.1.0",
     "@stacksjs/stx": "^0.2.153",
+    "@stacksjs/ts-cloud": "^0.7.120",
     "bun-plugin-stx": "^0.2.153",
     "bun-query-builder": "^0.2.22",
     "stacks": "^0.70.292",
