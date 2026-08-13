@@ -1,5 +1,189 @@
 # Stacks Changelog
 
+## v1.0.1
+
+## ✨ Features
+
+- **odds**: add native-first paid fallback ([ea03da9](https://github.com/chrisbbreuer/predicthq/commit/ea03da9)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **account**: add controlled trading dashboard ([5e3f5dd](https://github.com/chrisbbreuer/predicthq/commit/5e3f5dd)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **trading**: update exchange clients ([70a107e](https://github.com/chrisbbreuer/predicthq/commit/70a107e)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **trading**: harden controlled live execution ([fcfffd7](https://github.com/chrisbbreuer/predicthq/commit/fcfffd7)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **odds**: enable Pinnacle, reachable from where it is licensed ([7484ed2](https://github.com/chrisbbreuer/predicthq/commit/7484ed2)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **odds**: add the Pinnacle adapter, disabled on a geo-block ([0318c32](https://github.com/chrisbbreuer/predicthq/commit/0318c32)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **odds**: read DraftKings directly ([1e35935](https://github.com/chrisbbreuer/predicthq/commit/1e35935)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **odds**: take a league off the polling path once every book pushes ([0486cc1](https://github.com/chrisbbreuer/predicthq/commit/0486cc1)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **marketing**: add the comparison pages ([a925261](https://github.com/chrisbbreuer/predicthq/commit/a925261)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **api**: serve the price history we already keep ([e1d74e9](https://github.com/chrisbbreuer/predicthq/commit/e1d74e9)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **odds**: poll on a cadence cron cannot express ([c21e328](https://github.com/chrisbbreuer/predicthq/commit/c21e328)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **odds**: read the bookmakers ourselves, and pay only for the gaps ([1e80688](https://github.com/chrisbbreuer/predicthq/commit/1e80688)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **odds**: make the sports and the poll cadence configurable ([abcb060](https://github.com/chrisbbreuer/predicthq/commit/abcb060)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **api**: issue API keys and meter what they use ([4672fcd](https://github.com/chrisbbreuer/predicthq/commit/4672fcd)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **alerts**: deliver alerts to the people who asked for them ([3cb79f2](https://github.com/chrisbbreuer/predicthq/commit/3cb79f2)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **trading**: report what each strategy actually returned ([ad11978](https://github.com/chrisbbreuer/predicthq/commit/ad11978)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **trading**: run strategies on paper before they run on money ([e7c8af2](https://github.com/chrisbbreuer/predicthq/commit/e7c8af2)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **monitoring**: record job failures where they can be found ([a5696f9](https://github.com/chrisbbreuer/predicthq/commit/a5696f9)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **monitoring**: alert when an ingestion loop stops producing ([4701d6e](https://github.com/chrisbbreuer/predicthq/commit/4701d6e)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **api**: answer health from the dependencies, not a literal ([860269b](https://github.com/chrisbbreuer/predicthq/commit/860269b)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **trading**: add a global stop for order placement ([7b603ca](https://github.com/chrisbbreuer/predicthq/commit/7b603ca)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **trading**: re-check the quote before an order leaves the process ([5e94533](https://github.com/chrisbbreuer/predicthq/commit/5e94533)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **trading**: book positions and settle them for realized P&L ([5fce8e1](https://github.com/chrisbbreuer/predicthq/commit/5fce8e1)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **trading**: reconcile open orders against the venue ([00dfc59](https://github.com/chrisbbreuer/predicthq/commit/00dfc59)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **vitess**: commit portable production schema ([7ec7843](https://github.com/chrisbbreuer/predicthq/commit/7ec7843)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **vitess**: configure production database cutover ([ceddafd](https://github.com/chrisbbreuer/predicthq/commit/ceddafd)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **transfermarkt**: backfill complete player histories ([4933a0b](https://github.com/chrisbbreuer/predicthq/commit/4933a0b)) _(by Chris <chrisbreuer93@gmail.com>)_
+- scrape Transfermarkt club valuations ([96ae21e](https://github.com/chrisbbreuer/predicthq/commit/96ae21e)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **signals**: ladder coherence, and steam finally reaching the engine ([2cadd51](https://github.com/chrisbbreuer/predicthq/commit/2cadd51)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **attribution**: score each signal against the close, so one can be killed ([b7b6022](https://github.com/chrisbbreuer/predicthq/commit/b7b6022)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **signals**: rest, congestion, and the first real reverse-line read ([5b5ee94](https://github.com/chrisbbreuer/predicthq/commit/5b5ee94)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **intl**: national teams, so a friendly is readable too ([8475d7d](https://github.com/chrisbbreuer/predicthq/commit/8475d7d)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **tiers**: the mismatch signal no longer needs a paid source to fire ([b4386d1](https://github.com/chrisbbreuer/predicthq/commit/b4386d1)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **kalshi**: read a fixture back to the two clubs playing it ([aaa9f41](https://github.com/chrisbbreuer/predicthq/commit/aaa9f41)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **fundamentals**: give the model something the books did not tell it ([25ef417](https://github.com/chrisbbreuer/predicthq/commit/25ef417)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **web**: say where the prices came from and what they have been worth ([5afe5f7](https://github.com/chrisbbreuer/predicthq/commit/5afe5f7)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **quant**: a real pricing pipeline behind the board ([54f383a](https://github.com/chrisbbreuer/predicthq/commit/54f383a)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **auth**: sign-in and sign-up pages, and Apple that can actually work ([37efd5f](https://github.com/chrisbbreuer/predicthq/commit/37efd5f)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **web**: one nav on every page, with sign-in where you expect it ([63e1ad8](https://github.com/chrisbbreuer/predicthq/commit/63e1ad8)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **auth**: Google and Apple sign-in ([d67cf82](https://github.com/chrisbbreuer/predicthq/commit/d67cf82)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **scores**: show the book's line on a game ([dcbf710](https://github.com/chrisbbreuer/predicthq/commit/dcbf710)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **scores**: game detail with line score and match stats ([f0fe2fb](https://github.com/chrisbbreuer/predicthq/commit/f0fe2fb)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **scores**: live scoreboards from ESPN ([e1a5fc7](https://github.com/chrisbbreuer/predicthq/commit/e1a5fc7)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **community**: per-market threads, and softer copy until they fill ([5955227](https://github.com/chrisbbreuer/predicthq/commit/5955227)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **web**: reposition around accounts, people, and your AI ([24cfbec](https://github.com/chrisbbreuer/predicthq/commit/24cfbec)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **web**: mobile nav, display face, calibrated palette ([f526274](https://github.com/chrisbbreuer/predicthq/commit/f526274)) _(by Chris <chrisbreuer93@gmail.com>)_
+- rename to PredictHQ and launch on predicthq.org ([cae3145](https://github.com/chrisbbreuer/predicthq/commit/cae3145)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **cloud**: attach predict.stacksjs.com to the shared stacks box ([81bca78](https://github.com/chrisbbreuer/predicthq/commit/81bca78)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **web**: follow the system theme by default ([fabbd21](https://github.com/chrisbbreuer/predicthq/commit/fabbd21)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **web**: a page per feature ([265ea19](https://github.com/chrisbbreuer/predicthq/commit/265ea19)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+## 🐛 Bug Fixes
+
+- **queue**: provision durability support tables ([d7db244](https://github.com/chrisbbreuer/predicthq/commit/d7db244)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **scheduler**: run canonical job modules once ([f24eb67](https://github.com/chrisbbreuer/predicthq/commit/f24eb67)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **db**: normalize production datetime writes ([67a32f2](https://github.com/chrisbbreuer/predicthq/commit/67a32f2)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **db**: reconcile Vitess migration snapshot ([3eacd70](https://github.com/chrisbbreuer/predicthq/commit/3eacd70)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **db**: preserve market foreign key index ([f4a21c2](https://github.com/chrisbbreuer/predicthq/commit/f4a21c2)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **config**: unify production encryption keypair ([64282a5](https://github.com/chrisbbreuer/predicthq/commit/64282a5)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **deploy**: defer production secret resolution ([4d53548](https://github.com/chrisbbreuer/predicthq/commit/4d53548)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **deploy**: isolate production runtime env ([5821ece](https://github.com/chrisbbreuer/predicthq/commit/5821ece)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **config**: ship Google OAuth callback ([a2599c8](https://github.com/chrisbbreuer/predicthq/commit/a2599c8)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **auth**: complete social login session ([69e9466](https://github.com/chrisbbreuer/predicthq/commit/69e9466)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **models**: make the player part of a market's identity ([c845087](https://github.com/chrisbbreuer/predicthq/commit/c845087)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **migrations**: generate the Vitess schema for the keyspace we run ([3f56a6d](https://github.com/chrisbbreuer/predicthq/commit/3f56a6d)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **api**: rate limit the write endpoints ([fc06297](https://github.com/chrisbbreuer/predicthq/commit/fc06297)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **trading**: let a strategy revisit a market it has traded ([e9c1b7a](https://github.com/chrisbbreuer/predicthq/commit/e9c1b7a)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **trading**: halt on realized loss, not deployed capital ([916622c](https://github.com/chrisbbreuer/predicthq/commit/916622c)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **deploy**: seed canonical provider metadata ([8e4d6f9](https://github.com/chrisbbreuer/predicthq/commit/8e4d6f9)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **transfermarkt**: write MySQL-safe queue timestamps ([b072197](https://github.com/chrisbbreuer/predicthq/commit/b072197)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **deps**: ship production cache runtime ([404cdd3](https://github.com/chrisbbreuer/predicthq/commit/404cdd3)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **deploy**: persist source document snapshots ([d3b222a](https://github.com/chrisbbreuer/predicthq/commit/d3b222a)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **migrations**: reconcile production Vitess schema ([cf3a356](https://github.com/chrisbbreuer/predicthq/commit/cf3a356)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **migrations**: align Vitess foreign key types ([2f83c30](https://github.com/chrisbbreuer/predicthq/commit/2f83c30)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **migrations**: preserve bounded string widths ([857f76b](https://github.com/chrisbbreuer/predicthq/commit/857f76b)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **cli**: prefer installed dependencies over Pantry ([aaefc78](https://github.com/chrisbbreuer/predicthq/commit/aaefc78)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **migrations**: regenerate Vitess defaults ([f48b1b5](https://github.com/chrisbbreuer/predicthq/commit/f48b1b5)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **models**: own notification column types ([1d85d1e](https://github.com/chrisbbreuer/predicthq/commit/1d85d1e)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **api**: expose a stable health endpoint ([355cc32](https://github.com/chrisbbreuer/predicthq/commit/355cc32)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **cli**: register production data commands ([0097349](https://github.com/chrisbbreuer/predicthq/commit/0097349)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **prod**: stop pointing every visitor's browser at their own machine ([17457c4](https://github.com/chrisbbreuer/predicthq/commit/17457c4)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **build**: regenerate the auto-import manifest so it stops exporting a name twice ([1d6134d](https://github.com/chrisbbreuer/predicthq/commit/1d6134d)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **orm**: tolerate a missing config/qb.ts so the API can boot ([9c55756](https://github.com/chrisbbreuer/predicthq/commit/9c55756)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **web**: do not open a page about real data with four zeros ([b8de208](https://github.com/chrisbbreuer/predicthq/commit/b8de208)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **cloud**: tell main which port the API is on ([fd8b3f5](https://github.com/chrisbbreuer/predicthq/commit/fd8b3f5)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **cloud**: one database, outside the release trees ([b56e12e](https://github.com/chrisbbreuer/predicthq/commit/b56e12e)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **web**: one nav everywhere, and a mark that reads ([1c8bda0](https://github.com/chrisbbreuer/predicthq/commit/1c8bda0)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **web**: make dividers follow the theme instead of the text colour ([1cfc61e](https://github.com/chrisbbreuer/predicthq/commit/1cfc61e)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **cloud**: run the built CLI entry, not the ./buddy shim ([4a516d8](https://github.com/chrisbbreuer/predicthq/commit/4a516d8)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **odds**: destructure the price pair before reading it ([71a63e7](https://github.com/chrisbbreuer/predicthq/commit/71a63e7)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **models**: align prediction-market schema with the migrate differ ([2ded707](https://github.com/chrisbbreuer/predicthq/commit/2ded707)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **dev**: resolve the stx dev server as a normal dependency ([cce3172](https://github.com/chrisbbreuer/predicthq/commit/cce3172)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+## ⚡ Performance Improvements
+
+- **ingest**: write prices in batches, not row by row ([fdbbd26](https://github.com/chrisbbreuer/predicthq/commit/fdbbd26)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+## ♻️ Code Refactoring
+
+- **database**: use portable async connections ([273540e](https://github.com/chrisbbreuer/predicthq/commit/273540e)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **community**: write notes through the ORM ([ec42ebd](https://github.com/chrisbbreuer/predicthq/commit/ec42ebd)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **web**: move the existing pages onto the shared tokens ([ade8482](https://github.com/chrisbbreuer/predicthq/commit/ade8482)) _(by Chris <chrisbreuer93@gmail.com>)_
+- rename OddsBeacon to Prin.tel ([75e1792](https://github.com/chrisbbreuer/predicthq/commit/75e1792)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+## 📝 Documentation
+
+- record where the browser transport actually got to ([9c87004](https://github.com/chrisbbreuer/predicthq/commit/9c87004)) _(by Chris <chrisbreuer93@gmail.com>)_
+- how to capture a bookmaker payload ([b67cea1](https://github.com/chrisbbreuer/predicthq/commit/b67cea1)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **api**: document the two endpoints this branch added ([f2c3b78](https://github.com/chrisbbreuer/predicthq/commit/f2c3b78)) _(by Chris <chrisbreuer93@gmail.com>)_
+- call it PredictHQ, and describe the odds loop ([bc41f18](https://github.com/chrisbbreuer/predicthq/commit/bc41f18)) _(by Chris <chrisbreuer93@gmail.com>)_
+- describe the stop, the health check, and the API key ([4029999](https://github.com/chrisbbreuer/predicthq/commit/4029999)) _(by Chris <chrisbreuer93@gmail.com>)_
+- link the community as stacksjs.com/discord ([ccf6bdf](https://github.com/chrisbbreuer/predicthq/commit/ccf6bdf)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **ui**: update svg binding note now that stx restores attribute casing ([71d9a5b](https://github.com/chrisbbreuer/predicthq/commit/71d9a5b)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **env**: document SUDO_PASSWORD for rpx HTTPS pretty URLs ([187f946](https://github.com/chrisbbreuer/predicthq/commit/187f946)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+## 💄 Styles
+
+- **ui**: sort tailwind classes on the smart-money page ([a79a8ae](https://github.com/chrisbbreuer/predicthq/commit/a79a8ae)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **ui**: lean into a Kalshi-style look ([d4cf575](https://github.com/chrisbbreuer/predicthq/commit/d4cf575)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+## ✅ Tests
+
+- cover the paths where a mistake costs money ([b91f228](https://github.com/chrisbbreuer/predicthq/commit/b91f228)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **quant**: prove the loop from a finished game to a Brier score ([00e4de8](https://github.com/chrisbbreuer/predicthq/commit/00e4de8)) _(by Chris <chrisbreuer93@gmail.com>)_
+- cover fair value, sizing, and the entitlement gate ([d66b398](https://github.com/chrisbbreuer/predicthq/commit/d66b398)) _(by Chris <chrisbreuer93@gmail.com>)_
+- resolve migrations by table, not by filename ([6859e06](https://github.com/chrisbbreuer/predicthq/commit/6859e06)) _(by Chris <chrisbreuer93@gmail.com>)_
+- cover fill scoring, trader aggregates, and graph queries ([3260e56](https://github.com/chrisbbreuer/predicthq/commit/3260e56)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+## 👷 Build System
+
+- **migrations**: add the Vitess schema for the new tables ([12d32f1](https://github.com/chrisbbreuer/predicthq/commit/12d32f1)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+## 🔧 Chores
+
+- **deps**: enforce fixed ts-cloud runtime ([6b6c8cf](https://github.com/chrisbbreuer/predicthq/commit/6b6c8cf)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **config**: encrypt production Stripe credentials ([a7a672d](https://github.com/chrisbbreuer/predicthq/commit/a7a672d)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **config**: encrypt production provider credentials ([0604e7c](https://github.com/chrisbbreuer/predicthq/commit/0604e7c)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **build**: ignore generated stx caches ([46c1131](https://github.com/chrisbbreuer/predicthq/commit/46c1131)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **release**: prepare production v1 ([5100cbf](https://github.com/chrisbbreuer/predicthq/commit/5100cbf)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **deps**: pull proxy-safe FK introspection ([5a60cb6](https://github.com/chrisbbreuer/predicthq/commit/5a60cb6)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **deps**: avoid correlated FK introspection ([8c1d085](https://github.com/chrisbbreuer/predicthq/commit/8c1d085)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **deps**: pull proxy-safe migration DDL ([11debbc](https://github.com/chrisbbreuer/predicthq/commit/11debbc)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **deps**: pull bounded varchar reconciliation ([f30a0db](https://github.com/chrisbbreuer/predicthq/commit/f30a0db)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **deps**: preserve MySQL varchar bounds ([42e6488](https://github.com/chrisbbreuer/predicthq/commit/42e6488)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **deps**: pull accurate MySQL introspection ([13a5d2a](https://github.com/chrisbbreuer/predicthq/commit/13a5d2a)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **deps**: pull safe schema reconciliation ([5f87459](https://github.com/chrisbbreuer/predicthq/commit/5f87459)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **deps**: pull bounded varchar generation ([ca8b2ca](https://github.com/chrisbbreuer/predicthq/commit/ca8b2ca)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **deps**: pull bounded varchar fix ([6e68c88](https://github.com/chrisbbreuer/predicthq/commit/6e68c88)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **deps**: pull deterministic action resolution ([0cb081c](https://github.com/chrisbbreuer/predicthq/commit/0cb081c)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **deps**: pull MySQL DDL fix ([39d1bf6](https://github.com/chrisbbreuer/predicthq/commit/39d1bf6)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **deps**: pull Vitess lock fix ([7555ab5](https://github.com/chrisbbreuer/predicthq/commit/7555ab5)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **deps**: pull compiled migration planner ([e335a18](https://github.com/chrisbbreuer/predicthq/commit/e335a18)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **deps**: pull schema convergence fixes ([10a7bfa](https://github.com/chrisbbreuer/predicthq/commit/10a7bfa)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **deps**: pull Vitess runtime DDL fix ([e4cd5c3](https://github.com/chrisbbreuer/predicthq/commit/e4cd5c3)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **deps**: pull dialect-aware migrations ([9b75fc4](https://github.com/chrisbbreuer/predicthq/commit/9b75fc4)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **deps**: upgrade production framework ([c119dcf](https://github.com/chrisbbreuer/predicthq/commit/c119dcf)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **env**: rotate production database credential ([8a0d983](https://github.com/chrisbbreuer/predicthq/commit/8a0d983)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **env**: rotate production database credential ([12271e8](https://github.com/chrisbbreuer/predicthq/commit/12271e8)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **env**: encrypt production configuration ([7377217](https://github.com/chrisbbreuer/predicthq/commit/7377217)) _(by Chris <chrisbreuer93@gmail.com>)_
+- add DOM scraper dependency ([1615fa7](https://github.com/chrisbbreuer/predicthq/commit/1615fa7)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **env**: encrypt AWS credentials, unify on one keypair ([d0064ef](https://github.com/chrisbbreuer/predicthq/commit/d0064ef)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **web**: use stx comments in the partials again ([712d82d](https://github.com/chrisbbreuer/predicthq/commit/712d82d)) _(by Chris <chrisbreuer93@gmail.com>)_
+- regenerate the stx route manifest ([fd1b520](https://github.com/chrisbbreuer/predicthq/commit/fd1b520)) _(by Chris <chrisbreuer93@gmail.com>)_
+- regenerate the route and auto-import manifests ([5a3020c](https://github.com/chrisbbreuer/predicthq/commit/5a3020c)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **env**: declare the keys the trading and billing paths read ([6e18793](https://github.com/chrisbbreuer/predicthq/commit/6e18793)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **deps**: sync the framework defaults to 0.70.249 ([90b1add](https://github.com/chrisbbreuer/predicthq/commit/90b1add)) _(by Chris <chrisbreuer93@gmail.com>)_
+- run on the published stacks package ([60650c3](https://github.com/chrisbbreuer/predicthq/commit/60650c3)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **deps**: bump @stacksjs/ts-cloud to ^0.7.26 ([1637df2](https://github.com/chrisbbreuer/predicthq/commit/1637df2)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **deps**: declare bun ^1.3.14 in deps.yaml ([7e33474](https://github.com/chrisbbreuer/predicthq/commit/7e33474)) _(by Chris <chrisbreuer93@gmail.com>)_
+- drop redundant ts-cloud deps (transitive via the stacks meta) ([5f6602b](https://github.com/chrisbbreuer/predicthq/commit/5f6602b)) _(by Chris <chrisbreuer93@gmail.com>)_
+- regenerate auto-imports for the prediction-market models and job ([2947b01](https://github.com/chrisbbreuer/predicthq/commit/2947b01)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **deps**: add ts-charts as a trusted git dependency ([8ca0760](https://github.com/chrisbbreuer/predicthq/commit/8ca0760)) _(by Chris <chrisbreuer93@gmail.com>)_
+- wip ([2df2527](https://github.com/chrisbbreuer/predicthq/commit/2df2527)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **realtime**: bump ts-broadcasting to ^0.0.6 ([41385f6](https://github.com/chrisbbreuer/predicthq/commit/41385f6)) _(by Chris <chrisbreuer93@gmail.com>)_
+- initial commit ([d98819f](https://github.com/chrisbbreuer/predicthq/commit/d98819f)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+## Contributors
+
+- _Chris <chrisbreuer93@gmail.com>_
+
 ## v0.70.45
 
 [compare changes](https://github.com/stacksjs/stacks/compare/v0.70.44...v0.70.45)
