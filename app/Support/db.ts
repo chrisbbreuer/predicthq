@@ -23,8 +23,21 @@ export interface RunResult {
   lastInsertRowid: number
 }
 
+export function databaseValue(value: unknown): unknown {
+  // MySQL/Vitess DATETIME columns do not accept RFC 3339's `T` separator or
+  // trailing `Z`. The app deliberately works in UTC, so preserve the instant
+  // while translating only the wire representation. Doing this at the raw SQL
+  // boundary keeps every service portable instead of relying on each caller to
+  // remember which database happens to be behind it.
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(value))
+    return value.slice(0, 19).replace('T', ' ')
+
+  return value
+}
+
 function parameters(values: unknown[]): unknown[] {
-  return values.length === 1 && Array.isArray(values[0]) ? values[0] : values
+  const flattened = values.length === 1 && Array.isArray(values[0]) ? values[0] : values
+  return flattened.map(databaseValue)
 }
 
 function portableSql(sql: string): string {

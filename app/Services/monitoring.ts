@@ -33,12 +33,15 @@ export async function captureError(
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(
       thrown.name || 'Error',
-      thrown.message.slice(0, 2000),
-      (thrown.stack ?? '').slice(0, 8000),
+      // The framework errors table uses VARCHAR(255) for these fields on
+      // MySQL/Vitess. Keep the durable record useful without letting an
+      // oversized provider/SQL error make the reporting path fail too.
+      thrown.message.slice(0, 255),
+      (thrown.stack ?? '').slice(0, 255),
       // Background work has no HTTP status. Zero rather than null keeps
       // the column readable as "not a request".
       0,
-      JSON.stringify({ source, ...context }).slice(0, 4000),
+      JSON.stringify({ source, ...context }).slice(0, 255),
       new Date().toISOString(),
       new Date().toISOString(),
     )
