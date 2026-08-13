@@ -3,6 +3,10 @@ const navActive = 'account'
 </script>
 
 <script client>
+import { withCsrfHeader } from '@stacksjs/browser/composables/csrf'
+import { useStorage } from '@stacksjs/browser/composables/useStorage'
+
+const authToken = useStorage('token', '')
 const venue = state('kalshi')
 const mode = state('paper')
 const strategyId = state(0)
@@ -30,9 +34,10 @@ const message = state('')
 const snapshot = state('Loading your private trading dashboard…')
 
 async function api(path: string, options: RequestInit = {}): Promise<any> {
+  const bearer = authToken.value ? { Authorization: `Bearer ${authToken.value}` } : {}
   const response = await fetch(path, {
     ...options,
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    headers: withCsrfHeader({ 'Content-Type': 'application/json', ...bearer, ...(options.headers || {}) }),
   })
   const data = await response.json().catch(() => ({}))
   if (!response.ok)

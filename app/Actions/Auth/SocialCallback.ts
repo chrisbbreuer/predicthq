@@ -1,5 +1,7 @@
 import { Database } from '../../Support/db'
 import { Action } from '@stacksjs/actions'
+import { Auth } from '@stacksjs/auth'
+import { config } from '@stacksjs/config'
 import { response } from '@stacksjs/router'
 import { socialProvider } from '../../Support/auth'
 
@@ -92,21 +94,47 @@ export default new Action({
     try {
       const existing = await db.prepare<{ id: number }>('SELECT id FROM users WHERE lower(email) = ?').get(email)
       const now = new Date().toISOString()
+      let userId = existing?.id ?? 0
 
       if (!existing) {
         // No password is set. This account can only be reached through the
         // provider until the user chooses one, which is the correct state
         // rather than a placeholder hash somebody could guess.
-        await db.prepare(
+        const created = await db.prepare(
           `INSERT INTO users (name, email, password, created_at, updated_at)
           VALUES (?, ?, '', ?, ?)`,
         ).run(displayName, email, now, now)
+        userId = Number(created.lastInsertRowid)
       }
 
-      return response.redirect('/scores/nfl/today', 302)
+      // Creating or matching a user is only half a sign-in. Mint the same
+      // token pack as password authentication and keep the access token in a
+      // secure ambient cookie so the redirected browser is authenticated on
+      // its very next request. Without this, OAuth appeared to succeed but
+      // every auth-gated page immediately returned 401.
+      const login = await Auth.loginUsingId(userId)
+      if (!login)
+        return response.redirect('/login?error=provider', 302)
+
+      const redirect = response.redirect('/scores/nfl/today', 302)
+      const headers = new Headers(redirect.headers)
+      headers.append('Set-Cookie', accessTokenCookie(login.token, login.expiresIn))
+
+      return new Response(redirect.body, {
+        status: redirect.status,
+        statusText: redirect.statusText,
+        headers,
+      })
     }
     finally {
       db.close()
     }
   },
 })
+
+/** Cookie contract consumed by the framework Auth middleware. */
+export function accessTokenCookie(token: string, expiresIn: number): string {
+  const name = config.auth?.defaultTokenName || 'auth-token'
+  const maxAge = Math.max(1, Math.floor(Number(expiresIn) || 1))
+  return `${name}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`
+}

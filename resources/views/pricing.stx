@@ -80,6 +80,18 @@ function featureList(items) {
 const navActive = 'pricing'
 </script>
 
+<script client>
+import { withCsrfHeader } from '@stacksjs/browser/composables/csrf'
+import { useStorage } from '@stacksjs/browser/composables/useStorage'
+
+const billingToken = useStorage('token', '')
+
+function billingHeaders(): Record<string, string> {
+  const bearer = billingToken.value ? { Authorization: `Bearer ${billingToken.value}` } : {}
+  return withCsrfHeader({ 'Content-Type': 'application/json', ...bearer })
+}
+</script>
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -118,7 +130,7 @@ const navActive = 'pricing'
         try {
           const res = await fetch('/api/billing/checkout', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: billingHeaders(),
             body: JSON.stringify({ plan: planKey }),
           })
           const data = await res.json()
