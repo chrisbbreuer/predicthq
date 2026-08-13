@@ -84,6 +84,20 @@ interface FlowRow {
   wins: number
 }
 
+type MarketDatabaseRow = Omit<MarketRow, 'id' | 'last_price' | 'liquidity'> & {
+  id: number | string
+  last_price: number | string
+  liquidity: number | string
+}
+
+type FlowDatabaseRow = Omit<FlowRow, 'fills' | 'notional' | 'smart_notional' | 'resolved' | 'wins'> & {
+  fills: number | string
+  notional: number | string
+  smart_notional: number | string
+  resolved: number | string
+  wins: number | string
+}
+
 export interface EvidenceOptions {
   /** Restrict to these venues. Empty means both. */
   venues?: string[]
@@ -124,7 +138,7 @@ export async function buildCandidates(db: Database, options: EvidenceOptions = {
     params.push(...categories.map(c => c.toLowerCase()))
   }
 
-  const markets = await db.prepare<MarketRow>(`
+  const markets = await db.prepare<MarketDatabaseRow>(`
     SELECT id, venue, external_id, question, outcome_label, category, last_price, liquidity
     FROM prediction_markets
     WHERE ${where.join(' AND ')}
@@ -134,7 +148,8 @@ export async function buildCandidates(db: Database, options: EvidenceOptions = {
 
   const candidates: Candidate[] = []
 
-  for (const market of markets) {
+  for (const rawMarket of markets) {
+    const market = normalizeMarketRow(rawMarket)
     const candidate = await evaluateMarket(db, market)
     if (candidate && Math.abs(candidate.edge) >= minEdge)
       candidates.push(candidate)
@@ -154,7 +169,7 @@ export async function buildCandidates(db: Database, options: EvidenceOptions = {
 async function evaluateMarket(db: Database, market: MarketRow): Promise<Candidate | null> {
   const since = new Date(Date.now() - WINDOW_HOURS * 3600_000).toISOString()
 
-  const flows = await db.prepare<FlowRow>(`
+  const flowRows = await db.prepare<FlowDatabaseRow>(`
     SELECT
       t.side AS side,
       COUNT(*) AS fills,
@@ -167,6 +182,7 @@ async function evaluateMarket(db: Database, market: MarketRow): Promise<Candidat
     WHERE t.prediction_market_id = ? AND t.traded_at >= ?
     GROUP BY t.side
   `).all(market.id, since)
+  const flows = flowRows.map(normalizeFlowRow)
 
   const totalFills = flows.reduce((sum, f) => sum + f.fills, 0)
   if (totalFills < MIN_FILLS)
@@ -522,8 +538,28 @@ async function evaluateMarket(db: Database, market: MarketRow): Promise<Candidat
     fairValue: round(fairValue, 4),
     edge: round(fairValue - marketPrice, 4),
     confidence: confidenceFrom(evidence, totalFills),
-    liquidity: market.liquidity,
+    liquidity: Number(market.liquidity),
     evidence,
+  }
+}
+
+function normalizeMarketRow(row: MarketDatabaseRow): MarketRow {
+  return {
+    ...row,
+    id: Number(row.id),
+    last_price: Number(row.last_price),
+    liquidity: Number(row.liquidity),
+  }
+}
+
+function normalizeFlowRow(row: FlowDatabaseRow): FlowRow {
+  return {
+    ...row,
+    fills: Number(row.fills),
+    notional: Number(row.notional),
+    smart_notional: Number(row.smart_notional),
+    resolved: Number(row.resolved),
+    wins: Number(row.wins),
   }
 }
 

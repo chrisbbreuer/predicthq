@@ -33,15 +33,58 @@ export interface RunSummary {
   decidedBy: string
 }
 
+type StrategyDatabaseRow = Omit<Strategy,
+  | 'id'
+  | 'user_id'
+  | 'bankroll'
+  | 'max_stake'
+  | 'min_edge'
+  | 'min_confidence'
+  | 'max_open_positions'
+  | 'daily_loss_limit'
+  | 'cumulative_loss_limit'
+  | 'auto_execute'
+> & {
+  id: number | string
+  user_id: number | string
+  bankroll: number | string
+  max_stake: number | string
+  min_edge: number | string
+  min_confidence: number | string
+  max_open_positions: number | string
+  daily_loss_limit: number | string
+  cumulative_loss_limit: number | string
+  auto_execute: number | string
+}
+
 /** Every strategy the loop should consider this pass. */
 export async function activeStrategies(db: Database): Promise<Strategy[]> {
-  return await db.prepare<Strategy>(`
+  const rows = await db.prepare<StrategyDatabaseRow>(`
     SELECT id, user_id, venue, mode, bankroll, max_stake, min_edge, min_confidence,
           max_open_positions, daily_loss_limit, cumulative_loss_limit, auto_execute, status
     FROM trading_strategies
     WHERE status = 'active'
     ORDER BY id
   `).all()
+
+  return rows.map(normalizeStrategyRow)
+}
+
+/** Vitess returns DECIMAL and aggregate values as strings. */
+export function normalizeStrategyRow(row: StrategyDatabaseRow): Strategy {
+  return {
+    ...row,
+    id: Number(row.id),
+    user_id: Number(row.user_id),
+    bankroll: Number(row.bankroll),
+    max_stake: Number(row.max_stake),
+    min_edge: Number(row.min_edge),
+    min_confidence: Number(row.min_confidence),
+    max_open_positions: Number(row.max_open_positions),
+    daily_loss_limit: Number(row.daily_loss_limit),
+    cumulative_loss_limit: Number(row.cumulative_loss_limit),
+    auto_execute: Number(row.auto_execute),
+  }
 }
 
 export async function runStrategy(db: Database, strategy: Strategy): Promise<RunSummary> {

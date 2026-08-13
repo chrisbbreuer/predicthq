@@ -150,6 +150,26 @@ interface DecisionRow {
   edge: number
 }
 
+type DecisionDatabaseRow = Omit<DecisionRow,
+  | 'id'
+  | 'prediction_market_id'
+  | 'market_price'
+  | 'limit_price'
+  | 'size'
+  | 'notional'
+  | 'confidence'
+  | 'edge'
+> & {
+  id: number | string
+  prediction_market_id: number | string
+  market_price: number | string
+  limit_price: number | string
+  size: number | string
+  notional: number | string
+  confidence: number | string
+  edge: number | string
+}
+
 interface AccountRow {
   id: number
   credentials: string
@@ -219,12 +239,13 @@ export async function executeStrategy(
     return await Promise.all(decisionIds.map(id => skip(db, id, `plan ${entitlements.tier} does not include automated execution`)))
 
   const placeholders = decisionIds.map(() => '?').join(', ')
-  const decisions = await db.prepare<DecisionRow>(`
+  const decisionRows = await db.prepare<DecisionDatabaseRow>(`
     SELECT id, prediction_market_id, venue, side, market_price, limit_price, size, notional, confidence, edge
     FROM trade_decisions
     WHERE id IN (${placeholders})
     ORDER BY confidence DESC, edge DESC
   `).all(...decisionIds)
+  const decisions = decisionRows.map(normalizeDecisionRow)
 
   // Cache one client per venue: constructing a Polymarket client derives
   // an account from the private key, which is not free per order.
@@ -311,6 +332,20 @@ export async function executeStrategy(
   }
 
   return outcomes
+}
+
+function normalizeDecisionRow(row: DecisionDatabaseRow): DecisionRow {
+  return {
+    ...row,
+    id: Number(row.id),
+    prediction_market_id: Number(row.prediction_market_id),
+    market_price: Number(row.market_price),
+    limit_price: Number(row.limit_price),
+    size: Number(row.size),
+    notional: Number(row.notional),
+    confidence: Number(row.confidence),
+    edge: Number(row.edge),
+  }
 }
 
 function positiveNumber(value: string | undefined): number {
