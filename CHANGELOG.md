@@ -1,5 +1,34 @@
 # Stacks Changelog
 
+[Compare changes](https://github.com/chrisbbreuer/predicthq/compare/v1.0.1...v1.0.2)
+
+## 🐛 Bug Fixes
+
+- **api**: normalize decoded request inputs ([510ed8d](https://github.com/chrisbbreuer/predicthq/commit/510ed8d)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **auth**: resolve users from Stacks requests ([b4ff3d6](https://github.com/chrisbbreuer/predicthq/commit/b4ff3d6)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **auth**: accept OAuth token cookies ([d7fac66](https://github.com/chrisbbreuer/predicthq/commit/d7fac66)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **auth**: align OAuth token schema ([bbddeef](https://github.com/chrisbbreuer/predicthq/commit/bbddeef)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **auth**: harden Google OAuth exchange ([3120c37](https://github.com/chrisbbreuer/predicthq/commit/3120c37)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **ingest**: preserve long Kalshi market labels ([122feb0](https://github.com/chrisbbreuer/predicthq/commit/122feb0)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **db**: restore notification identity sequence ([c516d7f](https://github.com/chrisbbreuer/predicthq/commit/c516d7f)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **quant**: normalize Vitess decimal prices ([8ddd46e](https://github.com/chrisbbreuer/predicthq/commit/8ddd46e)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **quant**: normalize Vitess decimal prices ([269e586](https://github.com/chrisbbreuer/predicthq/commit/269e586)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **db**: normalize structured production writes ([3bb85a9](https://github.com/chrisbbreuer/predicthq/commit/3bb85a9)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **scheduler**: use supported trading cadence ([2b12824](https://github.com/chrisbbreuer/predicthq/commit/2b12824)) _(by Chris <chrisbreuer93@gmail.com>)_
+- **deps**: pin verified Stacks migration runtime ([f3a4c82](https://github.com/chrisbbreuer/predicthq/commit/f3a4c82)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+## 💄 Styles
+
+- normalize backfill query indentation ([197bd16](https://github.com/chrisbbreuer/predicthq/commit/197bd16)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+## 🔧 Chores
+
+- **config**: allowlist production tester ([8a405da](https://github.com/chrisbbreuer/predicthq/commit/8a405da)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+## Contributors
+
+- _Chris <chrisbreuer93@gmail.com>_
+
 ## v1.0.1
 
 ## ✨ Features
