@@ -43,7 +43,9 @@ export default defineModel({
     question: {
       type: 'string',
       fillable: true,
-      validation: { rule: schema.string().min(1).max(300) },
+      // Kalshi multi-leg markets serialize every leg into the title. These
+      // regularly exceed a conventional headline-sized VARCHAR.
+      validation: { rule: schema.string().min(1).max(2048) },
       factory: faker => `Will ${faker.company.name()} win?`,
     },
     /**
@@ -60,7 +62,7 @@ export default defineModel({
       type: 'string',
       fillable: true,
       default: '',
-      validation: { rule: schema.string().max(120) },
+      validation: { rule: schema.string().max(2048) },
       factory: () => '',
     },
     category: {
