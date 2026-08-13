@@ -56,6 +56,10 @@ export default defineModel({
       columns: ['market_event_id', 'market_type', 'line_key', 'period', 'player_name'],
       unique: true,
     },
+    // Keep a dedicated leading index for the foreign key. MySQL may otherwise
+    // use the natural-key index above to enforce it and then refuse an index
+    // replacement while the constraint still depends on that index.
+    { name: 'markets_market_event_id', columns: ['market_event_id'] },
     { name: 'markets_type', columns: ['market_type'] },
   ],
 
