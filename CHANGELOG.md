@@ -1,5 +1,15 @@
 # Stacks Changelog
 
+[Compare changes](https://github.com/chrisbbreuer/predicthq/compare/v1.0.5...v1.0.6)
+
+## 🐛 Bug Fixes
+
+- **trading**: normalize Vitess numeric rows ([90a77fe](https://github.com/chrisbbreuer/predicthq/commit/90a77fe)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+## Contributors
+
+- _Chris <chrisbreuer93@gmail.com>_
+
 [Compare changes](https://github.com/chrisbbreuer/predicthq/compare/v1.0.4...v1.0.5)
 
 ## 🐛 Bug Fixes
