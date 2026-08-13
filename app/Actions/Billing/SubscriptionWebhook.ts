@@ -32,6 +32,9 @@ import { response } from '@stacksjs/router'
 export default {
   name: 'SubscriptionWebhook',
   description: 'Apply Stripe subscription lifecycle events to the local subscriptions table.',
+  // Stripe authenticates this request with its signature over the raw body.
+  // It cannot present a browser CSRF cookie/header pair.
+  skipCsrf: true,
 
   async handle(request?: {
     header?: (key: string) => string | undefined

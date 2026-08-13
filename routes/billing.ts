@@ -16,7 +16,7 @@ import { route } from '@stacksjs/router'
  * trading pass.
  */
 
-route.post('/billing/webhook', 'Actions/Billing/SubscriptionWebhook')
+route.post('/billing/webhook', 'Actions/Billing/SubscriptionWebhook').skipCsrf()
 
 // Each checkout call creates a session at Stripe, so an unthrottled loop
 // here is an unthrottled loop against our payment provider.
