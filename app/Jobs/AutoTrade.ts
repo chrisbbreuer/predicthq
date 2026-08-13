@@ -9,8 +9,9 @@ import { monitored } from '../Services/monitoring'
  * Runs on a slower cadence than ingestion on purpose. The evidence
  * window is 24 hours, so a pass every five minutes would mostly
  * re-derive the same numbers while multiplying the chances of acting on
- * a momentary print. Fifteen minutes is frequent enough to catch a real
- * move and slow enough that each pass sees genuinely new tape.
+ * a momentary print. Thirty minutes is frequent enough to catch a real
+ * move, conservative with AI/API spend, and slow enough that each pass
+ * sees genuinely new tape.
  *
  * `tries: 1` — a retried trading pass is a second pass, not a resumed
  * one. The decisions upsert and orders carry an idempotency key, so a

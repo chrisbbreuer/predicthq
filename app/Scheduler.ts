@@ -61,7 +61,7 @@ export default function () {
   // re-derives the same numbers. See app/Jobs/AutoTrade.ts.
   schedule
     .job('AutoTrade')
-    .everyFifteenMinutes()
+    .everyThirtyMinutes()
 
   // Reconciliation runs far more often than the loop that places the
   // orders. A fill arrives whenever someone crosses, and until it has
