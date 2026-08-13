@@ -35,6 +35,10 @@ export function databaseValue(value: unknown): unknown {
   return value
 }
 
+function databaseRecord(values: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(values).map(([key, value]) => [key, databaseValue(value)]))
+}
+
 function parameters(values: unknown[]): unknown[] {
   const flattened = values.length === 1 && Array.isArray(values[0]) ? values[0] : values
   return flattened.map(databaseValue)
@@ -109,13 +113,13 @@ export class Database {
   async updateOrInsert(table: string, match: Record<string, unknown>, values: Record<string, unknown>): Promise<void> {
     if (!this.executor.updateOrInsert)
       throw new Error('The configured database driver does not support updateOrInsert')
-    await this.executor.updateOrInsert(table, match, values)
+    await this.executor.updateOrInsert(table, databaseRecord(match), databaseRecord(values))
   }
 
   async insertOrIgnore(table: string, values: Record<string, unknown>): Promise<void> {
     if (!this.executor.insertOrIgnore)
       throw new Error('The configured database driver does not support insertOrIgnore')
-    await this.executor.insertOrIgnore(table, values)
+    await this.executor.insertOrIgnore(table, databaseRecord(values))
   }
 
   /**
@@ -144,7 +148,7 @@ export class Database {
       return { changes: 0, lastInsertRowid: 0 }
     if (!this.executor.upsert)
       throw new Error('The configured database driver does not support upsert')
-    return runResult(await this.executor.upsert(table, rows, conflictColumns, mergeColumns))
+    return runResult(await this.executor.upsert(table, rows.map(databaseRecord), conflictColumns, mergeColumns))
   }
 
   close(): void {
