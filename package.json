@@ -74,7 +74,7 @@
     "@stacksjs/ts-cloud": "^0.7.120",
     "bun-plugin-stx": "^0.2.153",
     "bun-query-builder": "^0.2.22",
-    "stacks": "^0.70.292",
+    "stacks": "0.70.292",
     "ts-charts": "github:stacksjs/ts-charts",
     "ts-web-scraper": "^0.1.10",
     "viem": "^2.55.11"
@@ -84,8 +84,11 @@
   },
   "overrides": {
     "@stacksjs/ts-cloud": "0.7.120",
+    "@stacksjs/buddy": "0.70.292",
+    "@stacksjs/database": "0.70.292",
     "@ts-cloud/aws-types": "0.7.120",
     "@ts-cloud/core": "0.7.120",
+    "stacks": "0.70.292",
     "ws": "8.21.3"
   },
   "workspaces": [
