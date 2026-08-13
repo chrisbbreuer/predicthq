@@ -5670,6 +5670,42 @@
             "isUnique": false,
             "isNullable": true,
             "hasDefault": false
+          },
+          {
+            "name": "terms_accepted_at",
+            "type": "string",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": true,
+            "hasDefault": false,
+            "maxLength": 40
+          },
+          {
+            "name": "risk_accepted_at",
+            "type": "string",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": true,
+            "hasDefault": false,
+            "maxLength": 40
+          },
+          {
+            "name": "age_confirmed_at",
+            "type": "string",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": true,
+            "hasDefault": false,
+            "maxLength": 40
+          },
+          {
+            "name": "jurisdiction",
+            "type": "string",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": true,
+            "hasDefault": false,
+            "maxLength": 8
           }
         ],
         "indexes": [
@@ -5858,13 +5894,6 @@
         ],
         "indexes": [
           {
-            "name": "decision",
-            "columns": [
-              "trade_decision_id"
-            ],
-            "type": "index"
-          },
-          {
             "name": "account",
             "columns": [
               "exchange_account_id"
@@ -5882,6 +5911,13 @@
             "name": "client_order_id",
             "columns": [
               "client_order_id"
+            ],
+            "type": "unique"
+          },
+          {
+            "name": "trade_decision_id",
+            "columns": [
+              "trade_decision_id"
             ],
             "type": "unique"
           }
@@ -7999,6 +8035,13 @@
             "name": "markets_type",
             "columns": [
               "market_type"
+            ],
+            "type": "index"
+          },
+          {
+            "name": "markets_market_event_id",
+            "columns": [
+              "market_event_id"
             ],
             "type": "index"
           }
@@ -14207,6 +14250,15 @@
             "isNullable": true,
             "hasDefault": false,
             "maxLength": 10
+          },
+          {
+            "name": "cumulative_loss_limit",
+            "type": "decimal",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": true,
+            "hasDefault": true,
+            "defaultValue": 0
           }
         ],
         "indexes": [
@@ -15668,7 +15720,7 @@
       }
     ]
   },
-  "hash": "90bc6716eb24a0ee68334fa21cb9248a15cc53a3d620812c8c8532d831735396",
+  "hash": "3bbff146ec506e75b9ce2eba2d696191a5c47951ac39ce2ecb6c39939cb5796b",
   "dialect": "vitess",
-  "updatedAt": "2026-08-07T04:35:17.853Z"
+  "updatedAt": "2026-08-13T18:28:08.252Z"
 }

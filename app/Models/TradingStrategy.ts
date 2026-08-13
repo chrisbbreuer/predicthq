@@ -106,6 +106,7 @@ export default defineModel({
     cumulativeLossLimit: {
       type: 'number',
       fillable: true,
+      default: 0,
       validation: { rule: schema.float().min(0) },
       factory: () => 0,
     },
