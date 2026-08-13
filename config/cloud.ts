@@ -24,6 +24,7 @@ const productionRuntimeEnv = {
   ANTHROPIC_API_KEY: String(env.ANTHROPIC_API_KEY || ''),
   GOOGLE_CLIENT_ID: String(env.GOOGLE_CLIENT_ID || ''),
   GOOGLE_CLIENT_SECRET: String(env.GOOGLE_CLIENT_SECRET || ''),
+  GOOGLE_REDIRECT_URL: String(env.GOOGLE_REDIRECT_URL || 'https://predicthq.org/api/auth/google/callback'),
   APPLE_CLIENT_ID: String(env.APPLE_CLIENT_ID || ''),
   APPLE_TEAM_ID: String(env.APPLE_TEAM_ID || ''),
   APPLE_KEY_ID: String(env.APPLE_KEY_ID || ''),

@@ -61,7 +61,7 @@ const CHECKS: Check[] = [
     label: 'Google sign-in',
     consequence: 'The button is hidden and nobody can create an account with Google.',
     requiredInProduction: true,
-    companions: ['GOOGLE_CLIENT_SECRET'],
+    companions: ['GOOGLE_CLIENT_SECRET', 'GOOGLE_REDIRECT_URL'],
   },
   {
     key: 'APPLE_CLIENT_ID',

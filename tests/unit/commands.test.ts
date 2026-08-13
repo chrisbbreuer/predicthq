@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import commands from '../../app/Commands'
-import { invalidProductionValues } from '../../app/Commands/Preflight'
+import { evaluateChecks, invalidProductionValues, isBroken } from '../../app/Commands/Preflight'
 
 describe('production commands', () => {
   it('registers the resumable database import and Transfermarkt backfill', () => {
@@ -10,6 +10,17 @@ describe('production commands', () => {
 })
 
 describe('production preflight', () => {
+  it('requires the Google redirect URL with the OAuth credentials', () => {
+    const google = evaluateChecks({
+      GOOGLE_CLIENT_ID: 'client',
+      GOOGLE_CLIENT_SECRET: 'secret',
+    }).find(result => result.check.key === 'GOOGLE_CLIENT_ID')
+
+    expect(google).toBeDefined()
+    expect(isBroken(google!)).toBe(true)
+    expect(google?.missingCompanions).toContain('GOOGLE_REDIRECT_URL')
+  })
+
   it('requires https and a tester allowlist before a controlled live test', () => {
     const failures = invalidProductionValues({
       APP_URL: 'http://predicthq.org',
