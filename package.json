@@ -75,6 +75,7 @@
     "bun-plugin-stx": "^0.2.153",
     "bun-query-builder": "^0.2.22",
     "stacks": "0.70.292",
+    "stripe": "^22.5.0",
     "ts-charts": "github:stacksjs/ts-charts",
     "ts-web-scraper": "^0.1.10",
     "viem": "^2.55.11"
