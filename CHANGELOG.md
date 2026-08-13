@@ -1,5 +1,15 @@
 # Stacks Changelog
 
+[Compare changes](https://github.com/chrisbbreuer/predicthq/compare/v1.0.3...v1.0.4)
+
+## 🐛 Bug Fixes
+
+- **billing**: admit signed Stripe webhooks ([dab33a5](https://github.com/chrisbbreuer/predicthq/commit/dab33a5)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+## Contributors
+
+- _Chris <chrisbreuer93@gmail.com>_
+
 [Compare changes](https://github.com/chrisbbreuer/predicthq/compare/v1.0.2...v1.0.3)
 
 ## 🐛 Bug Fixes
