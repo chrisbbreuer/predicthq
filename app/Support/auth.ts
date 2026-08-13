@@ -128,6 +128,7 @@ export function socialProvider(slug: unknown): any | null {
 const ERRORS: Record<string, string> = {
   cancelled: 'Sign-in was cancelled. Nothing was changed.',
   provider: 'The provider could not confirm that sign-in. Please try again.',
+  state: 'That sign-in request expired or could not be verified. Please start again.',
   noemail: 'That provider did not share an email address, so there is no account to match. Try the other provider, or turn off private relay for PredictHQ.',
 }
 

@@ -2,6 +2,7 @@ import { Database } from '../../Support/db'
 import { Action } from '@stacksjs/actions'
 import { Auth } from '@stacksjs/auth'
 import { config } from '@stacksjs/config'
+import { log } from '@stacksjs/logging'
 import { response } from '@stacksjs/router'
 import { socialProvider } from '../../Support/auth'
 
@@ -62,20 +63,30 @@ export default new Action({
     if (!provider)
       return response.json({ message: 'Unknown sign-in provider.' }, 404)
 
+    const state = String(request.get('state') ?? '')
+    const expectedState = String(request.cookie?.(`oauth-state-${name}`) ?? request.cookies?.get?.(`oauth-state-${name}`) ?? '')
+    if (!state || !expectedState || state !== expectedState)
+      return oauthFailure(name, 'state')
+
     const code = String(request.get('code') ?? '')
     if (!code) {
       // The user declined at the provider, or the request was tampered
       // with. Either way there is nothing to exchange.
-      return response.redirect('/login?error=cancelled', 302)
+      return oauthFailure(name, 'cancelled')
     }
 
     let profile: any
     try {
-      const token = await provider.getAccessToken(code)
-      profile = await provider.getUserByToken(token)
+      if (name === 'google')
+        profile = await exchangeGoogleCode(code)
+      else {
+        const token = await provider.getAccessToken(code)
+        profile = await provider.getUserByToken(token)
+      }
     }
-    catch {
-      return response.redirect('/login?error=provider', 302)
+    catch (error) {
+      log.warn(`[auth] ${name} profile exchange failed: ${error instanceof Error ? error.message : String(error)}`)
+      return oauthFailure(name, 'provider')
     }
 
     const email = String(profile?.email ?? '').trim().toLowerCase()
@@ -83,7 +94,7 @@ export default new Action({
       // Apple lets the user hide their address behind a relay, and only
       // releases it on the FIRST authorisation. Without one there is no safe
       // key to match on, so we say so rather than inventing one.
-      return response.redirect('/login?error=noemail', 302)
+      return oauthFailure(name, 'noemail')
     }
 
     const displayName = String(
@@ -114,11 +125,12 @@ export default new Action({
       // every auth-gated page immediately returned 401.
       const login = await Auth.loginUsingId(userId)
       if (!login)
-        return response.redirect('/login?error=provider', 302)
+        return oauthFailure(name, 'provider')
 
       const redirect = response.redirect('/scores/nfl/today', 302)
       const headers = new Headers(redirect.headers)
       headers.append('Set-Cookie', accessTokenCookie(login.token, login.expiresIn))
+      headers.append('Set-Cookie', expiredOauthStateCookie(name))
 
       return new Response(redirect.body, {
         status: redirect.status,
@@ -131,6 +143,67 @@ export default new Action({
     }
   },
 })
+
+interface GoogleSettings {
+  clientId: string
+  clientSecret: string
+  redirectUrl: string
+}
+
+interface FetchLike {
+  (input: string | URL | Request, init?: RequestInit): Promise<Response>
+}
+
+/**
+ * Exchange Google's code using the OAuth wire format directly.
+ *
+ * The generic social driver delegates this to an HTTP wrapper whose body
+ * encoding varies between runtime releases. Google's token endpoint is
+ * explicitly form encoded, so owning these two requests keeps production
+ * sign-in independent of that wrapper detail.
+ */
+export async function exchangeGoogleCode(
+  code: string,
+  settings: GoogleSettings = (config as any).services.google,
+  request: FetchLike = fetch,
+): Promise<Record<string, unknown>> {
+  const tokenResponse = await request('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: settings.clientId,
+      client_secret: settings.clientSecret,
+      code,
+      redirect_uri: settings.redirectUrl,
+      grant_type: 'authorization_code',
+    }),
+    signal: AbortSignal.timeout(20_000),
+  })
+  const token = await tokenResponse.json().catch(() => ({})) as { access_token?: string, error?: string, error_description?: string }
+  if (!tokenResponse.ok || !token.access_token)
+    throw new Error(`Google token exchange failed (${tokenResponse.status}): ${token.error_description || token.error || 'missing access token'}`)
+
+  const profileResponse = await request('https://openidconnect.googleapis.com/v1/userinfo', {
+    headers: { Authorization: `Bearer ${token.access_token}` },
+    signal: AbortSignal.timeout(20_000),
+  })
+  const profile = await profileResponse.json().catch(() => ({})) as Record<string, unknown>
+  if (!profileResponse.ok || !profile.email)
+    throw new Error(`Google profile lookup failed (${profileResponse.status})`)
+
+  return profile
+}
+
+function oauthFailure(provider: string, error: string): Response {
+  const redirect = response.redirect(`/login?error=${encodeURIComponent(error)}`, 302)
+  const headers = new Headers(redirect.headers)
+  headers.append('Set-Cookie', expiredOauthStateCookie(provider))
+  return new Response(redirect.body, { status: redirect.status, statusText: redirect.statusText, headers })
+}
+
+export function expiredOauthStateCookie(provider: string): string {
+  return `oauth-state-${provider}=; Path=/api/auth/${provider}/callback; HttpOnly; Secure; SameSite=None; Max-Age=0`
+}
 
 /** Cookie contract consumed by the framework Auth middleware. */
 export function accessTokenCookie(token: string, expiresIn: number): string {

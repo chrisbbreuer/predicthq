@@ -35,7 +35,22 @@ export default new Action({
     // The state parameter is what ties the callback back to this request;
     // the provider mints and stores it.
     const url = await provider.getAuthUrl()
+    const state = new URL(url).searchParams.get('state') ?? ''
+    if (!state)
+      return response.json({ message: 'The sign-in provider did not create a state token.' }, 500)
 
-    return response.redirect(url, 302)
+    const redirect = response.redirect(url, 302)
+    const headers = new Headers(redirect.headers)
+    headers.append('Set-Cookie', oauthStateCookie(name, state))
+
+    return new Response(redirect.body, {
+      status: redirect.status,
+      statusText: redirect.statusText,
+      headers,
+    })
   },
 })
+
+export function oauthStateCookie(provider: string, state: string): string {
+  return `oauth-state-${provider}=${encodeURIComponent(state)}; Path=/api/auth/${provider}/callback; HttpOnly; Secure; SameSite=None; Max-Age=600`
+}
