@@ -1,5 +1,4 @@
 import { Job } from '@stacksjs/queue'
-import { Every } from '@stacksjs/types'
 import RunAutoTradeAction from '../Actions/Trading/RunAutoTrade'
 import { monitored } from '../Services/monitoring'
 
@@ -24,8 +23,6 @@ export default new Job({
   queue: 'default',
   tries: 1,
   backoff: 3,
-  rate: Every.FifteenMinutes,
-
   handle: monitored('AutoTrade', async () => {
     return RunAutoTradeAction.handle()
   }),

@@ -35,6 +35,19 @@ export default function () {
     .job('RunPipeline')
     .everyFiveMinutes()
 
+  // These are kept explicit rather than also giving the Job objects a
+  // `rate`. Stacks auto-discovers rated jobs and normalizes their names to
+  // snake_case before resolving the filename; mixing both paths duplicates
+  // every run and asks for files such as `app/Jobs/ingest_odds.ts` while the
+  // source-of-truth job is `app/Jobs/IngestOdds.ts`.
+  schedule
+    .job('IngestOdds')
+    .everyMinute()
+
+  schedule
+    .job('BroadcastOdds')
+    .everyMinute()
+
   // Prediction-market loop: the public Kalshi and Polymarket trade tapes
   // plus the smart-money analytics over them. Separate from the pipeline
   // above because it reads a different set of venues on its own cadence.

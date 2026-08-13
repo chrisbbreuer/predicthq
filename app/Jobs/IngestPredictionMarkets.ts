@@ -1,5 +1,4 @@
 import { Job } from '@stacksjs/queue'
-import { Every } from '@stacksjs/types'
 import IngestPredictionMarketsAction from '../Actions/PredictionMarkets/IngestPredictionMarkets'
 import { monitored } from '../Services/monitoring'
 
@@ -16,8 +15,6 @@ export default new Job({
   queue: 'default',
   tries: 1,
   backoff: 3,
-  rate: Every.FiveMinutes,
-
   handle: monitored('IngestPredictionMarkets', async () => {
     return IngestPredictionMarketsAction.handle()
   }),

@@ -1,5 +1,4 @@
 import { Job } from '@stacksjs/queue'
-import { Every } from '@stacksjs/types'
 
 const quotes = [
   'Simplicity is the ultimate sophistication. — Leonardo da Vinci',
@@ -18,8 +17,6 @@ export default new Job({
   queue: 'default',
   tries: 3,
   backoff: 3,
-  rate: Every.Hour,
-
   handle: () => {
     const quote = quotes[Math.floor(Math.random() * quotes.length)]
     console.log(`\n  ✨ ${quote}\n`)
