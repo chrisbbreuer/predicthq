@@ -83,6 +83,9 @@
     "better-dx": "^0.2.15"
   },
   "overrides": {
+    "@stacksjs/ts-cloud": "0.7.120",
+    "@ts-cloud/aws-types": "0.7.120",
+    "@ts-cloud/core": "0.7.120",
     "ws": "8.21.3"
   },
   "workspaces": [
