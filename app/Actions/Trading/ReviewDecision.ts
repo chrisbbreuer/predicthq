@@ -1,5 +1,6 @@
 import { Database } from '../../Support/db'
 import { authenticatedUserId } from '../../Support/request-auth'
+import { requestBoolean } from '../../Support/request-input'
 import { response } from '@stacksjs/router'
 import { executeStrategy, type Strategy } from '../../Services/trading/execute'
 
@@ -29,7 +30,7 @@ export default {
     if (!decisionId)
       return response.error('A decision id is required.', 422)
 
-    const approve = request?.get?.('approve') !== 'false'
+    const approve = requestBoolean(request, 'approve', true)
     const db = new Database()
 
     try {

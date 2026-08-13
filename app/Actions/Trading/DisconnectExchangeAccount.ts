@@ -1,5 +1,6 @@
 import { Database } from '../../Support/db'
 import { authenticatedUserId } from '../../Support/request-auth'
+import { requestString } from '../../Support/request-input'
 import { response } from '@stacksjs/router'
 
 export default {
@@ -11,7 +12,7 @@ export default {
     if (!userId)
       return response.error('Sign in to disconnect a trading account.', 401)
 
-    const venue = (request?.get?.('venue') ?? '').toLowerCase()
+    const venue = requestString(request, 'venue').toLowerCase()
     if (!['kalshi', 'polymarket'].includes(venue))
       return response.error('Expected kalshi or polymarket.', 422)
 

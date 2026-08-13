@@ -1,6 +1,7 @@
 import type { VenueCredentials } from '../../Services/trading/credentials'
 import { Database } from '../../Support/db'
 import { authenticatedUserId } from '../../Support/request-auth'
+import { requestBoolean, requestString } from '../../Support/request-input'
 import { response } from '@stacksjs/router'
 import { assertUsable, CredentialError, maskIdentifier, sealCredentials } from '../../Services/trading/credentials'
 import { clientFor } from '../../Services/trading/execute'
@@ -27,19 +28,18 @@ export default {
     if (!userId)
       return response.error('Sign in to connect a trading account.', 401)
 
-    const venue = (request?.get?.('venue') ?? '').toLowerCase()
+    const venue = requestString(request, 'venue').toLowerCase()
     if (venue !== 'kalshi' && venue !== 'polymarket')
       return response.error(`Unknown venue: ${venue || '(missing)'}. Expected kalshi or polymarket.`, 422)
 
-    const accepted = (key: string) => ['1', 'true', 'yes', 'on'].includes((request?.get?.(key) ?? '').toLowerCase())
-    if (!accepted('termsAccepted') || !accepted('riskAccepted') || !accepted('ageConfirmed')) {
+    if (!requestBoolean(request, 'termsAccepted') || !requestBoolean(request, 'riskAccepted') || !requestBoolean(request, 'ageConfirmed')) {
       return response.error(
         'You must accept the Terms, acknowledge the risk disclosure, and confirm you meet the venue age requirement before connecting an account.',
         422,
       )
     }
 
-    const jurisdiction = (request?.get?.('jurisdiction') ?? '').trim().toUpperCase()
+    const jurisdiction = requestString(request, 'jurisdiction').trim().toUpperCase()
     if (!/^[A-Z]{2}(-[A-Z0-9]{1,3})?$/.test(jurisdiction))
       return response.error('Enter your country code (for example US or CA-BC).', 422)
 
@@ -50,18 +50,18 @@ export default {
     const credentials: VenueCredentials = venue === 'kalshi'
       ? {
           venue: 'kalshi',
-          apiKeyId: request?.get?.('apiKeyId') ?? '',
-          privateKeyPem: request?.get?.('privateKeyPem') ?? '',
-          subaccount: optionalInteger(request?.get?.('subaccount')),
+          apiKeyId: requestString(request, 'apiKeyId'),
+          privateKeyPem: requestString(request, 'privateKeyPem'),
+          subaccount: optionalInteger(requestString(request, 'subaccount')),
         }
       : {
           venue: 'polymarket',
-          apiKey: request?.get?.('apiKey') ?? '',
-          apiSecret: request?.get?.('apiSecret') ?? '',
-          apiPassphrase: request?.get?.('apiPassphrase') ?? '',
-          privateKey: request?.get?.('privateKey') ?? '',
-          funderAddress: request?.get?.('funderAddress') ?? '',
-          signatureType: optionalSignatureType(request?.get?.('signatureType')),
+          apiKey: requestString(request, 'apiKey'),
+          apiSecret: requestString(request, 'apiSecret'),
+          apiPassphrase: requestString(request, 'apiPassphrase'),
+          privateKey: requestString(request, 'privateKey'),
+          funderAddress: requestString(request, 'funderAddress'),
+          signatureType: optionalSignatureType(requestString(request, 'signatureType')),
         }
 
     try {
@@ -72,7 +72,7 @@ export default {
     }
 
     const sealed = await sealCredentials(credentials)
-    const label = (request?.get?.('label') ?? 'Primary').slice(0, 60)
+    const label = requestString(request, 'label', 'Primary').slice(0, 60)
     const masked = maskIdentifier(credentials)
     const now = new Date().toISOString()
 

@@ -1,5 +1,6 @@
 import { Database } from '../../Support/db'
 import { authenticatedUserId } from '../../Support/request-auth'
+import { requestString } from '../../Support/request-input'
 import { response } from '@stacksjs/router'
 import { issueKey } from '../../Services/api-keys'
 
@@ -33,7 +34,7 @@ export default {
       if (Number(active?.n ?? 0) >= MAX_ACTIVE_KEYS)
         return response.error(`You already have ${MAX_ACTIVE_KEYS} active keys. Revoke one to create another.`, 422)
 
-      const name = (request?.get?.('name') ?? 'API key').slice(0, 80)
+      const name = requestString(request, 'name', 'API key').slice(0, 80)
       const issued = await issueKey(db, userId, name)
 
       return {

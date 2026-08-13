@@ -1,5 +1,6 @@
 import { Database } from '../../Support/db'
 import { authenticatedUserId } from '../../Support/request-auth'
+import { requestBoolean, requestString } from '../../Support/request-input'
 import { response } from '@stacksjs/router'
 import { resolveEntitlements } from '../../Services/billing/entitlements'
 
@@ -40,11 +41,11 @@ export default {
     try {
       const entitlements = await resolveEntitlements(db, userId)
       const id = Number(request?.get?.('id') ?? 0) || 0
-      const autoExecute = request?.get?.('autoExecute') === 'true'
+      const autoExecute = requestBoolean(request, 'autoExecute')
       // Anything that is not explicitly 'live' is paper. Going live is
       // the consequential direction, so it is the one that has to be
       // asked for, and a typo lands on the harmless side.
-      const mode = request?.get?.('mode') === 'live' ? 'live' : 'paper'
+      const mode = requestString(request, 'mode') === 'live' ? 'live' : 'paper'
 
       // A signed-in user can prove the workflow with one paper strategy
       // before subscribing. Live strategies remain a paid capability.
@@ -76,15 +77,15 @@ export default {
         }
       }
 
-      const venue = (request?.get?.('venue') ?? 'both').toLowerCase()
+      const venue = requestString(request, 'venue', 'both').toLowerCase()
       if (!['kalshi', 'polymarket', 'both'].includes(venue))
         return response.error(`Unknown venue: ${venue}.`, 422)
 
       const fields = {
-        name: (request?.get?.('name') ?? 'Untitled strategy').slice(0, 80),
+        name: requestString(request, 'name', 'Untitled strategy').slice(0, 80),
         venue,
         mode,
-        categories: (request?.get?.('categories') ?? '').slice(0, 300),
+        categories: requestString(request, 'categories').slice(0, 300),
         bankroll: clamp(Number(request?.get?.('bankroll') ?? 1000), 1, MAX_BANKROLL),
         maxStake: clamp(Number(request?.get?.('maxStake') ?? 100), 1, MAX_STAKE),
         minEdge: clamp(Number(request?.get?.('minEdge') ?? 0.04), 0, 0.5),
@@ -96,7 +97,7 @@ export default {
         // Arming a strategy is what 'active' means, so the two move
         // together: a user who turns off auto-execution has paused it,
         // not left it running with nothing to do.
-        status: request?.get?.('status') === 'active' ? 'active' : 'paused',
+        status: requestString(request, 'status') === 'active' ? 'active' : 'paused',
       }
 
       // A stake bigger than the bankroll is not a limit, it is a typo —

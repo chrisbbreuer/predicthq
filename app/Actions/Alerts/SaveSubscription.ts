@@ -1,5 +1,6 @@
 import { Database } from '../../Support/db'
 import { authenticatedUserId } from '../../Support/request-auth'
+import { requestBoolean, requestString } from '../../Support/request-input'
 import { response } from '@stacksjs/router'
 
 /**
@@ -27,15 +28,15 @@ export default {
     if (!userId)
       return response.error('Sign in to manage alerts.', 401)
 
-    const kind = (request?.get?.('kind') ?? 'arbitrage').toLowerCase()
+    const kind = requestString(request, 'kind', 'arbitrage').toLowerCase()
     if (!KINDS.includes(kind))
       return response.error(`Unknown alert kind: ${kind}. Choose one of ${KINDS.join(', ')}.`, 422)
 
-    const venue = (request?.get?.('venue') ?? 'both').toLowerCase()
+    const venue = requestString(request, 'venue', 'both').toLowerCase()
     if (!VENUES.includes(venue))
       return response.error(`Unknown venue: ${venue}.`, 422)
 
-    const channels = (request?.get?.('channels') ?? 'database')
+    const channels = requestString(request, 'channels', 'database')
       .split(',')
       .map(channel => channel.trim().toLowerCase())
       .filter(Boolean)
@@ -48,8 +49,8 @@ export default {
       return response.error('An alert with no delivery channel would never reach you.', 422)
 
     const minValue = Math.max(MIN_FLOOR, Number(request?.get?.('minValue') ?? 1) || MIN_FLOOR)
-    const leagues = (request?.get?.('leagues') ?? '').slice(0, 300)
-    const active = request?.get?.('active') !== 'false'
+    const leagues = requestString(request, 'leagues').slice(0, 300)
+    const active = requestBoolean(request, 'active', true)
     const id = Number(request?.get?.('id') ?? 0) || 0
 
     const db = new Database()
