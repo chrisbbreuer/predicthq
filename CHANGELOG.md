@@ -1,5 +1,15 @@
 # Stacks Changelog
 
+[Compare changes](https://github.com/chrisbbreuer/predicthq/compare/v1.0.2...v1.0.3)
+
+## 🐛 Bug Fixes
+
+- **ci**: release the application artifact ([88a3332](https://github.com/chrisbbreuer/predicthq/commit/88a3332)) _(by Chris <chrisbreuer93@gmail.com>)_
+
+## Contributors
+
+- _Chris <chrisbreuer93@gmail.com>_
+
 [Compare changes](https://github.com/chrisbbreuer/predicthq/compare/v1.0.1...v1.0.2)
 
 ## 🐛 Bug Fixes
