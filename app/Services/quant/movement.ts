@@ -39,9 +39,11 @@ export interface MovementFeatures {
 
 interface SnapshotRow {
   bookmaker_id: number
-  price: number | string
+  price: number
   captured_at: string
 }
+
+type RawSnapshotRow = Omit<SnapshotRow, 'price'> & { price: number | string }
 
 /**
  * Movement features for one selection.
@@ -53,7 +55,7 @@ interface SnapshotRow {
 export async function movementFor(db: Database, selectionId: number, windowHours = WINDOW_HOURS): Promise<MovementFeatures> {
   const cutoff = new Date(Date.now() - windowHours * 3_600_000).toISOString()
 
-  const rawHistory = await db.query<SnapshotRow>(`
+  const rawHistory = await db.query<RawSnapshotRow>(`
     SELECT bookmaker_id, price, captured_at
     FROM odds_snapshots
     WHERE selection_id = ?
@@ -62,7 +64,7 @@ export async function movementFor(db: Database, selectionId: number, windowHours
   // MySQL/Vitess returns DECIMAL columns as strings to avoid precision loss.
   // Prices are deliberately low-precision market values, so normalize them
   // before arithmetic and ignore corrupt/non-positive quotes.
-  const history = rawHistory
+  const history: SnapshotRow[] = rawHistory
     .map(row => ({ ...row, price: Number(row.price) }))
     .filter(row => Number.isFinite(row.price) && row.price > 0)
 
