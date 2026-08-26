@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite'
-import { readdirSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { mkdirSync, readdirSync, readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import process from 'node:process'
 
 /**
@@ -79,6 +79,19 @@ function statementsFor(path: string, wanted: Set<string>): string[] {
 
 /** A database with those tables, created and indexed. */
 export function schemaFor(path: string, tables: string[]): Database {
+  /*
+   * Every caller writes into `tests/temp`, which is gitignored - so it exists
+   * on a machine that has run the suite before, and nowhere else. A fresh
+   * clone and a CI runner are the same case: the directory is absent, and
+   * `new Database(path)` fails with SQLITE_CANTOPEN before a single assertion
+   * runs. That took out 83 of 436 tests, which is to say every test that
+   * needs a database rather than any particular one.
+   *
+   * Created here rather than in each test file because there are eight call
+   * sites and the next one added would rediscover this the hard way.
+   */
+  mkdirSync(dirname(path), { recursive: true })
+
   const db = new Database(path)
   const wanted = new Set(tables)
 
