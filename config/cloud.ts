@@ -712,6 +712,23 @@ export const tsCloud: TsCloudConfig = {
       // systemd unit wants the entry the shim would have resolved to.
       start: 'bun node_modules/@stacksjs/buddy/dist/cli.js serve',
       port: 3070,
+      /*
+       * Sized from what this service actually does, not from a default.
+       *
+       * Measured on the production host: 774M resident, 997M peak, and never
+       * once throttled. 2G is a shade over twice the worst seen, which is the
+       * right shape for a ceiling whose job is to contain a runaway rather
+       * than to ration a healthy process.
+       *
+       * Declaring it is now more important than it used to be. ts-cloud's
+       * default became `auto` (an eighth of host RAM), which resolves to
+       * ~1951M on this 15.6G box but would land well UNDER this service's
+       * 997M peak on a smaller one - and a ceiling below the working set is
+       * how a service ends up throttled into uninterruptible sleep rather
+       * than merely slow.
+       */
+      memoryHigh: '2G',
+      memoryMax: '2560M',
       preStart: [
         'bun install',
         'bun node_modules/@stacksjs/buddy/dist/cli.js preflight --production',
@@ -740,6 +757,10 @@ export const tsCloud: TsCloudConfig = {
       root: '.',
       start: 'bun node_modules/@stacksjs/actions/dist/serve/api.js',
       port: 3071,
+      // 84M resident, 200M peak, never throttled. 512M is ~2.5x the worst
+      // seen and a quarter of what it was silently holding before.
+      memoryHigh: '512M',
+      memoryMax: '768M',
       preStart: ['bun install'],
       // Same keyspace as `main`, and no migrate step: one schema owner.
       env: {
@@ -755,6 +776,9 @@ export const tsCloud: TsCloudConfig = {
       root: '.',
       start: 'bun node_modules/@stacksjs/buddy/dist/cli.js schedule:run',
       port: 3072,
+      // 331M resident, 466M peak, never throttled.
+      memoryHigh: '1G',
+      memoryMax: '1536M',
       sharedPaths: ['storage/ingest'],
       preStart: ['bun install'],
       env: productionRuntimeEnv,
@@ -763,6 +787,11 @@ export const tsCloud: TsCloudConfig = {
       root: '.',
       start: 'bun node_modules/@stacksjs/buddy/dist/cli.js queue:work --concurrency 2',
       port: 3073,
+      // 94M resident, 382M peak, never throttled. The peak is what matters
+      // here rather than the resident figure: this runs two jobs at once, so
+      // its high-water mark is set by the largest pair it has had in hand.
+      memoryHigh: '1G',
+      memoryMax: '1536M',
       sharedPaths: ['storage/ingest'],
       preStart: ['bun install'],
       env: productionRuntimeEnv,
@@ -771,6 +800,10 @@ export const tsCloud: TsCloudConfig = {
       root: '.',
       start: 'bun node_modules/@stacksjs/buddy/dist/cli.js odds:watch',
       port: 3074,
+      // 195M resident, 219M peak, never throttled. A long-lived poller with a
+      // flat profile, so it needs the least of the five.
+      memoryHigh: '512M',
+      memoryMax: '768M',
       sharedPaths: ['storage/ingest'],
       preStart: ['bun install'],
       env: productionRuntimeEnv,
