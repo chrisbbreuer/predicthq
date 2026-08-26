@@ -177,24 +177,39 @@ jobs:
         run: |
           cp .env.example .env
 
-      - name: Check AWS Credentials
-        id: aws-credentials
+      # config/cloud.ts declares `provider: 'hetzner'`, so AWS keys were never
+      # the credentials this deploy needs - it wants an SSH key and an hcloud
+      # token. Gating on AWS meant the step below was skipped on every run
+      # while the job still reported success: the box sat two weeks stale
+      # behind a green tick on every push.
+      - name: Check Deploy Credentials
+        id: deploy-credentials
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
         run: |
-          if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+          if [ -z "$DEPLOY_SSH_KEY" ] || [ -z "$HCLOUD_TOKEN" ]; then
             echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "AWS credentials are not configured; skipping production deploy."
+            # A warning annotation rather than a bare log line: this surfaces
+            # on the run itself, so "shipped a release" and "did nothing" stop
+            # looking identical from the outside.
+            echo "::warning title=Production deploy skipped::DEPLOY_SSH_KEY and HCLOUD_TOKEN are not set on this repository, so nothing was deployed. This job is green because the build passed, not because a release shipped."
+            {
+              echo "### Production deploy skipped - no credentials"
+              echo "Set \`DEPLOY_SSH_KEY\` and \`HCLOUD_TOKEN\` on this repository to enable deploys."
+            } >> "$GITHUB_STEP_SUMMARY"
           else
             echo "available=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Deploy
-        if: steps.aws-credentials.outputs.available == 'true'
+        if: steps.deploy-credentials.outputs.available == 'true'
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+          PORKBUN_API_KEY: ${{ secrets.PORKBUN_API_KEY }}
+          PORKBUN_SECRET_KEY: ${{ secrets.PORKBUN_SECRET_KEY }}
+          APP_KEY: ${{ secrets.APP_KEY }}
         run: bun buddy deploy production --yes
 
   deploy-stage:
@@ -224,24 +239,39 @@ jobs:
       - name: Ensure .env Set
         run: cp .env.example .env
 
-      - name: Check AWS Credentials
-        id: aws-credentials
+      # config/cloud.ts declares `provider: 'hetzner'`, so AWS keys were never
+      # the credentials this deploy needs - it wants an SSH key and an hcloud
+      # token. Gating on AWS meant the step below was skipped on every run
+      # while the job still reported success: the box sat two weeks stale
+      # behind a green tick on every push.
+      - name: Check Deploy Credentials
+        id: deploy-credentials
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
         run: |
-          if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+          if [ -z "$DEPLOY_SSH_KEY" ] || [ -z "$HCLOUD_TOKEN" ]; then
             echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "AWS credentials are not configured; skipping staging deploy."
+            # A warning annotation rather than a bare log line: this surfaces
+            # on the run itself, so "shipped a release" and "did nothing" stop
+            # looking identical from the outside.
+            echo "::warning title=Staging deploy skipped::DEPLOY_SSH_KEY and HCLOUD_TOKEN are not set on this repository, so nothing was deployed. This job is green because the build passed, not because a release shipped."
+            {
+              echo "### Staging deploy skipped - no credentials"
+              echo "Set \`DEPLOY_SSH_KEY\` and \`HCLOUD_TOKEN\` on this repository to enable deploys."
+            } >> "$GITHUB_STEP_SUMMARY"
           else
             echo "available=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Deploy
-        if: steps.aws-credentials.outputs.available == 'true'
+        if: steps.deploy-credentials.outputs.available == 'true'
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+          PORKBUN_API_KEY: ${{ secrets.PORKBUN_API_KEY }}
+          PORKBUN_SECRET_KEY: ${{ secrets.PORKBUN_SECRET_KEY }}
+          APP_KEY: ${{ secrets.APP_KEY }}
         run: bun buddy deploy staging --yes
 
   deploy-dev:
@@ -271,24 +301,39 @@ jobs:
       - name: Ensure .env Set
         run: cp .env.example .env
 
-      - name: Check AWS Credentials
-        id: aws-credentials
+      # config/cloud.ts declares `provider: 'hetzner'`, so AWS keys were never
+      # the credentials this deploy needs - it wants an SSH key and an hcloud
+      # token. Gating on AWS meant the step below was skipped on every run
+      # while the job still reported success: the box sat two weeks stale
+      # behind a green tick on every push.
+      - name: Check Deploy Credentials
+        id: deploy-credentials
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
         run: |
-          if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+          if [ -z "$DEPLOY_SSH_KEY" ] || [ -z "$HCLOUD_TOKEN" ]; then
             echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "AWS credentials are not configured; skipping development deploy."
+            # A warning annotation rather than a bare log line: this surfaces
+            # on the run itself, so "shipped a release" and "did nothing" stop
+            # looking identical from the outside.
+            echo "::warning title=Development deploy skipped::DEPLOY_SSH_KEY and HCLOUD_TOKEN are not set on this repository, so nothing was deployed. This job is green because the build passed, not because a release shipped."
+            {
+              echo "### Development deploy skipped - no credentials"
+              echo "Set \`DEPLOY_SSH_KEY\` and \`HCLOUD_TOKEN\` on this repository to enable deploys."
+            } >> "$GITHUB_STEP_SUMMARY"
           else
             echo "available=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Deploy
-        if: steps.aws-credentials.outputs.available == 'true'
+        if: steps.deploy-credentials.outputs.available == 'true'
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+          PORKBUN_API_KEY: ${{ secrets.PORKBUN_API_KEY }}
+          PORKBUN_SECRET_KEY: ${{ secrets.PORKBUN_SECRET_KEY }}
+          APP_KEY: ${{ secrets.APP_KEY }}
         run: bun buddy deploy development --yes
 
   publish-commit:
