@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { accessTokenCookie, exchangeGoogleCode, expiredOauthStateCookie } from '../../app/Actions/Auth/SocialCallback'
+import { accessTokenCookie, exchangeGoogleCode, expiredOauthStateCookie, oauthSuccess } from '../../app/Actions/Auth/SocialCallback'
 import { oauthStateCookie } from '../../app/Actions/Auth/SocialRedirect'
 import { accessTokenFromRequest } from '../../app/Middleware/Auth'
 
@@ -24,6 +24,16 @@ describe('social authentication cookie', () => {
     })
 
     expect(accessTokenFromRequest(request)).toBe(token)
+  })
+
+  it('delivers the auth cookie as the only cookie on the success redirect', () => {
+    const redirect = oauthSuccess('browser-token', 900)
+
+    expect(redirect.status).toBe(303)
+    expect(redirect.headers.get('location')).toBe('/scores/nfl/today')
+    expect(redirect.headers.getSetCookie()).toEqual([
+      accessTokenCookie('browser-token', 900),
+    ])
   })
 })
 

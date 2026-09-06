@@ -127,16 +127,7 @@ export default new Action({
       if (!login)
         return oauthFailure(name, 'provider')
 
-      const redirect = response.redirect('/scores/nfl/today', 302)
-      const headers = new Headers(redirect.headers)
-      headers.append('Set-Cookie', accessTokenCookie(login.token, login.expiresIn))
-      headers.append('Set-Cookie', expiredOauthStateCookie(name))
-
-      return new Response(redirect.body, {
-        status: redirect.status,
-        statusText: redirect.statusText,
-        headers,
-      })
+      return oauthSuccess(login.token, login.expiresIn)
     }
     finally {
       db.close()
@@ -199,6 +190,16 @@ function oauthFailure(provider: string, error: string): Response {
   const headers = new Headers(redirect.headers)
   headers.append('Set-Cookie', expiredOauthStateCookie(provider))
   return new Response(redirect.body, { status: redirect.status, statusText: redirect.statusText, headers })
+}
+
+export function oauthSuccess(token: string, expiresIn: number): Response {
+  return new Response(null, {
+    status: 303,
+    headers: {
+      Location: '/scores/nfl/today',
+      'Set-Cookie': accessTokenCookie(token, expiresIn),
+    },
+  })
 }
 
 export function expiredOauthStateCookie(provider: string): string {
