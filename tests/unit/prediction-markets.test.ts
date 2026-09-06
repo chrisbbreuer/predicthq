@@ -148,8 +148,16 @@ describe('runAnalytics — trader aggregates', () => {
         'INSERT INTO market_trades (prediction_market_id, market_trader_id, venue, external_id, side, price, size, notional, is_winner, traded_at, created_at, updated_at) VALUES (?, NULL, ?, ?, ?, ?, ?, ?, -1, ?, ?, ?)',
       )
 
-      for (let index = 0; index < 10_050; index++)
-        trade.run(Number(market.lastInsertRowid), 'kalshi', `batch-${index}`, 'yes', 0.5, 1, 0.5, now, now, now)
+      batchDb.exec('BEGIN')
+      try {
+        for (let index = 0; index < 10_050; index++)
+          trade.run(Number(market.lastInsertRowid), 'kalshi', `batch-${index}`, 'yes', 0.5, 1, 0.5, now, now, now)
+        batchDb.exec('COMMIT')
+      }
+      catch (error) {
+        batchDb.exec('ROLLBACK')
+        throw error
+      }
 
       const result = await runAnalytics(batchDb, [])
       const remaining = batchDb.query('SELECT COUNT(*) AS c FROM market_trades WHERE is_winner = -1').get() as { c: number }
