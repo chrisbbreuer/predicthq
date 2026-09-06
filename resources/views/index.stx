@@ -28,8 +28,6 @@ const feed = await loadFeedState()
 const intel = await loadIntelSummary()
 const candidate = await loadTopCandidate()
 
-const appName = 'PredictHQ'
-
 const bookById = {}
 for (const b of bookmakers)
   bookById[b.id] = b
@@ -606,7 +604,7 @@ const navActive = 'board'
           <div class="grid gap-2 md:grid-cols-[14rem_1fr] md:gap-10 py-6">
             <h3 class="font-bold">Read the tape</h3>
             <p class="max-w-2xl leading-relaxed muted">
-              Every five minutes we pull the public trade feed and market metadata from both venues. Polymarket fills carry a wallet, so per-account accuracy is real there. Kalshi's feed is anonymous, so its signal is flow rather than identity, and it is scored as such.
+              We continuously pull the public trade feed and market metadata from both venues, with a one-minute safety floor and immediate in-app broadcast after each completed pass. Polymarket fills carry a wallet, so per-account accuracy is real there. Kalshi's feed is anonymous, so its signal is flow rather than identity, and it is scored as such.
             </p>
           </div>
 
@@ -641,16 +639,6 @@ const navActive = 'board'
         <a href="https://www.ncpgambling.org/help-treatment/" target="_blank" rel="noopener" class="font-semibold accent hover:opacity-70">Get help ↗</a>
       </div>
     </section>
-
-    <footer class="border-t bd">
-      <div class="flex flex-col gap-3 items-center justify-between sm:flex-row mx-auto px-4 py-8 sm:px-6 max-w-7xl text-sm faint">
-        <span>© 2026 {{ appName }}. Prediction Intel. Analysis, not advice.</span>
-        <div class="flex gap-5 items-center">
-          <a href="/api/odds" data-no-router class="hover:opacity-70">JSON API</a>
-          <a href="https://github.com/stacksjs/stacks" class="hover:opacity-70">Built with Stacks</a>
-        </div>
-      </div>
-    </footer>
 
     <!-- floating sheet button (mobile) -->
     <button class="flex md:hidden bottom-5 fixed right-5 z-30 gap-2 items-center px-5 py-3 font-bold rounded-full shadow-lg btn btn-primary" x-show="sheet.length > 0" x-cloak @click="sheetOpen = true">
@@ -759,6 +747,7 @@ const navActive = 'board'
         </div>
       </div>
     </aside>
+    @include('footer')
   </div>
   </body>
 </html>

@@ -172,5 +172,6 @@ describe('support query helpers', () => {
     expect(link?.trades).toBe(2)
     expect(link?.wins).toBe(2)
     expect(link?.losses).toBe(0)
+    expect(() => JSON.stringify(graph)).not.toThrow()
   })
 })

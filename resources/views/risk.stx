@@ -7,8 +7,8 @@ const navActive = 'risk'
     <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="Prediction-market and automated trading risk disclosure."><title>PredictHQ: Risk Disclosure</title>@include('../partials/tokens')
   </head>
-  <body><div class="min-h-screen app">
-    <header class="border-b bd"><div class="flex items-center justify-between mx-auto px-4 h-16 sm:px-6 max-w-4xl"><a href="/" class="font-extrabold text-lg">Predict<span class="accent">HQ</span></a><a href="/account" class="font-bold text-sm accent">Account</a></div></header>
+  <body><div class="app">
+    @include('nav')
     <main class="mx-auto px-4 py-12 sm:px-6 max-w-4xl">
       <p class="font-bold text-xs tracking-widest uppercase accent">Read before enabling live mode</p><h1 class="mt-2 display font-black text-4xl tracking-tight">Risk Disclosure</h1>
       <div class="p-5 mt-8 rounded-2xl card"><p class="font-black text-lg">You can lose all money committed to a prediction-market position.</p><p class="mt-2 leading-relaxed muted">A $0 settlement can make a contract bought above $0 a total loss. Only use funds you can afford to lose.</p></div>
@@ -22,5 +22,6 @@ const navActive = 'risk'
       </div>
       <div class="mt-8"><a href="/account" class="inline-flex items-center px-5 h-11 font-bold rounded-lg btn btn-primary">Return to account setup</a></div>
     </main>
+    @include('footer')
   </div></body>
 </html>

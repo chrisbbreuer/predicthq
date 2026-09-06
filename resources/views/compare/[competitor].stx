@@ -257,6 +257,7 @@ const others = othersHtml(slug)
           </div>
         @endif
       </main>
+      @include('footer')
     </div>
   </body>
 </html>

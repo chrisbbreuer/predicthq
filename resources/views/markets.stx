@@ -3,17 +3,15 @@
  * PredictHQ: Smart money.
  *
  * Who keeps buying the winning side on Kalshi + Polymarket, and how big
- * they bet. The money-flow network is laid out server-side with
- * ts-charts' force simulation (`graphLayout`), so the page renders a
- * settled graph with zero client hydration; Alpine adds tooltip,
- * pan and zoom on top.
+ * they bet. The money-flow network is laid out deterministically on the
+ * server, so it renders with zero client layout work; the browser adds
+ * tooltip, pan, and zoom interactions on top.
  */
-import { graphLayout } from 'ts-charts/graph'
 import { loadBigTrades, loadGraph, loadSmartMoney } from '../../app/Support/prediction-markets'
 
-const appName = 'PredictHQ'
 const W = 920
 const H = 640
+const broadcastPort = process.env.BROADCAST_PORT || 6001
 
 const fmtUsd = (n) => {
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`
@@ -44,17 +42,25 @@ const whales = (await loadBigTrades(10)).map(t => ({
   outcome: t.isWinner === 1 ? 'won' : t.isWinner === 0 ? 'lost' : 'open',
 }))
 
-// Force layout, computed server-side. Node size tracks money flow
-// (sqrt so area ~ notional); collide keeps labels readable.
+// A two-ring layout keeps traders and markets visually distinct and is
+// deterministic across renders. Node size tracks money flow (sqrt so
+// area ~ notional), while the links retain the actual relationships.
 const maxNodeValue = Math.max(1, ...graph.nodes.map(n => n.value))
 const radiusOf = n => (n.kind === 'trader' ? 7 : 5) + Math.sqrt(n.value / maxNodeValue) * (n.kind === 'trader' ? 17 : 11)
-const laid = graphLayout(
-  {
-    nodes: graph.nodes.map(n => ({ ...n })),
-    links: graph.links.map(l => ({ ...l })),
-  },
-  { width: W, height: H, iterations: 300, chargeStrength: -70, linkDistance: 46, collideRadius: d => radiusOf(d) + 2 },
-)
+const traders = graph.nodes.filter(n => n.kind === 'trader')
+const markets = graph.nodes.filter(n => n.kind === 'market')
+const placeRing = (nodes, radius, offset) => nodes.map((node, index) => {
+  const angle = offset + (Math.PI * 2 * index / Math.max(1, nodes.length))
+  return { ...node, x: W / 2 + Math.cos(angle) * radius, y: H / 2 + Math.sin(angle) * radius }
+})
+const laidNodes = [
+  ...placeRing(traders, 165, -Math.PI / 2),
+  ...placeRing(markets, 275, -Math.PI / 2 + 0.08),
+]
+const laidById = new Map(laidNodes.map(node => [node.id, node]))
+const laidLinks = graph.links
+  .map(link => ({ ...link, source: laidById.get(link.source), target: laidById.get(link.target) }))
+  .filter(link => link.source && link.target)
 
 const fillOf = (n) => {
   if (n.kind === 'market') return n.venue === 'kalshi' ? 'var(--g-kalshi)' : 'var(--g-poly)'
@@ -63,7 +69,8 @@ const fillOf = (n) => {
 }
 
 const maxLink = Math.max(1, ...graph.links.map(l => l.value))
-const glinks = laid.links.map(l => ({
+const glinks = laidLinks.map(l => ({
+  id: `${l.source.id}:${l.target.id}`,
   x1: l.source.x.toFixed(1),
   y1: l.source.y.toFixed(1),
   x2: l.target.x.toFixed(1),
@@ -74,7 +81,7 @@ const glinks = laid.links.map(l => ({
 
 // Tooltip metadata rides on data- attributes per node (the hover handler
 // reads $event.target.dataset), so the x-data scope stays primitive.
-const gnodes = laid.nodes.map((n, i) => ({
+const gnodes = laidNodes.map((n, i) => ({
   i,
   x: n.x.toFixed(1),
   y: n.y.toFixed(1),
@@ -96,6 +103,12 @@ const stats = {
   markets: graph.nodes.filter(n => n.kind === 'market').length,
 }
 
+const leadersJson = JSON.stringify(leaders)
+const whalesJson = JSON.stringify(whales)
+const graphNodesJson = JSON.stringify(gnodes)
+const graphLinksJson = JSON.stringify(glinks)
+const statsJson = JSON.stringify(stats)
+
 const navActive = 'markets'
 </script>
 
@@ -105,6 +118,7 @@ const navActive = 'markets'
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     @include('tokens')
+    @include('realtime')
     <meta name="description" content="PredictHQ smart money: who keeps buying the winning side on Kalshi and Polymarket, and how big they bet.">
     <title>PredictHQ: smart money</title>
     <style>
@@ -133,8 +147,116 @@ const navActive = 'markets'
       tx: 0,
       ty: 0,
       panning: false,
+      connected: false,
+      refreshing: false,
+      leaders: {{ leadersJson }},
+      whales: {{ whalesJson }},
+      gnodes: {{ graphNodesJson }},
+      glinks: {{ graphLinksJson }},
+      stats: {{ statsJson }},
       px: 0,
       py: 0,
+      connectFlow() {
+        try {
+          const ws = new WebSocket(predicthqRealtime.url('{{ broadcastPort }}'))
+          ws.onopen = () => { this.connected = true; ws.send(JSON.stringify({ type: 'subscribe', channel: 'prediction-markets' })) }
+          ws.onclose = () => { this.connected = false; setTimeout(() => this.connectFlow(), 5000) }
+          ws.onmessage = (event) => {
+            let message; try { message = JSON.parse(event.data) } catch { return }
+            if (message.channel === 'prediction-markets' && message.event === 'flow:updated')
+              this.refreshFlow()
+          }
+        }
+        catch { this.connected = false }
+      },
+      money(value) {
+        const amount = Number(value) || 0
+        if (amount >= 1000000) return '$' + (amount / 1000000).toFixed(1) + 'M'
+        if (amount >= 1000) return '$' + (amount / 1000).toFixed(1) + 'k'
+        return '$' + Math.round(amount)
+      },
+      short(value, length) {
+        const text = String(value || '')
+        return text.length > length ? text.slice(0, length - 1) + '…' : text
+      },
+      layoutGraph(graph) {
+        const nodes = Array.isArray(graph.nodes) ? graph.nodes : []
+        const links = Array.isArray(graph.links) ? graph.links : []
+        const traders = nodes.filter(node => node.kind === 'trader')
+        const markets = nodes.filter(node => node.kind === 'market')
+        const maxValue = Math.max(1, ...nodes.map(node => Number(node.value) || 0))
+        const radius = node => (node.kind === 'trader' ? 7 : 5) + Math.sqrt((Number(node.value) || 0) / maxValue) * (node.kind === 'trader' ? 17 : 11)
+        const ring = (items, ringRadius, offset) => items.map((node, index) => {
+          const angle = offset + Math.PI * 2 * index / Math.max(1, items.length)
+          return { ...node, x: 460 + Math.cos(angle) * ringRadius, y: 320 + Math.sin(angle) * ringRadius }
+        })
+        const placed = [...ring(traders, 165, -Math.PI / 2), ...ring(markets, 275, -Math.PI / 2 + 0.08)]
+        const byId = Object.fromEntries(placed.map(node => [node.id, node]))
+        const maxLink = Math.max(1, ...links.map(link => Number(link.value) || 0))
+
+        this.glinks = links.map((link) => {
+          const source = byId[link.source]
+          const target = byId[link.target]
+          if (!source || !target) return null
+          const wins = Number(link.wins) || 0
+          const losses = Number(link.losses) || 0
+          return {
+            id: link.source + ':' + link.target,
+            x1: source.x.toFixed(1), y1: source.y.toFixed(1),
+            x2: target.x.toFixed(1), y2: target.y.toFixed(1),
+            w: (1 + Math.sqrt((Number(link.value) || 0) / maxLink) * 4.5).toFixed(1),
+            stroke: wins > losses ? 'var(--pos)' : losses > wins ? 'var(--neg)' : 'var(--g-edge)',
+          }
+        }).filter(Boolean)
+
+        this.gnodes = placed.map((node, index) => ({
+          ...node,
+          i: index,
+          x: node.x.toFixed(1), y: node.y.toFixed(1), r: radius(node).toFixed(1),
+          fill: node.kind === 'market' ? (node.venue === 'kalshi' ? 'var(--g-kalshi)' : 'var(--g-poly)') : node.isWhale ? 'var(--g-whale)' : node.group === 'smart' ? 'var(--g-smart)' : 'var(--g-trader)',
+          ring: node.kind === 'trader' && node.group === 'smart' ? 'var(--g-smart)' : 'transparent',
+          label: this.short(node.label, 46),
+          sub: node.kind === 'trader'
+            ? (node.isWhale ? 'Whale · ' : '') + Math.round((Number(node.winRate) || 0) * 100) + '% win rate · score ' + (Number(node.smartScore) || 0).toFixed(0) + ' · ' + this.money(node.value) + ' bought'
+            : node.venue + ' · ' + node.status + ' · ' + this.money(node.value) + ' volume',
+          mx: Math.round(node.x), my: Math.round(node.y),
+        }))
+        this.stats = {
+          traders: traders.length,
+          smart: nodes.filter(node => node.group === 'smart').length,
+          whalesCount: nodes.filter(node => node.isWhale).length,
+          markets: markets.length,
+        }
+      },
+      async refreshFlow() {
+        if (this.refreshing) return
+        this.refreshing = true
+        try {
+          const responses = await Promise.all([
+            fetch('/api/markets/smart-money', { cache: 'no-store' }),
+            fetch('/api/markets/whales', { cache: 'no-store' }),
+            fetch('/api/markets/graph', { cache: 'no-store' }),
+          ])
+          if (responses.some(response => !response.ok)) throw new Error('flow refresh failed')
+          const [smart, whaleFlow, graph] = await Promise.all(responses.map(response => response.json()))
+          this.leaders = (smart.traders || []).slice(0, 12).map(trader => ({
+            alias: this.short(trader.alias, 22), venue: trader.venue,
+            record: trader.winningTradeCount + '-' + (trader.resolvedTradeCount - trader.winningTradeCount),
+            score: Number(trader.smartScore).toFixed(0), vol: this.money(trader.totalNotional),
+            maxBet: this.money(trader.maxTradeSize), whale: Boolean(trader.isWhale),
+          }))
+          this.whales = (whaleFlow.trades || []).slice(0, 10).map(trade => ({
+            mark: trade.venue === 'kalshi' ? 'KAL' : 'PM',
+            question: this.short(trade.question, 60), side: String(trade.side).toUpperCase(),
+            price: Math.round(Number(trade.price) * 100) + '¢', notional: this.money(trade.notional),
+            who: trade.alias ? this.short(trade.alias, 18) : 'anonymous',
+            outcome: Number(trade.isWinner) === 1 ? 'won' : Number(trade.isWinner) === 0 ? 'lost' : 'open',
+          }))
+          this.layoutGraph(graph)
+        }
+        catch {}
+        finally { this.refreshing = false }
+      },
       toggleTheme() { this.theme = predicthqTheme.toggle() }, toggleMenu() { this.menu = !this.menu },
       xform() { return 'translate(' + this.tx + ' ' + this.ty + ') scale(' + this.scale + ')' },
       zoom(f) {
@@ -165,6 +287,7 @@ const navActive = 'markets'
         return 'left:' + Math.min(80, Math.max(2, left)) + '%;top:' + Math.min(88, Math.max(2, top)) + '%'
       }
     }"
+    x-init="connectFlow(); refreshFlow(); setInterval(() => refreshFlow(), 60000)"
   >
   <div class="app">
       @include('nav')
@@ -173,9 +296,10 @@ const navActive = 'markets'
       <div class="flex flex-wrap gap-3 items-center justify-between">
         <div>
           <h1 class="display font-black text-3xl tracking-tight sm:text-4xl">Smart money</h1>
-          <p class="mt-1 muted">Public Kalshi + Polymarket tape. Who keeps buying the winning side, and how big they bet.</p>
+          <p class="mt-1 muted">Live Kalshi + Polymarket tape. Who keeps buying the winning side, and how big they bet.</p>
         </div>
-        <div class="flex gap-4 items-center font-semibold text-xs muted">
+        <div class="flex flex-wrap gap-4 items-center font-semibold text-xs muted">
+          <span class="px-2.5 py-1 rounded-full soft" :class="connected ? 'pos' : 'faint'" x-text="connected ? '● Live updates' : '○ Minute fallback'">○ Minute fallback</span>
           <span class="flex gap-1.5 items-center"><span class="dot" style="background:var(--g-smart)"></span> smart trader</span>
           <span class="flex gap-1.5 items-center"><span class="dot" style="background:var(--g-whale)"></span> whale</span>
           <span class="flex gap-1.5 items-center"><span class="dot" style="background:var(--g-kalshi)"></span> Kalshi market</span>
@@ -196,66 +320,61 @@ const navActive = 'markets'
             </div>
           </div>
 
-          @if (gnodes.length === 0)
-            <div class="grid place-items-center p-16 text-center muted">
-              <div>
-                <div class="font-bold">No tape ingested yet</div>
-                <div class="mt-1 text-sm faint">Run the IngestPredictionMarkets job to pull the public trade tape.</div>
-              </div>
+          <div x-show="gnodes.length === 0" class="grid place-items-center p-16 text-center muted">
+            <div>
+              <div class="font-bold">Waiting for market flow</div>
+              <div class="mt-1 text-sm faint">The live APIs will populate this graph as attributable trades arrive.</div>
             </div>
-          @else
-            <svg
-              class="w-full graph-svg"
-              viewBox="0 0 {{ W }} {{ H }}"
-              preserveAspectRatio="xMidYMid meet"
-              @pointerdown="startPan($event)"
-              @pointermove="movePan($event)"
-              @pointerup="panning = false"
-              @pointerleave="panning = false"
-              @wheel.prevent="zoom($event.deltaY < 0 ? 1.15 : 0.87)"
-            >
-              <!-- pan/zoom via a `transform` binding on the inner group; a
-                  :viewBox binding also works on current stx (the runtime
-                  restores SVG attribute casing), but transform keeps the
-                  outer viewBox static for percent-based tooltip math -->
-              <g :transform="xform()">
+          </div>
+
+          <svg
+            x-show="gnodes.length > 0"
+            class="w-full graph-svg"
+            viewBox="0 0 {{ W }} {{ H }}"
+            preserveAspectRatio="xMidYMid meet"
+            @pointerdown="startPan($event)"
+            @pointermove="movePan($event)"
+            @pointerup="panning = false"
+            @pointerleave="panning = false"
+            @wheel.prevent="zoom($event.deltaY < 0 ? 1.15 : 0.87)"
+          >
+            <g :transform="xform()">
               <g stroke-opacity="0.55">
-                @foreach (glinks as l)
-                  <line x1="{{ l.x1 }}" y1="{{ l.y1 }}" x2="{{ l.x2 }}" y2="{{ l.y2 }}" stroke="{{ l.stroke }}" stroke-width="{{ l.w }}" />
-                @endforeach
+                <template x-for="link in glinks" :key="link.id">
+                  <line :x1="link.x1" :y1="link.y1" :x2="link.x2" :y2="link.y2" :stroke="link.stroke" :stroke-width="link.w"></line>
+                </template>
               </g>
               <g>
-                @foreach (gnodes as n)
+                <template x-for="node in gnodes" :key="node.id">
                   <circle
                     class="graph-node"
-                    cx="{{ n.x }}" cy="{{ n.y }}" r="{{ n.r }}"
-                    fill="{{ n.fill }}" stroke="{{ n.ring }}" stroke-width="2"
-                    data-i="{{ n.i }}" data-label="{{ n.label }}" data-sub="{{ n.sub }}" data-mx="{{ n.mx }}" data-my="{{ n.my }}"
-                    :opacity="hover < 0 || hover === {{ n.i }} ? 1 : 0.35"
+                    :cx="node.x" :cy="node.y" :r="node.r"
+                    :fill="node.fill" :stroke="node.ring" stroke-width="2"
+                    :data-i="node.i" :data-label="node.label" :data-sub="node.sub" :data-mx="node.mx" :data-my="node.my"
+                    :opacity="hover < 0 || hover === node.i ? 1 : 0.35"
                     @pointerenter="showTip($event)"
                     @pointerleave="hover = -1"
-                  />
-                @endforeach
+                  ></circle>
+                </template>
               </g>
-              </g>
-            </svg>
+            </g>
+          </svg>
 
-            <div class="px-3 py-2 text-xs rounded-xl card tip" x-cloak :style="tipStyle()">
-              <div class="font-bold" x-text="tipLabel"></div>
-              <div class="mt-0.5 faint" x-text="tipSub"></div>
-            </div>
-          @endif
+          <div class="px-3 py-2 text-xs rounded-xl card tip" x-cloak :style="tipStyle()">
+            <div class="font-bold" x-text="tipLabel"></div>
+            <div class="mt-0.5 faint" x-text="tipSub"></div>
+          </div>
         </section>
 
         <!-- sidebar -->
         <aside class="grid content-start gap-5">
           <section class="grid gap-3 grid-cols-2">
             <div class="p-4 rounded-2xl card">
-              <div class="font-black text-2xl num">{{ stats.smart }}</div>
+              <div class="font-black text-2xl num" x-text="stats.smart">{{ stats.smart }}</div>
               <div class="mt-0.5 font-semibold text-xs tracking-wide uppercase muted">Smart accounts</div>
             </div>
             <div class="p-4 rounded-2xl card">
-              <div class="font-black text-2xl num">{{ stats.whalesCount }}</div>
+              <div class="font-black text-2xl num" x-text="stats.whalesCount">{{ stats.whalesCount }}</div>
               <div class="mt-0.5 font-semibold text-xs tracking-wide uppercase muted">Whales</div>
             </div>
           </section>
@@ -265,19 +384,20 @@ const navActive = 'markets'
               <span class="font-bold">Winning-side leaderboard</span>
               <span class="text-xs faint">score · W-L · volume</span>
             </div>
-            @foreach (leaders as t)
+            <template x-for="trader in leaders" :key="trader.venue + ':' + trader.alias">
               <div class="lb-row">
-                <span class="dot" style="background:{{ t.whale ? 'var(--g-whale)' : 'var(--g-smart)' }}"></span>
+                <span class="dot" :style="trader.whale ? 'background:var(--g-whale)' : 'background:var(--g-smart)'"></span>
                 <div class="flex-1 min-w-0">
-                  <div class="font-bold text-sm truncate">{{ t.alias }}</div>
-                  <div class="text-xs faint">{{ t.venue }} · max bet {{ t.maxBet }}</div>
+                  <div class="font-bold text-sm truncate" x-text="trader.alias"></div>
+                  <div class="text-xs faint"><span x-text="trader.venue"></span> · max bet <span x-text="trader.maxBet"></span></div>
                 </div>
                 <div class="text-right">
-                  <div class="font-black text-sm accent num">{{ t.score }}</div>
-                  <div class="text-xs faint num">{{ t.record }} · {{ t.vol }}</div>
+                  <div class="font-black text-sm accent num" x-text="trader.score"></div>
+                  <div class="text-xs faint num"><span x-text="trader.record"></span> · <span x-text="trader.vol"></span></div>
                 </div>
               </div>
-            @endforeach
+            </template>
+            <div x-show="leaders.length === 0" class="px-4 py-7 text-center text-sm muted">Waiting for enough settled history to rank a trader.</div>
           </section>
 
           <section class="overflow-hidden rounded-2xl card">
@@ -285,23 +405,25 @@ const navActive = 'markets'
               <span class="font-bold">Biggest bets</span>
               <span class="text-xs faint">by notional</span>
             </div>
-            @foreach (whales as w)
+            <template x-for="trade in whales" :key="trade.mark + ':' + trade.question + ':' + trade.notional">
               <div class="lb-row">
-                <span class="grid place-items-center h-7 w-10 font-black text-[9px] rounded-md soft">{{ w.mark }}</span>
+                <span class="grid place-items-center h-7 w-10 font-black text-[9px] rounded-md soft" x-text="trade.mark"></span>
                 <div class="flex-1 min-w-0">
-                  <div class="font-semibold text-xs truncate">{{ w.question }}</div>
-                  <div class="text-xs faint">{{ w.who }} · {{ w.side }} @ {{ w.price }}</div>
+                  <div class="font-semibold text-xs truncate" x-text="trade.question"></div>
+                  <div class="text-xs faint"><span x-text="trade.who"></span> · <span x-text="trade.side"></span> @ <span x-text="trade.price"></span></div>
                 </div>
                 <div class="text-right">
-                  <div class="font-black text-sm num">{{ w.notional }}</div>
-                  <div class="text-xs num {{ w.outcome === 'won' ? 'pos' : w.outcome === 'lost' ? 'neg' : 'faint' }}">{{ w.outcome }}</div>
+                  <div class="font-black text-sm num" x-text="trade.notional"></div>
+                  <div class="text-xs num" :class="trade.outcome === 'won' ? 'pos' : trade.outcome === 'lost' ? 'neg' : 'faint'" x-text="trade.outcome"></div>
                 </div>
               </div>
-            @endforeach
+            </template>
+            <div x-show="whales.length === 0" class="px-4 py-7 text-center text-sm muted">No large trades in the current tape.</div>
           </section>
         </aside>
       </div>
     </main>
+    @include('footer')
   </div>
   </body>
 </html>

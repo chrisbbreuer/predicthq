@@ -49,11 +49,12 @@ export default function () {
     .everyMinute()
 
   // Prediction-market loop: the public Kalshi and Polymarket trade tapes
-  // plus the smart-money analytics over them. Separate from the pipeline
-  // above because it reads a different set of venues on its own cadence.
+  // plus smart-money analytics. One minute is the scheduler's safe floor:
+  // each completed pass broadcasts to connected clients immediately while
+  // still respecting venue limits.
   schedule
     .job('IngestPredictionMarkets')
-    .everyFiveMinutes()
+    .everyMinute()
 
   // Trading loop: score markets from that tape, judge the candidates, and
   // place what the active strategies approve. Slower than ingestion on

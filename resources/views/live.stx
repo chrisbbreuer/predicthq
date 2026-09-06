@@ -9,7 +9,6 @@
 import { brandFor, teamFor } from '../../app/Support/branding'
 import { loadBoard, loadRecentMoves } from '../../app/Support/odds'
 
-const appName = 'PredictHQ'
 const { bookmakers, events, summary } = await loadBoard()
 
 // Initial feed (recent line moves): rendered server-side with @foreach.
@@ -222,6 +221,7 @@ const navActive = 'live'
         </aside>
       </div>
     </main>
+    @include('footer')
   </div>
   </body>
 </html>

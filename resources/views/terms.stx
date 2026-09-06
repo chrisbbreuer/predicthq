@@ -7,8 +7,8 @@ const navActive = 'terms'
     <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="PredictHQ terms of service."><title>PredictHQ: Terms</title>@include('../partials/tokens')
   </head>
-  <body><div class="min-h-screen app">
-    <header class="border-b bd"><div class="flex items-center justify-between mx-auto px-4 h-16 sm:px-6 max-w-4xl"><a href="/" class="font-extrabold text-lg">Predict<span class="accent">HQ</span></a><a href="/account" class="font-bold text-sm accent">Account</a></div></header>
+  <body><div class="app">
+    @include('nav')
     <main class="mx-auto px-4 py-12 sm:px-6 max-w-4xl">
       <p class="font-bold text-xs tracking-widest uppercase accent">Effective August 8, 2026</p>
       <h1 class="mt-2 display font-black text-4xl tracking-tight">Terms of Service</h1>
@@ -23,5 +23,6 @@ const navActive = 'terms'
         <section><h2 class="font-black text-xl" style="color:var(--text)">8. Contact</h2><p class="mt-2">Questions or legal notices: <a class="underline accent" href="mailto:hello@predicthq.org">hello@predicthq.org</a>.</p></section>
       </div>
     </main>
+    @include('footer')
   </div></body>
 </html>

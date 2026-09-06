@@ -1,127 +1,104 @@
-<script server>
-/**
- * The one nav.
- *
- * Every link is declared once, here, and rendered twice: the desktop row
- * and the mobile sheet both iterate this array. They used to be two
- * hand-written lists, which is why they drifted (the mobile sheet carried
- * a Live link the desktop row never had). A single source means they
- * cannot disagree again.
- *
- * `key` is matched against the `navActive` const each page sets in its own
- * server scope, which is how a link knows it is the current one.
- */
-const NAV_LINKS = [
-  { href: '/', key: 'board', label: 'Odds', router: true },
-  { href: '/live', key: 'live', label: 'Live', router: false },
-  { href: '/scores/nfl/today', key: 'scores', label: 'Scores', router: false },
-  { href: '/markets', key: 'markets', label: 'Smart money', router: false },
-  { href: '/community', key: 'community', label: 'Community', router: false },
-  { href: '/positions', key: 'positions', label: 'My book', router: false },
-  { href: '/features', key: 'features', label: 'Features', router: false },
-  { href: '/compare', key: 'compare', label: 'Compare', router: false },
-  { href: '/pricing', key: 'pricing', label: 'Pricing', router: false },
-  { href: '/account', key: 'account', label: 'Account', router: false },
-]
-</script>
-
 <header
   class="sticky top-0 z-30 border-b bd"
-  style="background:color-mix(in srgb, var(--surface) 86%, transparent);backdrop-filter:blur(14px)"
+  style="background:color-mix(in srgb, var(--surface) 88%, transparent);backdrop-filter:blur(16px)"
+  x-data="{ menu: false, toggleMenu() { this.menu = !this.menu } }"
 >
   <div class="flex gap-4 items-center justify-between mx-auto px-4 h-16 sm:px-6 max-w-7xl">
-    <a href="/" class="flex gap-2.5 items-center shrink-0">
+    <a href="/" class="flex gap-2.5 items-center shrink-0" aria-label="PredictHQ home">
       <span class="grid place-items-center h-9 w-9 p-2 rounded-xl brandmark">@include('logo')</span>
       <span class="font-extrabold text-lg tracking-tight">Predict<span class="accent">HQ</span></span>
     </a>
 
-    {{--
-      Seven destinations plus a visible auth pair does not fit on one line
-      at 1024, and a nav that wraps to two lines is a layout bug. So the
-      full row starts at xl and the sheet covers everything below it,
-      rather than dropping links nobody would then be able to find.
-    --}}
-    {{--
-      `.nav-row` stretches this to the full bar height. The row above is
-      `items-center`, which would otherwise size it to its content, and the
-      active rule below is positioned against the bottom of this element,
-      so it has to be full height for the rule to land on the header's own
-      border rather than float above it.
-    --}}
-    <nav class="hidden gap-6 items-center font-semibold text-sm xl:flex nav-row muted">
-      @foreach (NAV_LINKS as link)
-        <a
-          href="{{ link.href }}"
-          {{ link.router ? '' : 'data-no-router' }}
-          class="nav-link {{ navActive === link.key ? 'is-active' : '' }}"
-          {{ navActive === link.key ? 'aria-current=page' : '' }}
-        >{{ link.label }}</a>
-      @endforeach
+    <nav class="hidden gap-1 items-stretch self-stretch font-semibold text-sm lg:flex muted" aria-label="Primary navigation">
+      <a href="/" class="nav-link {{ navActive === 'board' ? 'is-active' : '' }}" {{ navActive === 'board' ? 'aria-current=page' : '' }}>Odds</a>
+      <a href="/live" data-no-router class="nav-link {{ navActive === 'live' ? 'is-active' : '' }}" {{ navActive === 'live' ? 'aria-current=page' : '' }}>Live</a>
+      <a href="/scores/nfl/today" data-no-router class="nav-link {{ navActive === 'scores' ? 'is-active' : '' }}" {{ navActive === 'scores' ? 'aria-current=page' : '' }}>Scores</a>
+
+      <details class="relative nav-mega {{ navActive === 'features' ? 'is-active' : '' }}">
+        <summary class="gap-1 nav-summary">
+          Features
+          <i class="h-3.5 w-3.5 i-hugeicons-arrow-down-01 nav-chevron"></i>
+        </summary>
+        <div class="mega-panel mega-features">
+          <div class="grid gap-2 sm:grid-cols-2">
+            <div>
+              <p class="mega-kicker">Find an edge</p>
+              <a href="/features/evidence" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-ai-brain-03"></i><span><strong>Evidence engine</strong><small>See every input behind a call.</small></span></a>
+              <a href="/features/smart-money" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-chart-relationship"></i><span><strong>Smart money</strong><small>Follow proven wallets and whale flow.</small></span></a>
+              <a href="/features/odds" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-chart-line-data-02"></i><span><strong>Odds comparison</strong><small>Best prices across every connected book.</small></span></a>
+              <a href="/features/live" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-flash"></i><span><strong>Live moves</strong><small>Stream price changes while games unfold.</small></span></a>
+            </div>
+            <div>
+              <p class="mega-kicker">Act on it</p>
+              <a href="/features/automation" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-robot-01"></i><span><strong>Automation</strong><small>Execute only inside limits you set.</small></span></a>
+              <a href="/features/risk" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-shield-01"></i><span><strong>Risk controls</strong><small>Exposure, loss, and freshness guardrails.</small></span></a>
+              <a href="/features/sheets" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-note-edit"></i><span><strong>Bet sheets</strong><small>Build and save multi-leg ideas.</small></span></a>
+              <a href="/features/api" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-api"></i><span><strong>Developer API</strong><small>Bring the same signals into your tools.</small></span></a>
+            </div>
+          </div>
+          <a href="/features" data-no-router class="mega-cta">Explore every feature <span aria-hidden="true">→</span></a>
+        </div>
+      </details>
+
+      <details class="relative nav-mega {{ ['markets', 'community', 'positions', 'compare'].includes(navActive) ? 'is-active' : '' }}">
+        <summary class="gap-1 nav-summary">
+          Explore
+          <i class="h-3.5 w-3.5 i-hugeicons-arrow-down-01 nav-chevron"></i>
+        </summary>
+        <div class="mega-panel mega-explore">
+          <a href="/markets" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-user-multiple-02"></i><span><strong>Smart-money desk</strong><small>Leaderboard, whale tape, and signal graph.</small></span></a>
+          <a href="/positions" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-briefcase-01"></i><span><strong>My book</strong><small>Private positions, orders, and live scores.</small></span></a>
+          <a href="/community" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-bubble-chat"></i><span><strong>Community</strong><small>Talk through a market before it settles.</small></span></a>
+          <a href="/compare" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-balance-scale"></i><span><strong>Compare</strong><small>See where PredictHQ fits—and where it does not.</small></span></a>
+          <a href="/pipeline" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-activity-03"></i><span><strong>Data health</strong><small>Freshness, coverage, and ingestion status.</small></span></a>
+          <a href="/account" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-settings-02"></i><span><strong>Account</strong><small>Connections, strategies, and limits.</small></span></a>
+        </div>
+      </details>
+
+      <a href="/pricing" data-no-router class="nav-link {{ navActive === 'pricing' ? 'is-active' : '' }}" {{ navActive === 'pricing' ? 'aria-current=page' : '' }}>Pricing</a>
     </nav>
 
     <div class="flex gap-2 items-center shrink-0">
-      <button class="grid place-items-center h-9 w-9 rounded-lg icon-btn" @click="toggleTheme()" aria-label="Toggle theme">
-        <i class="h-4 w-4 i-hugeicons-moon-02" x-show="theme !== 'dark'"></i>
-        <i class="h-4 w-4 i-hugeicons-sun-03" x-show="theme === 'dark'" style="display:none"></i>
-      </button>
-
-      {{--
-        The sheet is the visitor's working state, not a conversion action,
-        so it stays a secondary button and never takes the primary slot the
-        way it used to. Below xl it keeps the count and drops the words.
-      --}}
       @if (navActive === 'board')
-        <button
-          class="hidden gap-2 items-center px-3 py-2 h-9 font-bold text-sm rounded-lg sm:inline-flex btn"
-          @click="drawer = true"
-          aria-label="Open my sheet"
-        >
+        <button class="hidden gap-2 items-center px-3 py-2 h-9 font-bold text-sm rounded-lg sm:inline-flex btn" @click="drawer = true" aria-label="Open my sheet">
           <i class="h-4 w-4 i-hugeicons-note-edit"></i>
           <span class="hidden xl:inline">My sheet</span>
           <span class="grid place-items-center h-5 min-w-5 px-1 font-bold text-xs rounded-full soft num" x-text="sheet.length"></span>
         </button>
       @endif
-
-      {{--
-        Log in and Sign up, on every page, in the same place. Previously
-        the only thing here was a "Start" button pointing at pricing, and
-        an existing customer had nowhere to say they were one.
-      --}}
       <a href="/login" data-no-router class="hidden items-center px-3 h-9 font-semibold text-sm rounded-lg sm:inline-flex nav-login">Log in</a>
       <a href="/signup" data-no-router class="hidden items-center px-4 h-9 font-bold text-sm rounded-lg sm:inline-flex btn btn-primary">Sign up</a>
-
-      <button
-        class="grid place-items-center h-9 w-9 rounded-lg xl:hidden icon-btn"
-        @click="toggleMenu()"
-        :aria-expanded="menu ? 'true' : 'false'"
-        aria-controls="mobile-nav"
-        aria-label="Toggle menu"
-      >
+      <button class="grid place-items-center h-9 w-9 rounded-lg lg:hidden icon-btn" @click="toggleMenu()" :aria-expanded="menu ? 'true' : 'false'" aria-controls="mobile-nav" aria-label="Toggle menu">
         <i class="h-4 w-4 i-hugeicons-menu-01" x-show="!menu"></i>
         <i class="h-4 w-4 i-hugeicons-cancel-01" x-show="menu" style="display:none"></i>
       </button>
     </div>
   </div>
 
-  <nav
-    id="mobile-nav"
-    class="border-t xl:hidden bd transition-opacity duration-150"
-    style="background:var(--surface)"
-    x-show="menu"
-    x-cloak
-  >
-    <div class="flex flex-col mx-auto px-4 py-2 sm:px-6 max-w-7xl">
-      @foreach (NAV_LINKS as link)
-        <a
-          href="{{ link.href }}"
-          {{ link.router ? '' : 'data-no-router' }}
-          class="py-3 font-semibold border-b bd {{ navActive === link.key ? 'accent' : '' }}"
-          {{ navActive === link.key ? 'aria-current=page' : '' }}
-          @click="menu = false"
-        >{{ link.label }}</a>
-      @endforeach
-
-      <div class="flex gap-2 items-center py-3 sm:hidden">
+  <nav id="mobile-nav" class="border-t lg:hidden bd transition-opacity duration-150" style="background:var(--surface)" x-show="menu" x-cloak aria-label="Mobile navigation">
+    <div class="grid gap-5 mx-auto px-4 py-5 sm:grid-cols-2 sm:px-6 max-w-7xl">
+      <div>
+        <p class="mega-kicker">Markets</p>
+        <div class="grid">
+          <a href="/" class="mobile-link" @click="menu = false">Odds board</a>
+          <a href="/live" data-no-router class="mobile-link" @click="menu = false">Live moves</a>
+          <a href="/scores/nfl/today" data-no-router class="mobile-link" @click="menu = false">Scores</a>
+          <a href="/markets" data-no-router class="mobile-link" @click="menu = false">Smart money</a>
+          <a href="/positions" data-no-router class="mobile-link" @click="menu = false">My book</a>
+        </div>
+      </div>
+      <div>
+        <p class="mega-kicker">Discover</p>
+        <div class="grid grid-cols-2 gap-x-4">
+          <a href="/features" data-no-router class="mobile-link" @click="menu = false">Features</a>
+          <a href="/community" data-no-router class="mobile-link" @click="menu = false">Community</a>
+          <a href="/compare" data-no-router class="mobile-link" @click="menu = false">Compare</a>
+          <a href="/pipeline" data-no-router class="mobile-link" @click="menu = false">Data health</a>
+          <a href="/pricing" data-no-router class="mobile-link" @click="menu = false">Pricing</a>
+          <a href="/account" data-no-router class="mobile-link" @click="menu = false">Account</a>
+        </div>
+      </div>
+      <div class="flex gap-2 items-center sm:col-span-2 sm:hidden">
         <a href="/login" data-no-router class="flex flex-1 items-center justify-center px-4 h-11 font-bold text-sm rounded-lg btn" @click="menu = false">Log in</a>
         <a href="/signup" data-no-router class="flex flex-1 items-center justify-center px-4 h-11 font-bold text-sm rounded-lg btn btn-primary" @click="menu = false">Sign up</a>
       </div>
@@ -130,47 +107,27 @@ const NAV_LINKS = [
 </header>
 
 <style>
-  /*
-    The active link was carried by colour alone, which on the muted grey row
-    is a small difference to ask someone to notice. It now also sits on a
-    rule flush with the bottom of the bar, so the current page reads at a
-    glance rather than on inspection.
-  */
-  .nav-row { align-self: stretch; }
-
-  .nav-link {
-    position: relative;
-    display: flex;
-    align-items: center;
-    height: 100%;
-    transition: color 0.12s ease;
-  }
-  .nav-link:hover { color: var(--text); }
-  .nav-link.is-active { color: var(--text); }
-  .nav-link.is-active::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: -1px;
-    height: 2px;
-    border-radius: 2px 2px 0 0;
-    background: var(--accent);
-  }
-
-  /*
-    Log in is a real destination, not a quiet aside, so it gets button-sized
-    padding and a hover surface. It stays unfilled so Sign up is still the
-    one obviously-primary thing in the bar.
-  */
-  .nav-login {
-    color: var(--text);
-    transition: background 0.12s ease;
-  }
+  .nav-link, .nav-summary { position: relative; display: flex; align-items: center; height: 100%; padding: 0 0.7rem; color: var(--muted); cursor: pointer; list-style: none; transition: color 0.12s ease, background 0.12s ease; }
+  .nav-summary::-webkit-details-marker { display: none; }
+  .nav-link:hover, .nav-summary:hover, .nav-mega[open] > .nav-summary { color: var(--text); background: var(--surface-2); }
+  .nav-link.is-active, .nav-mega.is-active > .nav-summary { color: var(--text); }
+  .nav-link.is-active::after, .nav-mega.is-active > .nav-summary::after { content: ''; position: absolute; left: 0.7rem; right: 0.7rem; bottom: -1px; height: 2px; border-radius: 2px 2px 0 0; background: var(--accent); }
+  .nav-chevron { transition: transform 0.15s ease; }
+  .nav-mega[open] .nav-chevron { transform: rotate(180deg); }
+  .mega-panel { position: absolute; top: calc(100% - 5px); z-index: 50; padding: 0.75rem; border: 1px solid var(--border-strong); border-radius: 1rem; background: var(--surface); box-shadow: var(--shadow); color: var(--text); }
+  .mega-features { left: 50%; width: min(680px, calc(100vw - 2rem)); transform: translateX(-50%); }
+  .mega-explore { right: 0; width: 360px; }
+  .mega-kicker { margin: 0.35rem 0.65rem 0.45rem; color: var(--faint); font-size: 0.68rem; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; }
+  .mega-link { display: flex; gap: 0.75rem; align-items: flex-start; padding: 0.7rem; border-radius: 0.75rem; }
+  .mega-link:hover, .mega-link:focus-visible { background: var(--surface-2); outline: none; }
+  .mega-link strong, .mega-link small { display: block; }
+  .mega-link strong { font-size: 0.86rem; line-height: 1.2; }
+  .mega-link small { margin-top: 0.2rem; color: var(--muted); font-size: 0.73rem; font-weight: 500; line-height: 1.35; }
+  .mega-icon { width: 1.1rem; height: 1.1rem; margin-top: 0.05rem; flex: none; color: var(--accent-strong); }
+  .mega-cta { display: flex; align-items: center; justify-content: space-between; margin-top: 0.5rem; padding: 0.75rem 0.85rem; border-radius: 0.75rem; background: var(--accent-weak); color: var(--accent-strong); font-size: 0.8rem; font-weight: 800; }
+  .mobile-link { padding: 0.65rem; border-bottom: 1px solid var(--border); color: var(--text); font-weight: 700; }
+  .mobile-link:hover { color: var(--accent-strong); }
+  .nav-login { color: var(--text); transition: background 0.12s ease; }
   .nav-login:hover { background: var(--surface-2); }
-
-  @media (prefers-reduced-motion: reduce) {
-    .nav-link,
-    .nav-login { transition: none; }
-  }
+  @media (prefers-reduced-motion: reduce) { .nav-link, .nav-summary, .nav-chevron, .nav-login { transition: none; } }
 </style>

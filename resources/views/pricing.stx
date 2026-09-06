@@ -17,12 +17,10 @@
  */
 import { config } from '@stacksjs/config'
 
-const appName = 'PredictHQ'
-
 /** What each tier actually unlocks, keyed by the metadata tier name. */
 const tierFeatures = {
   signal: [
-    'Every market on Kalshi and Polymarket, refreshed every five minutes',
+    'Live Kalshi and Polymarket flow, refreshed continuously and pushed to every paid account as venues permit',
     'Smart-money leaderboard, whale flow, and the signal graph',
     'Every decision the engine would make, with its full evidence',
     'One strategy you can watch run',
@@ -244,15 +242,7 @@ function billingHeaders(): Record<string, string> {
         </section>
       </main>
 
-      <footer class="border-t bd">
-        <div class="flex flex-col gap-3 items-center justify-between sm:flex-row mx-auto px-4 py-8 sm:px-6 max-w-6xl text-sm faint">
-          <span>© 2026 {{ appName }}. Prediction Intel.</span>
-          <div class="flex gap-5 items-center">
-            <a href="/" class="hover:opacity-70">Markets</a>
-            <a href="/api/trading/candidates" data-no-router class="hover:opacity-70">JSON API</a>
-          </div>
-        </div>
-      </footer>
+      @include('footer')
     </div>
   </body>
 </html>

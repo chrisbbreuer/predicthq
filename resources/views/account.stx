@@ -173,15 +173,8 @@ onMounted(() => void refresh())
     @include('../partials/tokens')
   </head>
   <body>
-    <div class="min-h-screen app">
-      <header class="border-b bd">
-        <div class="flex items-center justify-between mx-auto px-4 h-16 sm:px-6 max-w-6xl">
-          <a href="/" class="font-extrabold text-lg tracking-tight">Predict<span class="accent">HQ</span></a>
-          <nav class="flex gap-5 items-center text-sm font-semibold muted">
-            <a href="/positions">My book</a><a href="/markets">Markets</a><a href="/pricing">Pricing</a><a href="/risk">Risk</a>
-          </nav>
-        </div>
-      </header>
+    <div class="app">
+      @include('nav')
 
       <main class="mx-auto px-4 py-10 sm:px-6 max-w-6xl">
         <div class="max-w-3xl">
@@ -271,6 +264,7 @@ onMounted(() => void refresh())
           </div>
         </section>
       </main>
+      @include('footer')
     </div>
   </body>
 </html>

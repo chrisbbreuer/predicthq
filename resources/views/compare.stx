@@ -98,6 +98,7 @@ const entries = comparisons.map(entry => ({
           comparison page that overstates its own side is worth less than no page at all.
         </p>
       </main>
+      @include('footer')
     </div>
   </body>
 </html>

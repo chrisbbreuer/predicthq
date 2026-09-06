@@ -1,4 +1,4 @@
-<footer class="mt-20 border-t bd">
+<footer class="mt-20 border-t bd" x-data="{ footerTheme: predicthqTheme.current(), toggleFooterTheme() { this.footerTheme = predicthqTheme.toggle() } }">
   <div class="grid gap-8 sm:grid-cols-2 lg:grid-cols-4 mx-auto px-4 py-12 sm:px-6 max-w-6xl">
     <div class="lg:col-span-1">
       <a href="/" class="flex gap-2.5 items-center">
@@ -40,6 +40,26 @@
         <a href="/risk" data-no-router class="hover:opacity-70">Risk disclosure</a>
         <a href="https://stacksjs.com" class="hover:opacity-70">Built with Stacks</a>
       </div>
+    </div>
+  </div>
+
+  <div class="mx-auto px-4 pb-10 sm:px-6 max-w-6xl">
+    <div class="flex flex-col gap-4 items-start justify-between p-4 rounded-xl soft sm:flex-row sm:items-center">
+      <div>
+        <div class="font-bold text-sm">Appearance</div>
+        <div class="mt-0.5 text-xs muted">Switch PredictHQ between light and dark mode.</div>
+      </div>
+      <button
+        type="button"
+        class="inline-flex gap-2 items-center justify-center px-3 h-10 min-w-32 font-bold text-sm rounded-lg btn"
+        @click="toggleFooterTheme()"
+        :aria-pressed="footerTheme === 'dark' ? 'true' : 'false'"
+        :aria-label="footerTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'"
+      >
+        <i class="h-4 w-4 i-hugeicons-moon-02" x-show="footerTheme !== 'dark'"></i>
+        <i class="h-4 w-4 i-hugeicons-sun-03" x-show="footerTheme === 'dark'" style="display:none"></i>
+        <span x-text="footerTheme === 'dark' ? 'Light mode' : 'Dark mode'">Dark mode</span>
+      </button>
     </div>
   </div>
 

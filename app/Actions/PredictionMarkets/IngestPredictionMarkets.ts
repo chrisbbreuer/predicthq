@@ -1,4 +1,5 @@
 import { Database } from '../../Support/db'
+import { channel } from '@stacksjs/realtime'
 import { runAnalytics } from '../../Services/prediction-markets/analytics'
 import { KalshiProvider } from '../../Services/prediction-markets/kalshi'
 import { PolymarketProvider } from '../../Services/prediction-markets/polymarket'
@@ -116,7 +117,7 @@ export default {
       db.close()
     }
 
-    return {
+    const result = {
       venues: providers.map(p => p.name),
       trades: tradesInserted,
       markets: marketsUpserted,
@@ -125,6 +126,17 @@ export default {
       positionsSettled: settlement.settled,
       realized: settlement.realized,
       at: now,
+    }
+
+    // Tell connected clients only after the transaction, analytics, and
+    // settlement have committed. Realtime being unavailable must not turn
+    // a successful ingest into a failed job; REST remains the fallback.
+    try {
+      await channel('prediction-markets').public('flow:updated', result)
+      return { ...result, broadcast: true }
+    }
+    catch {
+      return { ...result, broadcast: false }
     }
   },
 }
