@@ -187,16 +187,17 @@ jobs:
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+          DOTENV_PRIVATE_KEY_PRODUCTION: ${{ secrets.DOTENV_PRIVATE_KEY_PRODUCTION }}
         run: |
-          if [ -z "$DEPLOY_SSH_KEY" ] || [ -z "$HCLOUD_TOKEN" ]; then
+          if [ -z "$DEPLOY_SSH_KEY" ] || [ -z "$HCLOUD_TOKEN" ] || [ -z "$DOTENV_PRIVATE_KEY_PRODUCTION" ]; then
             echo "available=false" >> "$GITHUB_OUTPUT"
             # A warning annotation rather than a bare log line: this surfaces
             # on the run itself, so "shipped a release" and "did nothing" stop
             # looking identical from the outside.
-            echo "::warning title=Production deploy skipped::DEPLOY_SSH_KEY and HCLOUD_TOKEN are not set on this repository, so nothing was deployed. This job is green because the build passed, not because a release shipped."
+            echo "::warning title=Production deploy skipped::DEPLOY_SSH_KEY, HCLOUD_TOKEN, and DOTENV_PRIVATE_KEY_PRODUCTION are required, so nothing was deployed. This job is green because the build passed, not because a release shipped."
             {
               echo "### Production deploy skipped - no credentials"
-              echo "Set \`DEPLOY_SSH_KEY\` and \`HCLOUD_TOKEN\` on this repository to enable deploys."
+              echo "Set \`DEPLOY_SSH_KEY\`, \`HCLOUD_TOKEN\`, and \`DOTENV_PRIVATE_KEY_PRODUCTION\` on this repository to enable deploys."
             } >> "$GITHUB_STEP_SUMMARY"
           else
             echo "available=true" >> "$GITHUB_OUTPUT"
@@ -207,6 +208,9 @@ jobs:
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+          # Decrypts the committed .env.production at deploy time. The public
+          # half stays in git; only this private half belongs in Actions.
+          DOTENV_PRIVATE_KEY_PRODUCTION: ${{ secrets.DOTENV_PRIVATE_KEY_PRODUCTION }}
           PORKBUN_API_KEY: ${{ secrets.PORKBUN_API_KEY }}
           PORKBUN_SECRET_KEY: ${{ secrets.PORKBUN_SECRET_KEY }}
           APP_KEY: ${{ secrets.APP_KEY }}
