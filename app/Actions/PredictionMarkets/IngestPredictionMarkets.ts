@@ -36,6 +36,7 @@ export default {
     let tradesInserted = 0
     let marketsUpserted = 0
     let tradersUpserted = 0
+    const touchedTraderIds = new Set<number>()
     try {
       // Markets to refresh: everything referenced by new fills, plus any
       // stored market that hasn't settled yet (so its result — and the
@@ -82,6 +83,8 @@ export default {
               })
               if (!existingTrader) tradersUpserted++
               tid = (await traderId.get(t.venue, t.trader.externalId))?.id ?? null
+              if (tid !== null)
+                touchedTraderIds.add(Number(tid))
             }
 
             const existingTrade = await transaction.query<{ id: number }>(
@@ -105,7 +108,7 @@ export default {
     let analytics
     let settlement
     try {
-      analytics = await runAnalytics(db)
+      analytics = await runAnalytics(db, [...touchedTraderIds])
 
       // Settlement belongs here rather than on its own schedule: the
       // refresh above is the moment a market's result first exists in our

@@ -134,6 +134,33 @@ describe('runAnalytics — trader aggregates', () => {
     expect(t.is_whale).toBe(1)
     expect(t.resolved_trade_count).toBe(0)
   })
+
+  it('scores a bounded tranche instead of crossing the Vitess row ceiling', async () => {
+    const batchDir = mkdtempSync(join(tmpdir(), 'ob-pm-analytics-batch-'))
+    const batchDb = schemaFor(join(batchDir, 'test.sqlite'), TABLES)
+
+    try {
+      const now = '2026-07-07T00:00:00.000Z'
+      const market = batchDb.prepare(
+        'INSERT INTO prediction_markets (venue, external_id, question, category, status, result, volume, liquidity, last_price, ends_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ).run('kalshi', 'batch-market', 'Batch market?', '', 'settled', 'yes', 1, 1, 1, now, now, now)
+      const trade = batchDb.prepare(
+        'INSERT INTO market_trades (prediction_market_id, market_trader_id, venue, external_id, side, price, size, notional, is_winner, traded_at, created_at, updated_at) VALUES (?, NULL, ?, ?, ?, ?, ?, ?, -1, ?, ?, ?)',
+      )
+
+      for (let index = 0; index < 10_050; index++)
+        trade.run(Number(market.lastInsertRowid), 'kalshi', `batch-${index}`, 'yes', 0.5, 1, 0.5, now, now, now)
+
+      const result = await runAnalytics(batchDb, [])
+      const remaining = batchDb.query('SELECT COUNT(*) AS c FROM market_trades WHERE is_winner = -1').get() as { c: number }
+      expect(result.scoredTrades).toBe(2_000)
+      expect(remaining.c).toBe(8_050)
+    }
+    finally {
+      batchDb.close()
+      rmSync(batchDir, { recursive: true, force: true })
+    }
+  })
 })
 
 describe('support query helpers', () => {

@@ -21,6 +21,8 @@ const WHALE_SINGLE_TRADE = 10_000
 const WHALE_TOTAL_NOTIONAL = 100_000
 /** Pseudo-observations pulled toward 50% when shrinking win rates. */
 const PRIOR_WEIGHT = 6
+/** Keep every result set well below Vitess's 10,000-row response ceiling. */
+const ANALYTICS_BATCH = 2_000
 
 export interface AnalyticsSummary {
   scoredTrades: number
@@ -28,15 +30,17 @@ export interface AnalyticsSummary {
   whales: number
 }
 
-export async function runAnalytics(db: Database): Promise<AnalyticsSummary> {
+export async function runAnalytics(db: Database, touchedTraderIds?: readonly number[]): Promise<AnalyticsSummary> {
   const now = new Date().toISOString()
 
-  const pending = await db.query<{ id: number, side: string, result: string }>(`
-    SELECT t.id, t.side, pm.result
+  const pending = await db.query<{ id: number, market_trader_id: number | null, side: string, result: string }>(`
+    SELECT t.id, t.market_trader_id, t.side, pm.result
     FROM market_trades t
     JOIN prediction_markets pm ON pm.id = t.prediction_market_id
     WHERE t.is_winner = -1 AND pm.status = 'settled' AND pm.result != ''
-  `).all()
+    ORDER BY t.id
+    LIMIT ?
+  `).all(ANALYTICS_BATCH)
 
   // Pass 2 — recompute aggregates for every attributable trader. The smart
   // score shrinks the raw win rate toward 0.5 with PRIOR_WEIGHT pseudo-trades
@@ -49,7 +53,24 @@ export async function runAnalytics(db: Database): Promise<AnalyticsSummary> {
     }
   })
 
-  const aggregates = await db.query<{
+  // A scheduled ingest only needs to recompute traders whose tape changed or
+  // whose old fill was just scored. The optional-argument form still supports
+  // manual/backfill runs, but selects a bounded tranche instead of returning
+  // every wallet in a multi-million-fill database at once.
+  const traderIds = new Set<number>(touchedTraderIds)
+  for (const trade of pending) {
+    if (trade.market_trader_id !== null)
+      traderIds.add(Number(trade.market_trader_id))
+  }
+
+  if (touchedTraderIds === undefined) {
+    const tranche = await db.query<{ id: number }>('SELECT id FROM market_traders ORDER BY id LIMIT ?').all(ANALYTICS_BATCH)
+    for (const trader of tranche)
+      traderIds.add(Number(trader.id))
+  }
+
+  const ids = [...traderIds].filter(Number.isFinite)
+  const aggregates = ids.length === 0 ? [] : await db.query<{
     tid: number
     n: number
     total: number
@@ -62,8 +83,10 @@ export async function runAnalytics(db: Database): Promise<AnalyticsSummary> {
           AVG(notional) AS avg_size, MAX(notional) AS max_size,
           SUM(CASE WHEN is_winner != -1 THEN 1 ELSE 0 END) AS resolved,
           SUM(CASE WHEN is_winner = 1 THEN 1 ELSE 0 END) AS wins
-    FROM market_trades WHERE market_trader_id IS NOT NULL GROUP BY market_trader_id
-  `).all()
+    FROM market_trades
+    WHERE market_trader_id IN (${ids.map(() => '?').join(', ')})
+    GROUP BY market_trader_id
+  `).all(...ids)
 
   await db.transaction(async (transaction) => {
     for (const row of aggregates) {
