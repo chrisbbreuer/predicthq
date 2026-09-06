@@ -102,10 +102,13 @@
     --surface: #ffffff;
     --surface-2: #f4f7fb;
     --border: #e3e9f2;
-    --border-strong: #d2dbe8;
+    /* 3:1 against both light surfaces, so inputs and icon buttons retain a
+       visible boundary without relying on color vision or a box shadow. */
+    --border-strong: #8290a3;
     --text: #0f141c;
     --muted: #5b6780;
-    --faint: #8e9ab1;
+    /* Small metadata still clears WCAG AA on --surface-2 (4.63:1). */
+    --faint: #667085;
 
     --accent: #3e64e0;
     --accent-strong: #2742b0; /* passes AA as text on --surface */
@@ -117,7 +120,7 @@
     --best-text: #2742b0;
 
     /* Semantic only. Never used for emphasis. */
-    --pos: #0d9d63;
+    --pos: #087a4b;
     --neg: #d92d20;
 
     --track: #e9eef6;
@@ -141,10 +144,10 @@
     /* Barely there. Elevation does the separating; the line is a backstop
        for the few places two surfaces sit at the same height. */
     --border: #26292f;
-    --border-strong: #34383f;
+    --border-strong: #626975;
     --text: #f2f3f5;
     --muted: #9698a0;
-    --faint: #6c6e77;
+    --faint: #81848d;
 
     --accent: #5b83f5;
     --accent-strong: #93aef9;
@@ -229,7 +232,7 @@
   */
   .btn-primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
   .btn-primary:hover { border-color: var(--accent-strong); }
-  .icon-btn { border: 1px solid var(--border); color: var(--muted); background: var(--surface); }
+  .icon-btn { border: 1px solid var(--border-strong); color: var(--text); background: var(--surface); }
 
   .brandmark { background: var(--accent); color: var(--on-accent); }
 

@@ -4,7 +4,7 @@
  *
  * Apple Sports layout: a league pill in the header, Yesterday / Today /
  * Upcoming as one segmented control, and a card per day holding one row
- * per game. Rows carry the logo, the name, the record, and the score,
+ * per game. Rows carry a neutral monogram, the name, the record, and score,
  * with the leader in full contrast and the trailer dimmed, so the state
  * of a game reads without being read.
  *
@@ -17,19 +17,21 @@
  * rather than ?league=&day=.
  */
 import { fetchScoreboard, LEAGUES, leagueFor } from '../../../../app/Services/scores/espn'
+import { iconForLeague, teamAbbreviation } from '../../../../app/Support/branding'
 
 const navActive = 'scores'
 
 // Bind imports to locals before the template touches them. A bare imported
 // binding is not iterable from an @foreach in this scope, and the failure is
 // a render-time "not iterable" rather than anything at import.
-const leagues = [...LEAGUES]
+const leagues = LEAGUES.map(item => ({ ...item, icon: iconForLeague(item.key) }))
 
 // Route params, injected by stx as `params`. Read defensively: a direct
 // hit on /scores with no segments should still render today's NFL rather
 // than throw.
 const routeParams = (typeof params !== 'undefined' && params) ? params : {}
 const league = leagueFor(String(routeParams.league ?? 'nfl'))
+const leagueIcon = iconForLeague(league.key)
 const day = ['yesterday', 'today', 'upcoming'].includes(String(routeParams.day ?? ''))
   ? String(routeParams.day)
   : 'today'
@@ -64,6 +66,8 @@ function timeLabel(game) {
 
 const rows = games.map(g => ({
   ...g,
+  awayMark: teamAbbreviation(g.away.shortName || g.away.name),
+  homeMark: teamAbbreviation(g.home.shortName || g.home.name),
   label: timeLabel(g),
   isLive: g.state === 'in',
   isDone: g.state === 'post',
@@ -77,6 +81,10 @@ const rows = games.map(g => ({
 <html lang="en">
   <head>
     @include('head')
+    <style>
+      .sports-tabs { scrollbar-width: none; scroll-snap-type: x proximity; }
+      .sports-tabs::-webkit-scrollbar { display: none; }
+    </style>
   </head>
 
   <body x-data="{ menu: false, theme: predicthqTheme.current(), toggleTheme() { this.theme = predicthqTheme.toggle() }, toggleMenu() { this.menu = !this.menu } }">
@@ -85,16 +93,19 @@ const rows = games.map(g => ({
 
       <main class="mx-auto px-4 pt-10 pb-16 sm:px-6 max-w-3xl">
         <div class="flex flex-wrap gap-3 items-center justify-between">
-          <h1 class="display font-black text-3xl tracking-tight sm:text-4xl">Scores</h1>
+          <div class="flex gap-3 items-center">
+            <span class="grid place-items-center h-11 w-11 rounded-xl soft" aria-hidden="true"><i class="h-6 w-6 {{ leagueIcon }}"></i></span>
+            <h1 class="display font-black text-3xl tracking-tight sm:text-4xl">Scores</h1>
+          </div>
 
           <!-- League switcher. A pill, like the sport pill in Apple Sports. -->
-          <div class="flex overflow-x-auto gap-2 max-w-full">
+          <div class="flex overflow-x-auto gap-2 max-w-full sports-tabs">
             @foreach (leagues as l)
               <a
                 href="/scores/{{ l.key }}/{{ day }}"
                 data-no-router
-                class="px-3.5 py-2 font-bold text-sm rounded-full shrink-0 {{ l.key === league.key ? 'btn btn-primary' : 'btn' }}"
-              >{{ l.label }}</a>
+                class="inline-flex gap-1.5 items-center px-3.5 py-2 font-bold text-sm rounded-full shrink-0 snap-start {{ l.key === league.key ? 'btn btn-primary' : 'btn' }}"
+              ><i class="h-4 w-4 {{ l.icon }}" aria-hidden="true"></i>{{ l.label }}</a>
             @endforeach
           </div>
         </div>
@@ -140,11 +151,7 @@ const rows = games.map(g => ({
                     <div class="flex flex-col gap-2 min-w-0 grow">
                       <!-- Away first, matching how every scoreboard is read. -->
                       <div class="flex gap-3 items-center {{ g.isDone && !g.awayLeads ? 'opacity-55' : '' }}">
-                        @if (g.away.logo)
-                          <img src="{{ g.away.logo }}" alt="" width="22" height="22" class="h-[22px] w-[22px] object-contain shrink-0" loading="lazy">
-                        @else
-                          <span class="grid place-items-center h-[22px] w-[22px] text-[10px] font-black rounded-full shrink-0 soft">{{ g.away.abbreviation }}</span>
-                        @endif
+                        <span class="grid place-items-center h-7 min-w-7 px-1 text-[9px] font-black rounded-lg shrink-0 soft" aria-hidden="true">{{ g.awayMark }}</span>
                         <span class="font-semibold truncate">{{ g.away.shortName || g.away.name }}</span>
                         @if (g.away.record)
                           <span class="text-xs num faint shrink-0">{{ g.away.record }}</span>
@@ -153,11 +160,7 @@ const rows = games.map(g => ({
                       </div>
 
                       <div class="flex gap-3 items-center {{ g.isDone && !g.homeLeads ? 'opacity-55' : '' }}">
-                        @if (g.home.logo)
-                          <img src="{{ g.home.logo }}" alt="" width="22" height="22" class="h-[22px] w-[22px] object-contain shrink-0" loading="lazy">
-                        @else
-                          <span class="grid place-items-center h-[22px] w-[22px] text-[10px] font-black rounded-full shrink-0 soft">{{ g.home.abbreviation }}</span>
-                        @endif
+                        <span class="grid place-items-center h-7 min-w-7 px-1 text-[9px] font-black rounded-lg shrink-0 soft" aria-hidden="true">{{ g.homeMark }}</span>
                         <span class="font-semibold truncate">{{ g.home.shortName || g.home.name }}</span>
                         @if (g.home.record)
                           <span class="text-xs num faint shrink-0">{{ g.home.record }}</span>

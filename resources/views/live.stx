@@ -43,7 +43,7 @@ const selMeta = {}
 for (const ev of events) {
   for (const s of ev.selections) {
     const t = teamFor(s.label)
-    selMeta[s.id] = { pick: s.label, game: ev.title, league: ev.league, tbg: t.bg, tfg: t.fg, tlogo: t.logo, tabbr: t.abbr }
+    selMeta[s.id] = { pick: s.label, game: ev.title, league: ev.league, tbg: t.bg, tfg: t.fg, tabbr: t.abbr }
   }
 }
 const bookMeta = {}
@@ -117,7 +117,7 @@ const navActive = 'live'
                 const key = s.id + ':' + q.bookmakerId; const old = this.live[key]; next[key] = q.price
                 if (old != null && q.price !== old) {
                   const sm = this.selMeta[s.id] || {}; const bm = this.bookMeta[q.bookmakerId] || {}
-                  fresh.push({ kind: 'move', time: this.clock(), pick: sm.pick, game: sm.game, league: sm.league, tbg: sm.tbg, tfg: sm.tfg, tlogo: sm.tlogo, tabbr: sm.tabbr, mark: bm.mark, bg: bm.bg, fg: bm.fg, from: old.toFixed(2), to: q.price.toFixed(2), dir: q.price > old ? 'up' : 'down' })
+                  fresh.push({ kind: 'move', time: this.clock(), pick: sm.pick, game: sm.game, league: sm.league, tbg: sm.tbg, tfg: sm.tfg, tabbr: sm.tabbr, mark: bm.mark, bg: bm.bg, fg: bm.fg, from: old.toFixed(2), to: q.price.toFixed(2), dir: q.price > old ? 'up' : 'down' })
                 }
               }
               this.live = next
@@ -161,7 +161,7 @@ const navActive = 'live'
           <template x-for="(it, i) in moves" :key="'m' + i">
             <div class="feed-row fresh">
               <span class="text-xs faint num" style="width:38px" x-text="it.time"></span>
-              <span class="badge" x-show="it.kind === 'move'" :style="`background-color:${it.tbg};color:${it.tfg}` + (it.tlogo ? `;background-image:url(${it.tlogo});background-size:76%;background-position:center;background-repeat:no-repeat` : '')" x-text="it.tlogo ? '' : it.tabbr"></span>
+              <span class="badge" x-show="it.kind === 'move'" :style="`background-color:${it.tbg};color:${it.tfg};border:1px solid var(--border)`" x-text="it.tabbr"></span>
               <span x-show="it.kind === 'arb'" class="grid place-items-center text-base rounded-full soft" style="height:30px;width:30px;flex:0 0 auto">⚡</span>
               <div class="flex-1 min-w-0">
                 <div class="font-bold truncate" x-text="it.kind === 'arb' ? ('Arbitrage: ' + it.title) : it.pick"></div>

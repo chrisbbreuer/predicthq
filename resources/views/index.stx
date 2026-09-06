@@ -9,7 +9,7 @@
  * here so the template stays declarative. Theming and the betting sheet
  * are client-side (an x-data store on <body>, persisted to localStorage).
  */
-import { brandFor, sportIcon, teamFor } from '../../app/Support/branding'
+import { brandFor, iconForSport, teamFor } from '../../app/Support/branding'
 import { loadIntelSummary, loadTopCandidate } from '../../app/Support/intel'
 import { loadBoard } from '../../app/Support/odds'
 import { loadFeedState } from '../../app/Support/pipeline'
@@ -55,7 +55,7 @@ function sparkPoints(history, w, h) {
 const categories = []
 for (const e of events) {
   if (!categories.some(c => c.name === e.category))
-    categories.push({ name: e.category, icon: sportIcon[e.category] || '•' })
+    categories.push({ name: e.category, icon: iconForSport(e.category) })
 }
 
 const board = events.map((ev) => {
@@ -87,7 +87,7 @@ const board = events.map((ev) => {
   })
   return {
     ...ev,
-    sport: sportIcon[ev.category] || '•',
+    sport: iconForSport(ev.category),
     holdLabel: hold ? `${hold.holdPct.toFixed(1)}% hold` : null,
     arbLabel: hold && hold.isArbitrage ? `+${hold.arbitragePct.toFixed(2)}%` : null,
     isArb: !!(hold && hold.isArbitrage),
@@ -175,13 +175,13 @@ const navActive = 'board'
       @keyframes ping { 0% { box-shadow: 0 0 0 0 var(--neg); opacity: 1; } 70% { box-shadow: 0 0 0 6px transparent; opacity: 0.7; } 100% { box-shadow: 0 0 0 0 transparent; opacity: 1; } }
       .flash-up { animation: flashUp 1.1s ease-out; }
       .flash-down { animation: flashDown 1.1s ease-out; }
-      @keyframes flashUp { 0% { background: var(--pos); color: #fff; } 100% { background: transparent; } }
-      @keyframes flashDown { 0% { background: var(--neg); color: #fff; } 100% { background: transparent; } }
+      @keyframes flashUp { 0% { background: var(--pos); color: var(--on-accent); } 100% { background: transparent; } }
+      @keyframes flashDown { 0% { background: var(--neg); color: var(--on-accent); } 100% { background: transparent; } }
 
       /* Best price doubles as the add-to-sheet control */
       .pick { border: 1px solid var(--best-ring); background: var(--best-bg); color: var(--best-text); transition: all 0.15s ease; cursor: pointer; }
       .pick:hover { filter: brightness(1.04); transform: translateY(-1px); }
-      .pick-on { background: var(--accent); border-color: var(--accent); color: #04130c; box-shadow: var(--shadow); }
+      .pick-on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); box-shadow: var(--shadow); }
 
       .badge-arb { background: var(--accent-weak); color: var(--accent-strong); }
       .badge-hold { border: 1px solid var(--border); color: var(--muted); }
@@ -439,7 +439,7 @@ const navActive = 'board'
           <div class="flex flex-wrap gap-2">
             <button class="px-3.5 py-1.5 font-semibold text-sm rounded-full chip" :class="cat === 'all' ? 'chip-on' : ''" @click="cat = 'all'">All sports</button>
             @foreach (categories as c)
-              <button class="px-3.5 py-1.5 font-semibold text-sm rounded-full chip" :class="cat === '{{ c.name }}' ? 'chip-on' : ''" @click="cat = '{{ c.name }}'"><span>{{ c.icon }}</span> {{ c.name }}</button>
+              <button class="inline-flex gap-1.5 items-center px-3.5 py-1.5 font-semibold text-sm rounded-full chip" :class="cat === '{{ c.name }}' ? 'chip-on' : ''" @click="cat = '{{ c.name }}'"><i class="h-4 w-4 {{ c.icon }}"></i>{{ c.name }}</button>
             @endforeach
           </div>
           <div class="inline-flex p-1 font-bold text-xs rounded-full seg">
@@ -448,7 +448,7 @@ const navActive = 'board'
             <button class="px-3 py-1.5 rounded-full seg-btn" :class="format === 'price' ? 'seg-on' : ''" @click="format = 'price'">Price</button>
           </div>
         </div>
-        <p class="mt-3 text-sm muted">Tap a <span class="font-semibold accent">green best price</span> to add that pick to your sheet. The best line on each outcome is ringed.</p>
+        <p class="mt-3 text-sm muted">Tap a <span class="font-semibold accent">ringed best price</span> to add that pick to your sheet. The best available line on each outcome carries the accent ring.</p>
 
         <!-- game cards -->
         <div class="mt-6 space-y-5">
@@ -457,7 +457,7 @@ const navActive = 'board'
               <!-- card header: matchup -->
               <div class="flex flex-wrap gap-3 items-center justify-between px-4 py-4 sm:px-5 border-b bd">
                 <div class="flex gap-3 items-center">
-                  <span class="grid place-items-center h-11 w-11 text-xl rounded-xl soft">{{ ev.sport }}</span>
+                  <span class="grid place-items-center h-11 w-11 rounded-xl soft" aria-hidden="true"><i class="h-6 w-6 {{ ev.sport }}"></i></span>
                   <div>
                     <div class="flex gap-2 items-center font-bold text-xs tracking-wider uppercase faint">
                       <span>{{ ev.league }}</span><span>·</span><span>{{ ev.market }}</span>
@@ -518,7 +518,7 @@ const navActive = 'board'
                           <button
                             class="inline-flex flex-col items-center px-3 py-1.5 min-w-[92px] font-black rounded-xl num pick"
                             :class="inSheet({{ s.id }}) ? 'pick-on' : ''"
-                            @click="toggleLeg({ id: {{ s.id }}, league: '{{ ev.league }}', game: '{{ ev.title }}', pick: '{{ s.label }}', price: {{ s.bestPrice }}, book: '{{ s.bestBook.short }}', ta: '{{ s.team.abbr }}', tb: '{{ s.team.bg }}', tf: '{{ s.team.fg }}', tl: '{{ s.team.logo }}', bb: '{{ s.bestBrand.bg }}', bf: '{{ s.bestBrand.fg }}', bm: '{{ s.bestBrand.mark }}', bu: '{{ s.bestBrand.url }}' })"
+                            @click="toggleLeg({ id: {{ s.id }}, league: '{{ ev.league }}', game: '{{ ev.title }}', pick: '{{ s.label }}', price: {{ s.bestPrice }}, book: '{{ s.bestBook.short }}', ta: '{{ s.team.abbr }}', tb: '{{ s.team.bg }}', tf: '{{ s.team.fg }}', bb: '{{ s.bestBrand.bg }}', bf: '{{ s.bestBrand.fg }}', bm: '{{ s.bestBrand.mark }}', bu: '{{ s.bestBrand.url }}' })"
                           >
                             <span class="leading-none text-base" x-text="px({{ s.id }}, {{ s.bestBookmakerId }}, {{ s.bestPrice }})">{{ s.bestDecimalLabel }}</span>
                             <span class="flex gap-1 items-center mt-1 font-bold text-[10px] tracking-wide uppercase">
@@ -556,7 +556,7 @@ const navActive = 'board'
         </div>
 
         @if (arbEvents.length === 0)
-          <p class="mt-6 px-5 py-10 text-center rounded-2xl card muted">No arbitrage on the board right now. The market is efficient, Check back as lines move.</p>
+          <p class="mt-6 px-5 py-10 text-center rounded-2xl card muted">No arbitrage on the board right now. The market is efficient. Check back as lines move.</p>
         @else
           <div class="grid gap-5 md:grid-cols-2 mt-6">
             @foreach (arbEvents as ev)
@@ -681,14 +681,14 @@ const navActive = 'board'
 
       <div class="overflow-y-auto flex-1 px-5 py-4">
         <div x-show="sheet.length === 0" class="px-4 py-12 text-center text-sm rounded-xl muted soft">
-          Your sheet is empty.<br>Tap a green best price on any game to start a parlay.
+          Your sheet is empty.<br>Tap a ringed best price on any game to start a parlay.
         </div>
 
         <div x-show="sheet.length > 0" class="space-y-2.5">
           <template x-for="leg in sheet" :key="leg.id">
             <div class="flex gap-3 items-center justify-between px-3 py-2.5 rounded-xl soft">
               <div class="flex gap-2.5 items-center min-w-0">
-                <span class="badge" :style="`background-color:${leg.tb};color:${leg.tf}` + (leg.tl ? `;background-image:url('${leg.tl}');background-size:76%;background-position:center;background-repeat:no-repeat` : '')" x-text="leg.tl ? '' : leg.ta"></span>
+                <span class="badge" :style="`background-color:${leg.tb};color:${leg.tf};border:1px solid var(--border)`" x-text="leg.ta"></span>
                 <div class="min-w-0">
                   <div class="text-xs truncate muted" x-text="leg.league + ' · ' + leg.game"></div>
                   <div class="font-bold" x-text="leg.pick"></div>

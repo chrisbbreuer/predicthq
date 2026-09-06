@@ -49,8 +49,8 @@ export type VenueCredentials = KalshiCredentials | PolymarketCredentials
 export class CredentialError extends Error {}
 
 /** Seal credentials for storage. */
-export async function sealCredentials(credentials: VenueCredentials): Promise<string> {
-  return await encrypt(JSON.stringify(credentials))
+export async function sealCredentials(credentials: VenueCredentials, passphrase?: string): Promise<string> {
+  return await encrypt(JSON.stringify(credentials), passphrase)
 }
 
 /**
@@ -60,13 +60,13 @@ export async function sealCredentials(credentials: VenueCredentials): Promise<st
  * row, so the message says so: the alternative is a caller reporting
  * "the venue rejected us" when we never reached the venue.
  */
-export async function openCredentials(sealed: string): Promise<VenueCredentials> {
+export async function openCredentials(sealed: string, passphrase?: string): Promise<VenueCredentials> {
   if (!sealed)
     throw new CredentialError('No credentials stored for this account.')
 
   let plain: string
   try {
-    plain = await decrypt(sealed)
+    plain = await decrypt(sealed, passphrase)
   }
   catch {
     throw new CredentialError('Stored credentials could not be decrypted — APP_KEY may have changed since they were saved. Reconnect the account.')

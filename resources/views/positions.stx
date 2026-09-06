@@ -673,6 +673,9 @@ onMount(start)
                           </div>
 
                           <div class="flex gap-3 items-center mt-2.5">
+                            <span class="grid place-items-center h-8 w-8 rounded-lg soft shrink-0" aria-hidden="true">
+                              <i class="h-4 w-4 i-hugeicons-american-football"></i>
+                            </span>
                             <div class="min-w-0 grow">
                               <div class="flex gap-1.5 items-center min-w-0">
                                 <span class="tag" :class="leg.tone" x-text="leg.choice"></span>

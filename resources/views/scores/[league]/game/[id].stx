@@ -15,14 +15,18 @@
  * error, so it is worth getting right the first time.
  */
 import { fetchGame, leagueFor } from '../../../../../app/Services/scores/espn'
+import { iconForLeague, teamAbbreviation } from '../../../../../app/Support/branding'
 
 const navActive = 'scores'
 
 const routeParams = (typeof params !== 'undefined' && params) ? params : {}
 const league = leagueFor(String(routeParams.league ?? 'nfl'))
+const leagueIcon = iconForLeague(league.key)
 const eventId = String(routeParams.id ?? '')
 
 const game = eventId ? await fetchGame(league.key, eventId) : null
+const awayMark = game ? teamAbbreviation(game.away.shortName || game.away.name) : ''
+const homeMark = game ? teamAbbreviation(game.home.shortName || game.home.name) : ''
 
 const pageTitle = game
   ? `${game.away.shortName} at ${game.home.shortName} | PredictHQ`
@@ -61,7 +65,7 @@ const homeLine = game?.home.line ?? []
       @include('nav')
 
       <main class="mx-auto px-4 pt-8 pb-16 sm:px-6 max-w-3xl">
-        <a href="/scores/{{ league.key }}/today" data-no-router class="text-sm font-semibold muted hover:opacity-70">{{ league.label }} scores</a>
+        <a href="/scores/{{ league.key }}/today" data-no-router class="inline-flex gap-2 items-center text-sm font-semibold muted hover:opacity-70"><i class="h-4 w-4 {{ leagueIcon }}" aria-hidden="true"></i>{{ league.label }} scores</a>
 
         @if (!game)
           <section class="px-6 py-16 mt-6 text-center rounded-2xl card">
@@ -73,9 +77,7 @@ const homeLine = game?.home.line ?? []
           <section class="p-6 mt-4 rounded-2xl card sm:p-8">
             <div class="grid gap-4 grid-cols-[1fr_auto_1fr] items-center">
               <div class="flex flex-col gap-2 items-center text-center">
-                @if (game.away.logo)
-                  <img src="{{ game.away.logo }}" alt="" width="52" height="52" class="h-13 w-13 object-contain">
-                @endif
+                <span class="grid place-items-center h-13 min-w-13 px-2 text-sm font-black rounded-2xl soft" aria-hidden="true">{{ awayMark }}</span>
                 <span class="font-bold text-sm sm:text-base">{{ game.away.shortName || game.away.name }}</span>
                 @if (game.away.record)
                   <span class="text-xs num faint">{{ game.away.record }}</span>
@@ -94,9 +96,7 @@ const homeLine = game?.home.line ?? []
               </div>
 
               <div class="flex flex-col gap-2 items-center text-center">
-                @if (game.home.logo)
-                  <img src="{{ game.home.logo }}" alt="" width="52" height="52" class="h-13 w-13 object-contain">
-                @endif
+                <span class="grid place-items-center h-13 min-w-13 px-2 text-sm font-black rounded-2xl soft" aria-hidden="true">{{ homeMark }}</span>
                 <span class="font-bold text-sm sm:text-base">{{ game.home.shortName || game.home.name }}</span>
                 @if (game.home.record)
                   <span class="text-xs num faint">{{ game.home.record }}</span>

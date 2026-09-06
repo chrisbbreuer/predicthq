@@ -1,12 +1,14 @@
 /**
- * Shared display branding for PredictHQ — bookmaker "logo" tiles and team
- * badges — used by both the board (`index.stx`) and the live feed
- * (`live.stx`). Team logos are referenced from ESPN's public CDN by URL
- * (not reproduced); the colored chip shows through if one fails to load.
+ * Shared display marks for PredictHQ.
+ *
+ * Publisher marks remain compact text tiles. Sports use open Iconify glyphs,
+ * while teams use neutral monograms instead of club crests, league marks, or
+ * team colour systems. That keeps the visual language useful without making
+ * our interface depend on third-party trademark artwork.
  */
 
 export interface BookBrand { bg: string, fg: string, mark: string, url: string }
-export interface TeamBrand { abbr: string, bg: string, fg: string, logo: string }
+export interface TeamBrand { abbr: string, bg: string, fg: string }
 export interface TeamChip extends TeamBrand { style: string, text: string }
 
 export const bookBrand: Record<string, BookBrand> = {
@@ -24,53 +26,109 @@ export function brandFor(slug: string, short: string): BookBrand {
   return bookBrand[slug] || { bg: '#64748b', fg: '#ffffff', mark: short, url: '#' }
 }
 
-const ESPN = 'https://a.espncdn.com/i/teamlogos'
-export const teamBrand: Record<string, TeamBrand> = {
-  Lakers: { abbr: 'LAL', bg: '#552583', fg: '#fdb927', logo: `${ESPN}/nba/500/lal.png` },
-  Celtics: { abbr: 'BOS', bg: '#007a33', fg: '#ffffff', logo: `${ESPN}/nba/500/bos.png` },
-  Warriors: { abbr: 'GSW', bg: '#1d428a', fg: '#ffc72c', logo: `${ESPN}/nba/500/gs.png` },
-  Nuggets: { abbr: 'DEN', bg: '#0e2240', fg: '#fec524', logo: `${ESPN}/nba/500/den.png` },
-  Chiefs: { abbr: 'KC', bg: '#e31837', fg: '#ffb81c', logo: `${ESPN}/nfl/500/kc.png` },
-  Bills: { abbr: 'BUF', bg: '#00338d', fg: '#c60c30', logo: `${ESPN}/nfl/500/buf.png` },
-  '49ers': { abbr: 'SF', bg: '#aa0000', fg: '#b3995d', logo: `${ESPN}/nfl/500/sf.png` },
-  Eagles: { abbr: 'PHI', bg: '#004c54', fg: '#a5acaf', logo: `${ESPN}/nfl/500/phi.png` },
-  'Man City': { abbr: 'MCI', bg: '#6cabdd', fg: '#1c2c5b', logo: `${ESPN}/soccer/500/382.png` },
-  Arsenal: { abbr: 'ARS', bg: '#ef0107', fg: '#ffffff', logo: `${ESPN}/soccer/500/359.png` },
-  Liverpool: { abbr: 'LIV', bg: '#c8102e', fg: '#ffffff', logo: `${ESPN}/soccer/500/364.png` },
-  Chelsea: { abbr: 'CHE', bg: '#034694', fg: '#ffffff', logo: `${ESPN}/soccer/500/363.png` },
-  Rangers: { abbr: 'NYR', bg: '#0038a8', fg: '#ce1126', logo: `${ESPN}/nhl/500/nyr.png` },
-  Bruins: { abbr: 'BOS', bg: '#111111', fg: '#ffb81c', logo: `${ESPN}/nhl/500/bos.png` },
-  Dodgers: { abbr: 'LAD', bg: '#005a9c', fg: '#ffffff', logo: `${ESPN}/mlb/500/lad.png` },
-  Yankees: { abbr: 'NYY', bg: '#0c2340', fg: '#ffffff', logo: `${ESPN}/mlb/500/nyy.png` },
-  Draw: { abbr: 'X', bg: '#94a3b8', fg: '#ffffff', logo: '' },
-}
-
-/** Resolve a team chip for a selection label, handling spreads + totals. */
-export function teamFor(label: string): TeamChip {
-  let base: TeamBrand | undefined = teamBrand[label]
-  if (!base && /^(?:over|under)\b/i.test(label)) {
-    const over = /^over/i.test(label)
-    base = { abbr: over ? 'O' : 'U', bg: over ? '#0a934f' : '#d64550', fg: '#ffffff', logo: '' }
-  }
-  if (!base) {
-    const stripped = label.replace(/\s+[+-]?\d+(?:\.\d+)?$/, '').trim()
-    if (teamBrand[stripped])
-      base = teamBrand[stripped]
-  }
-  if (!base)
-    base = { abbr: label.slice(0, 3).toUpperCase(), bg: '#64748b', fg: '#ffffff', logo: '' }
-
-  const logo = base.logo || ''
-  let style = `background-color:${base.bg};color:${base.fg}`
-  if (logo)
-    style += `;background-image:url('${logo}');background-size:76%;background-position:center;background-repeat:no-repeat`
-  return { ...base, logo, style, text: logo ? '' : base.abbr }
-}
+const sportIcons = {
+  baseball: 'i-hugeicons-baseball',
+  basketball: 'i-hugeicons-basketball-01',
+  football: 'i-hugeicons-american-football',
+  hockey: 'i-hugeicons-ice-hockey',
+  soccer: 'i-hugeicons-football',
+  tennis: 'i-hugeicons-tennis-ball',
+  golf: 'i-hugeicons-golf-ball',
+  racing: 'i-hugeicons-racing-flag',
+  combat: 'i-hugeicons-boxing-glove-01',
+  default: 'i-hugeicons-champion',
+} as const
 
 export const sportIcon: Record<string, string> = {
-  Basketball: '🏀',
-  Football: '🏈',
-  Soccer: '⚽',
-  Hockey: '🏒',
-  Baseball: '⚾',
+  Baseball: sportIcons.baseball,
+  Basketball: sportIcons.basketball,
+  Football: sportIcons.football,
+  Hockey: sportIcons.hockey,
+  Soccer: sportIcons.soccer,
+  Tennis: sportIcons.tennis,
+  Golf: sportIcons.golf,
+  Racing: sportIcons.racing,
+  Combat: sportIcons.combat,
+}
+
+const leagueSport: Record<string, keyof typeof sportIcons> = {
+  nfl: 'football',
+  ncaaf: 'football',
+  nba: 'basketball',
+  ncaab: 'basketball',
+  wnba: 'basketball',
+  mlb: 'baseball',
+  nhl: 'hockey',
+  epl: 'soccer',
+  soccer: 'soccer',
+  atp: 'tennis',
+  wta: 'tennis',
+  pga: 'golf',
+  mma: 'combat',
+  ufc: 'combat',
+  f1: 'racing',
+}
+
+export function iconForLeague(league: string): string {
+  return sportIcons[leagueSport[league.trim().toLowerCase()] ?? 'default']
+}
+
+export function iconForSport(sport: string): string {
+  const normalized = sport.trim().toLowerCase()
+  if (normalized.includes('basket'))
+    return sportIcons.basketball
+  if (normalized.includes('baseball'))
+    return sportIcons.baseball
+  if (normalized.includes('american football') || normalized === 'football')
+    return sportIcons.football
+  if (normalized.includes('hockey'))
+    return sportIcons.hockey
+  if (normalized.includes('soccer') || normalized.includes('premier league'))
+    return sportIcons.soccer
+  if (normalized.includes('tennis'))
+    return sportIcons.tennis
+  if (normalized.includes('golf'))
+    return sportIcons.golf
+  if (normalized.includes('racing') || normalized.includes('formula'))
+    return sportIcons.racing
+  if (normalized.includes('mma') || normalized.includes('ufc') || normalized.includes('boxing'))
+    return sportIcons.combat
+  return sportIcons.default
+}
+
+/** Produce a compact neutral mark without reproducing a team's visual IP. */
+export function teamAbbreviation(label: string): string {
+  const cleaned = label
+    .replace(/^(?:yes|no)\s+/i, '')
+    .replace(/\s+[+-]?\d+(?:\.\d+)?$/, '')
+    .replace(/[^a-z0-9]+/gi, ' ')
+    .trim()
+  if (!cleaned)
+    return '—'
+
+  const words = cleaned.split(/\s+/).filter(Boolean)
+  if (words.length === 1)
+    return words[0]!.slice(0, 3).toUpperCase()
+  return words.slice(0, 3).map(word => word[0]).join('').toUpperCase()
+}
+
+/** Resolve a neutral team/selection chip, handling spreads and totals. */
+export function teamFor(label: string): TeamChip {
+  let base: TeamBrand
+  if (/^(?:over|under)\b/i.test(label)) {
+    const over = /^over/i.test(label)
+    base = { abbr: over ? 'O' : 'U', bg: 'var(--surface-2)', fg: over ? 'var(--pos)' : 'var(--neg)' }
+  }
+  else if (/^draw$/i.test(label.trim())) {
+    base = { abbr: 'X', bg: 'var(--surface-2)', fg: 'var(--muted)' }
+  }
+  else {
+    base = { abbr: teamAbbreviation(label), bg: 'var(--surface-2)', fg: 'var(--text)' }
+  }
+
+  return {
+    ...base,
+    style: `background-color:${base.bg};color:${base.fg};border:1px solid var(--border)`,
+    text: base.abbr,
+  }
 }

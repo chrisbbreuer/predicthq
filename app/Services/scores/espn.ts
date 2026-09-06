@@ -18,7 +18,6 @@ export interface Team {
   location: string
   name: string
   shortName: string
-  logo: string | null
   score: number | null
   record: string | null
   winner: boolean
@@ -83,11 +82,6 @@ function toTeam(competitor: any): Team {
     location: String(team.location ?? ''),
     name: String(team.displayName ?? team.name ?? 'Unknown'),
     shortName: String(team.shortDisplayName ?? team.abbreviation ?? ''),
-    // The scoreboard exposes `logo`; the summary header exposes `logos[]`
-    // instead, so a detail page reading only the former rendered no crests.
-    logo: typeof team.logo === 'string'
-      ? team.logo
-      : (typeof team.logos?.[0]?.href === 'string' ? team.logos[0].href : null),
     score: num(competitor?.score),
     // ESPN nests the summary record among several; the overall one is the
     // only one worth a line on a scoreboard.

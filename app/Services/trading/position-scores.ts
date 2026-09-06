@@ -26,8 +26,6 @@ export interface PositionScoreLeg extends MultiGameLeg {
   selectedScore: number | null
   opponentScore: number | null
   opponent: string
-  selectedLogo: string | null
-  opponentLogo: string | null
   standing: string
   tone: string
 }
@@ -163,8 +161,6 @@ export function buildPositionScorecard(legs: MultiGameLeg[], games: Game[], now 
         selectedScore: null,
         opponentScore: null,
         opponent: '',
-        selectedLogo: null,
-        opponentLogo: null,
         standing: 'Waiting',
         tone: 'muted',
       }
@@ -184,8 +180,6 @@ export function buildPositionScorecard(legs: MultiGameLeg[], games: Game[], now 
       selectedScore: selected.score,
       opponentScore: opponent.score,
       opponent: opponent.location || opponent.shortName || opponent.name,
-      selectedLogo: selected.logo,
-      opponentLogo: opponent.logo,
       standing: standing.label,
       tone: standing.tone,
     }

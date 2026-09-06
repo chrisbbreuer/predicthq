@@ -29,7 +29,6 @@ function team(location: string, score: number | null): Team {
     location,
     name: `${location} Mascots`,
     shortName: location,
-    logo: null,
     score,
     record: null,
     winner: false,
