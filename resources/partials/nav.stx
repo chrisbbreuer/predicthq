@@ -105,11 +105,10 @@ const NAV_LINKS = [
 
   <nav
     id="mobile-nav"
-    class="border-t xl:hidden bd"
+    class="border-t xl:hidden bd transition-opacity duration-150"
     style="background:var(--surface)"
     x-show="menu"
     x-cloak
-    x-transition.opacity.duration.150ms
   >
     <div class="flex flex-col mx-auto px-4 py-2 sm:px-6 max-w-7xl">
       @foreach (NAV_LINKS as link)

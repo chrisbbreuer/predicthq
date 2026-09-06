@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import { readSessionHandoff } from '@stacksjs/composables'
+import { readFileSync } from 'node:fs'
 import { accessTokenCookie, exchangeGoogleCode, expiredOauthStateCookie, oauthSuccess } from '../../app/Actions/Auth/SocialCallback'
 import { oauthStateCookie } from '../../app/Actions/Auth/SocialRedirect'
 import { accessTokenFromRequest } from '../../app/Middleware/Auth'
@@ -47,6 +48,15 @@ describe('social authentication cookie', () => {
     expect(redirect.headers.getSetCookie()).toEqual([
       accessTokenCookie('browser-token', 900),
     ])
+  })
+})
+
+describe('browser session routes', () => {
+  it('keeps identity and token refresh on the public API surface', () => {
+    const routes = readFileSync(new URL('../../routes/auth.ts', import.meta.url), 'utf8')
+
+    expect(routes).toContain("route.get('/me', 'Actions/Auth/AuthUserAction').middleware('auth')")
+    expect(routes).toContain("route.post('/auth/refresh', 'Actions/Auth/RefreshTokenAction').rateLimit(10, 'minute')")
   })
 })
 

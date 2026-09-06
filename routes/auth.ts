@@ -1,6 +1,17 @@
 import { route } from '@stacksjs/router'
 
 /**
+ * Browser session endpoints.
+ *
+ * The private pages use the framework auth composable, whose canonical user
+ * check is `/api/me`. Refresh lives beside the rest of this route file so it
+ * reaches the API service as well; the public document server owns unknown
+ * root paths and would otherwise answer `/auth/refresh` itself.
+ */
+route.get('/me', 'Actions/Auth/AuthUserAction').middleware('auth')
+route.post('/auth/refresh', 'Actions/Auth/RefreshTokenAction').rateLimit(10, 'minute')
+
+/**
  * Social sign-in. Served under /api.
  *
  * The stx page server owns the document root and answers any unknown root

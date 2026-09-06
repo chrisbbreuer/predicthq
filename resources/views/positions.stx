@@ -31,27 +31,358 @@ const POLL_SECONDS = 10
 </script>
 
 <script client>
-import { useAuth } from '@stacksjs/browser/composables/useAuth'
+import { useIntervalFn } from '@stacksjs/composables'
 import { withCsrfHeader } from '@stacksjs/browser/composables/csrf'
+import { useAuth } from '@stacksjs/browser/composables/useAuth'
 
 const bookAuth = useAuth()
+const loading = state(true)
+const live = state(false)
+const signedIn = state(true)
+const error = state('')
+const note = state('')
+const busy = state(0)
+const stamp = state('')
+const accounts = state<any[]>([])
+const broken = state<any[]>([])
+const positions = state<any[]>([])
+const paper = state<any[]>([])
+const orders = state<any[]>([])
+const pending = state<any[]>([])
+const settled = state<any[]>([])
+const empty = state(false)
+const totals = state({
+  cash: '$0.00',
+  cost: '$0.00',
+  markValue: '$0.00',
+  unrealized: '+$0.00',
+  unrealizedTone: 'muted',
+  realizedToday: '+$0.00',
+  realizedTodayTone: 'muted',
+  realizedAll: '+$0.00',
+  realizedAllTone: 'muted',
+  committed: '$0.00',
+  paperUnrealized: '+$0.00',
+  paperTone: 'muted',
+  positionCount: 0,
+})
 
-async function completeBookSignIn(): Promise<void> {
-  await bookAuth.completeSocialLogin()
+function usd(value: unknown): string {
+  const amount = Number(value) || 0
+  const body = Math.abs(amount).toFixed(2)
+  return (amount < 0 ? '-$' : '$') + body
 }
 
-function readBook(path: string): Promise<Response> {
-  return bookAuth.authFetch(path, { credentials: 'same-origin' })
+function signed(value: unknown): string {
+  const amount = Number(value) || 0
+  return (amount > 0 ? '+' : '') + usd(amount)
 }
 
-function updateBook(path: string, body: Record<string, unknown>): Promise<Response> {
-  return bookAuth.authFetch(path, {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: withCsrfHeader({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify(body),
+function tone(value: unknown): string {
+  const amount = Number(value) || 0
+  return amount > 0 ? 'pos' : (amount < 0 ? 'neg' : 'muted')
+}
+
+function cents(value: unknown): string {
+  return Math.round((Number(value) || 0) * 100) + '¢'
+}
+
+function count(value: unknown): string {
+  return String(Math.round((Number(value) || 0) * 100) / 100)
+}
+
+function instant(value: unknown): number {
+  const valueString = String(value || '')
+  if (!valueString)
+    return 0
+
+  const iso = valueString.indexOf('T') === -1 ? valueString.replace(' ', 'T') + 'Z' : valueString
+  const parsed = Date.parse(iso)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function ago(value: unknown): string {
+  const at = instant(value)
+  if (!at)
+    return ''
+
+  const seconds = Math.max(0, Math.round((Date.now() - at) / 1000))
+  if (seconds < 60)
+    return seconds + 's ago'
+  if (seconds < 3600)
+    return Math.round(seconds / 60) + 'm ago'
+  if (seconds < 86400)
+    return Math.round(seconds / 3600) + 'h ago'
+  return Math.round(seconds / 86400) + 'd ago'
+}
+
+function clock(): string {
+  const at = new Date()
+  return ('0' + at.getHours()).slice(-2) + ':' + ('0' + at.getMinutes()).slice(-2) + ':' + ('0' + at.getSeconds()).slice(-2)
+}
+
+function day(value: unknown): string {
+  return value ? String(value).slice(0, 10) : ''
+}
+
+function holding(row: any, isPaper: boolean): any {
+  const marked = Number(row.mark) > 0
+  return {
+    key: row.venue + row.marketExternalId + row.side + (isPaper ? 'p' : ''),
+    question: row.question,
+    ticker: row.marketExternalId,
+    venue: row.venue,
+    side: String(row.side || '').toUpperCase(),
+    sideClass: String(row.side || '').toLowerCase() === 'no' ? 'no' : 'yes',
+    outcome: row.outcomeLabel || '',
+    strategies: (row.strategies || []).map((strategy: any) => strategy.name).join(', '),
+    hand: row.source === 'venue',
+    closes: day(row.endsAt),
+    size: count(row.size),
+    paid: cents(row.avgPrice),
+    mark: marked ? cents(row.mark) : '—',
+    value: usd(row.markValue),
+    pnl: marked ? signed(row.unrealized) : '—',
+    pnlTone: marked ? tone(row.unrealized) : 'muted',
+  }
+}
+
+function apply(data: any): void {
+  const rows = data.positions || []
+  const rawTotals = data.totals || {}
+  const livePositions: any[] = []
+  const paperPositions: any[] = []
+
+  for (const row of rows) {
+    if (row.source === 'paper')
+      paperPositions.push(holding(row, true))
+    else
+      livePositions.push(holding(row, false))
+  }
+
+  const nextAccounts = (data.accounts || []).map((account: any) => ({
+    venue: account.venue,
+    balance: (Number(account.balance) < 0 ? '-$' : '$') + Math.abs(Number(account.balance) || 0).toFixed(2),
+    identifier: account.maskedIdentifier,
+    status: account.status,
+    error: account.lastError,
+    syncedAt: account.lastSyncedAt,
+    fault: account.status === 'active' ? 'not syncing' : account.status,
+  }))
+  accounts.set(nextAccounts)
+  broken.set(nextAccounts.filter((account: any) => account.status !== 'active' || account.error))
+  positions.set(livePositions)
+  paper.set(paperPositions)
+
+  orders.set((data.orders || []).map((order: any, index: number) => ({
+    key: 'o' + index,
+    question: order.question,
+    venue: order.venue,
+    side: String(order.side || '').toUpperCase(),
+    sideClass: String(order.side || '').toLowerCase() === 'no' ? 'no' : 'yes',
+    outcome: order.outcomeLabel || '',
+    status: order.status,
+    strategy: order.strategy || '',
+    hand: order.source === 'venue',
+    placedAt: order.placedAt,
+    limit: cents(order.limitPrice),
+    left: count(order.remaining) + ' / ' + count(order.size),
+    committed: usd(order.committed),
+  })))
+
+  pending.set((data.pending || []).map((decision: any) => ({
+    id: decision.id,
+    question: decision.question || decision.venue,
+    side: String(decision.side || '').toUpperCase(),
+    sideClass: String(decision.side || '').toLowerCase() === 'no' ? 'no' : 'yes',
+    outcome: decision.outcomeLabel || '',
+    strategy: decision.strategy,
+    evidence: 'edge ' + Math.round((Number(decision.edge) || 0) * 100) + ' pts · confidence ' + Math.round((Number(decision.confidence) || 0) * 100) + '%',
+    rationale: decision.rationale || '',
+    stake: usd(decision.notional),
+    limit: cents(decision.limitPrice),
+  })))
+
+  settled.set((data.settled || []).map((position: any, index: number) => {
+    const realized = Number(position.realized) || 0
+    return {
+      key: 's' + index,
+      question: position.question,
+      outcome: position.outcomeLabel || position.side,
+      result: position.won ? 'won' : 'lost',
+      resultClass: position.won ? 'yes' : 'no',
+      strategy: position.strategy + (position.mode === 'paper' ? ' · paper' : ''),
+      settledAt: position.settledAt,
+      size: count(position.size),
+      cost: usd(position.cost),
+      realized: signed(realized),
+      realizedTone: tone(realized),
+    }
+  }))
+
+  totals.set({
+    cash: usd(rawTotals.cash),
+    cost: usd(rawTotals.cost),
+    markValue: usd(rawTotals.markValue),
+    unrealized: signed(rawTotals.unrealized),
+    unrealizedTone: tone(rawTotals.unrealized),
+    realizedToday: signed(rawTotals.realizedToday),
+    realizedTodayTone: tone(rawTotals.realizedToday),
+    realizedAll: signed(rawTotals.realizedAll),
+    realizedAllTone: tone(rawTotals.realizedAll),
+    committed: usd(rawTotals.committed),
+    paperUnrealized: signed(rawTotals.paperUnrealized),
+    paperTone: tone(rawTotals.paperUnrealized),
+    positionCount: Number(rawTotals.positions) || 0,
   })
+
+  empty.set(livePositions.length === 0 && paperPositions.length === 0 && orders().length === 0 && pending().length === 0)
+  stamp.set(clock())
 }
+
+function messageOf(value: unknown): string {
+  return value instanceof Error ? value.message : String(value)
+}
+
+let refreshing: Promise<boolean> | null = null
+
+async function refreshBookSession(): Promise<boolean> {
+  if (refreshing)
+    return refreshing
+
+  const refreshToken = bookAuth.getRefreshToken()
+  if (!refreshToken)
+    return false
+
+  refreshing = (async () => {
+    try {
+      const response = await fetch('/api/auth/refresh', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: withCsrfHeader({
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        }),
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      })
+      if (!response.ok)
+        return false
+
+      const data = await response.json()
+      const accessToken = data.access_token || data.token
+      if (!accessToken)
+        return false
+
+      bookAuth.token.value = accessToken
+      if (data.refresh_token)
+        bookAuth.refreshToken.value = data.refresh_token
+      return true
+    }
+    catch {
+      return false
+    }
+    finally {
+      refreshing = null
+    }
+  })()
+
+  return refreshing
+}
+
+/**
+ * The app's private API is mounted below `/api`, including token refresh.
+ * Keep the framework-managed token refs and retry semantics, while targeting
+ * the route that is actually reachable through the production proxy.
+ */
+async function bookFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  const send = (): Promise<Response> => {
+    const accessToken = bookAuth.getToken()
+    return fetch(input, {
+      ...init,
+      headers: withCsrfHeader({
+        ...init.headers,
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        Accept: 'application/json',
+      }),
+    })
+  }
+
+  const response = await send()
+  if (response.status !== 401 || !bookAuth.getRefreshToken())
+    return response
+
+  if (!await refreshBookSession())
+    return response
+
+  return send()
+}
+
+async function load(fromVenue = false): Promise<void> {
+  try {
+    const response = await bookFetch('/api/trading/positions' + (fromVenue ? '?refresh=1' : ''), {
+      credentials: 'same-origin',
+    })
+
+    if (response.status === 401) {
+      signedIn.set(false)
+      live.set(false)
+      return
+    }
+
+    const data = await response.json()
+    if (!response.ok)
+      throw new Error(data.message || data.error || ('Request failed (' + response.status + ')'))
+
+    signedIn.set(true)
+    apply(data)
+    error.set('')
+    live.set(true)
+  }
+  catch (requestError) {
+    error.set(messageOf(requestError))
+    live.set(false)
+  }
+  finally {
+    loading.set(false)
+  }
+}
+
+async function review(id: number, approve: boolean): Promise<void> {
+  busy.set(id)
+  note.set('')
+  try {
+    const response = await bookFetch('/api/trading/decisions/' + id + '/review', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ approve }),
+    })
+    const data = await response.json()
+    if (!response.ok)
+      throw new Error(data.message || data.error || ('Request failed (' + response.status + ')'))
+
+    note.set(approve
+      ? (data.status === 'executed' ? 'Order placed.' : 'Approved, but no order was placed: ' + (data.reason || 'see the decision feed.'))
+      : 'Decision skipped.')
+    await load(true)
+  }
+  catch (requestError) {
+    note.set(messageOf(requestError))
+  }
+  finally {
+    busy.set(0)
+  }
+}
+
+const polling = useIntervalFn(() => void load(true), {{ POLL_SECONDS }} * 1000, { immediate: false })
+
+async function start(): Promise<void> {
+  await bookAuth.completeSocialLogin()
+  await load(true)
+  polling.resume()
+}
+
+onMount(start)
 </script>
 
 <!DOCTYPE html>
@@ -93,256 +424,17 @@ function updateBook(path: string, body: Record<string, unknown>): Promise<Respon
     </style>
   </head>
 
-  <body
-    x-data="{
-      menu: false,
-      theme: predicthqTheme.current(),
-      toggleTheme() { this.theme = predicthqTheme.toggle() },
-      toggleMenu() { this.menu = !this.menu },
-
-      loading: true,
-      live: false,
-      signedIn: true,
-      error: '',
-      note: '',
-      busy: 0,
-      stamp: '',
-      accounts: [],
-      broken: [],
-      totals: { cash: '$0.00', cost: '$0.00', markValue: '$0.00', unrealized: '+$0.00', unrealizedTone: 'muted', realizedToday: '+$0.00', realizedTodayTone: 'muted', realizedAll: '+$0.00', realizedAllTone: 'muted', committed: '$0.00', paperUnrealized: '+$0.00', paperTone: 'muted', positionCount: 0 },
-      positions: [],
-      paper: [],
-      orders: [],
-      pending: [],
-      settled: [],
-      empty: false,
-
-      usd(value) {
-        const n = Number(value) || 0
-        const body = Math.abs(n).toFixed(2)
-        return (n < 0 ? '-$' : '$') + body
-      },
-      signed(value) {
-        const n = Number(value) || 0
-        return (n > 0 ? '+' : '') + this.usd(n)
-      },
-      tone(value) {
-        const n = Number(value) || 0
-        return n > 0 ? 'pos' : (n < 0 ? 'neg' : 'muted')
-      },
-      cents(value) { return Math.round((Number(value) || 0) * 100) + '¢' },
-      count(value) { return String(Math.round((Number(value) || 0) * 100) / 100) },
-      pct(value) { return Math.round((Number(value) || 0) * 100) + '%' },
-      instant(stamp) {
-        if (!stamp) return 0
-        const iso = stamp.indexOf('T') === -1 ? stamp.replace(' ', 'T') + 'Z' : stamp
-        const parsed = Date.parse(iso)
-        return Number.isFinite(parsed) ? parsed : 0
-      },
-      ago(stamp) {
-        const at = this.instant(stamp)
-        if (!at) return ''
-        const seconds = Math.max(0, Math.round((Date.now() - at) / 1000))
-        if (seconds < 60) return seconds + 's ago'
-        if (seconds < 3600) return Math.round(seconds / 60) + 'm ago'
-        if (seconds < 86400) return Math.round(seconds / 3600) + 'h ago'
-        return Math.round(seconds / 86400) + 'd ago'
-      },
-      clock() {
-        const at = new Date()
-        return ('0' + at.getHours()).slice(-2) + ':' + ('0' + at.getMinutes()).slice(-2) + ':' + ('0' + at.getSeconds()).slice(-2)
-      },
-      day(stamp) { return stamp ? stamp.slice(0, 10) : '' },
-      /* One market and side, ready to render. */
-      holding(row, paper) {
-        const marked = Number(row.mark) > 0
-        return {
-          key: row.venue + row.marketExternalId + row.side + (paper ? 'p' : ''),
-          question: row.question,
-          ticker: row.marketExternalId,
-          venue: row.venue,
-          side: String(row.side || '').toUpperCase(),
-          sideClass: String(row.side || '').toLowerCase() === 'no' ? 'no' : 'yes',
-          outcome: row.outcomeLabel || '',
-          strategies: (row.strategies || []).map(function (s) { return s.name }).join(', '),
-          hand: row.source === 'venue',
-          closes: this.day(row.endsAt),
-          size: this.count(row.size),
-          paid: this.cents(row.avgPrice),
-          mark: marked ? this.cents(row.mark) : '—',
-          value: this.usd(row.markValue),
-          pnl: marked ? this.signed(row.unrealized) : '—',
-          pnlTone: marked ? this.tone(row.unrealized) : 'muted',
-        }
-      },
-
-      apply(data) {
-        const rows = data.positions || []
-        const totals = data.totals || {}
-        const live = []
-        const paper = []
-
-        for (const row of rows) {
-          if (row.source === 'paper') paper.push(this.holding(row, true))
-          else live.push(this.holding(row, false))
-        }
-
-        this.accounts = (data.accounts || []).map(function (account) {
-          return {
-            venue: account.venue,
-            balance: (Number(account.balance) < 0 ? '-$' : '$') + Math.abs(Number(account.balance) || 0).toFixed(2),
-            identifier: account.maskedIdentifier,
-            status: account.status,
-            error: account.lastError,
-            syncedAt: account.lastSyncedAt,
-            /* An account can be 'active' and still not answering — a
-               timeout is not a revoked key. Saying 'active' beside the
-               reason it is failing reads as a contradiction, so the
-               headline follows the symptom rather than the status. */
-            fault: account.status === 'active' ? 'not syncing' : account.status,
-          }
-        })
-        this.broken = this.accounts.filter(function (account) { return account.status !== 'active' || account.error })
-
-        this.positions = live
-        this.paper = paper
-
-        this.orders = (data.orders || []).map(function (order, index) {
-          return {
-            key: 'o' + index,
-            question: order.question,
-            venue: order.venue,
-            side: String(order.side || '').toUpperCase(),
-            sideClass: String(order.side || '').toLowerCase() === 'no' ? 'no' : 'yes',
-            outcome: order.outcomeLabel || '',
-            status: order.status,
-            strategy: order.strategy || '',
-            hand: order.source === 'venue',
-            placedAt: order.placedAt,
-            limit: Math.round((Number(order.limitPrice) || 0) * 100) + '¢',
-            left: (Math.round((Number(order.remaining) || 0) * 100) / 100) + ' / ' + (Math.round((Number(order.size) || 0) * 100) / 100),
-            committed: '$' + (Number(order.committed) || 0).toFixed(2),
-          }
-        })
-
-        this.pending = (data.pending || []).map(function (decision) {
-          return {
-            id: decision.id,
-            question: decision.question || decision.venue,
-            side: String(decision.side || '').toUpperCase(),
-            sideClass: String(decision.side || '').toLowerCase() === 'no' ? 'no' : 'yes',
-            outcome: decision.outcomeLabel || '',
-            strategy: decision.strategy,
-            evidence: 'edge ' + Math.round((Number(decision.edge) || 0) * 100) + ' pts · confidence ' + Math.round((Number(decision.confidence) || 0) * 100) + '%',
-            rationale: decision.rationale || '',
-            stake: '$' + (Number(decision.notional) || 0).toFixed(2),
-            limit: Math.round((Number(decision.limitPrice) || 0) * 100) + '¢',
-          }
-        })
-
-        this.settled = (data.settled || []).map(function (position, index) {
-          const realized = Number(position.realized) || 0
-          return {
-            key: 's' + index,
-            question: position.question,
-            outcome: position.outcomeLabel || position.side,
-            result: position.won ? 'won' : 'lost',
-            resultClass: position.won ? 'yes' : 'no',
-            strategy: position.strategy + (position.mode === 'paper' ? ' · paper' : ''),
-            settledAt: position.settledAt,
-            size: String(Math.round((Number(position.size) || 0) * 100) / 100),
-            cost: '$' + (Number(position.cost) || 0).toFixed(2),
-            realized: (realized > 0 ? '+' : '') + (realized < 0 ? '-$' : '$') + Math.abs(realized).toFixed(2),
-            realizedTone: realized > 0 ? 'pos' : (realized < 0 ? 'neg' : 'muted'),
-          }
-        })
-
-        this.totals = {
-          cash: this.usd(totals.cash),
-          cost: this.usd(totals.cost),
-          markValue: this.usd(totals.markValue),
-          unrealized: this.signed(totals.unrealized),
-          unrealizedTone: this.tone(totals.unrealized),
-          realizedToday: this.signed(totals.realizedToday),
-          realizedTodayTone: this.tone(totals.realizedToday),
-          realizedAll: this.signed(totals.realizedAll),
-          realizedAllTone: this.tone(totals.realizedAll),
-          committed: this.usd(totals.committed),
-          paperUnrealized: this.signed(totals.paperUnrealized),
-          paperTone: this.tone(totals.paperUnrealized),
-          positionCount: Number(totals.positions) || 0,
-        }
-
-        this.empty = live.length === 0 && paper.length === 0 && this.orders.length === 0 && this.pending.length === 0
-        this.stamp = this.clock()
-      },
-
-      async load(fromVenue) {
-        try {
-          const response = await readBook('/api/trading/positions' + (fromVenue ? '?refresh=1' : ''))
-
-          if (response.status === 401) {
-            this.signedIn = false
-            this.live = false
-            this.loading = false
-            return
-          }
-
-          const data = await response.json()
-          if (!response.ok) throw new Error(data.message || data.error || ('Request failed (' + response.status + ')'))
-
-          this.signedIn = true
-          this.apply(data)
-          this.error = ''
-          this.live = true
-        }
-        catch (err) {
-          /* The last good book stays on screen. A page that blanks on a
-             dropped request is worse than one that says it is stale. */
-          this.error = err && err.message ? err.message : String(err)
-          this.live = false
-        }
-        finally {
-          this.loading = false
-        }
-      },
-
-      async review(id, approve) {
-        this.busy = id
-        this.note = ''
-        try {
-          const response = await updateBook('/api/trading/decisions/' + id + '/review', { approve: approve })
-          const data = await response.json()
-          if (!response.ok) throw new Error(data.message || data.error || ('Request failed (' + response.status + ')'))
-          this.note = approve
-            ? (data.status === 'executed' ? 'Order placed.' : 'Approved, but no order was placed: ' + (data.reason || 'see the decision feed.'))
-            : 'Decision skipped.'
-          await this.load(true)
-        }
-        catch (err) {
-          this.note = err && err.message ? err.message : String(err)
-        }
-        finally {
-          this.busy = 0
-        }
-      },
-
-      async start() {
-        await completeBookSignIn()
-        await this.load(true)
-        setInterval(() => { this.load(true) }, {{ POLL_SECONDS }} * 1000)
-      },
-    }"
-    x-init="start()"
-  >
+  <body>
     <div class="app">
-      @include('nav')
+      <div x-data="{ menu: false, theme: predicthqTheme.current(), toggleTheme() { this.theme = predicthqTheme.toggle() }, toggleMenu() { this.menu = !this.menu } }">
+        @include('nav')
+      </div>
 
       <main class="mx-auto px-4 py-8 sm:px-6 max-w-6xl">
         <div class="flex flex-wrap gap-3 items-end justify-between">
           <div>
             <div class="flex gap-2 items-center">
-              <span class="live-dot" :class="live ? 'on' : ''"></span>
+              <span class="live-dot" :class="live() ? 'on' : ''"></span>
               <h1 class="display font-black text-3xl tracking-tight sm:text-4xl">Your book</h1>
             </div>
             <p class="mt-1 muted">
@@ -351,19 +443,19 @@ function updateBook(path: string, body: Record<string, unknown>): Promise<Respon
           </div>
 
           <div class="flex gap-2 items-center">
-            <span class="text-xs faint num" x-text="loading ? 'loading…' : (stamp ? 'as of ' + stamp : '')"></span>
+            <span class="text-xs faint num" x-text="loading() ? 'loading…' : (stamp() ? 'as of ' + stamp() : '')"></span>
             <button type="button" class="px-4 h-9 font-bold text-sm rounded-lg btn" @click="load(true)">Refresh</button>
           </div>
         </div>
 
-        <p x-show="error" x-cloak class="px-4 py-3 mt-5 text-sm rounded-xl card" role="status">
+        <p x-show="error()" x-cloak class="px-4 py-3 mt-5 text-sm rounded-xl card" role="status">
           <span class="neg font-bold">Not updating</span>
-          <span class="muted" x-text="'— ' + error + '. These are the last figures received.'"></span>
+          <span class="muted" x-text="'— ' + error() + '. These are the last figures received.'"></span>
         </p>
-        <p x-show="note" x-cloak class="px-4 py-3 mt-5 text-sm rounded-xl card" role="status" x-text="note"></p>
+        <p x-show="note()" x-cloak class="px-4 py-3 mt-5 text-sm rounded-xl card" role="status" x-text="note()"></p>
 
         {{-- Not signed in. Nothing here is public, so this is the whole page. --}}
-        <section x-show="!signedIn" x-cloak class="p-8 mt-6 text-center rounded-2xl card">
+        <section x-show="!signedIn()" x-cloak class="p-8 mt-6 text-center rounded-2xl card">
           <h2 class="display font-black text-xl">Sign in to see your book</h2>
           <p class="mt-2 mx-auto max-w-md leading-relaxed muted">Positions, orders, and P&amp;L are private to the account that holds them. Sign in, connect a venue, and this page fills itself.</p>
           <div class="flex flex-wrap gap-3 justify-center mt-6">
@@ -372,35 +464,35 @@ function updateBook(path: string, body: Record<string, unknown>): Promise<Respon
           </div>
         </section>
 
-        <div x-show="signedIn">
+        <div x-show="signedIn()">
           {{-- Money, five ways: what is uncommitted, what is committed, what
                that is worth now, the difference, and what today has already
                banked. --}}
           <section class="grid gap-3 grid-cols-2 mt-6 lg:grid-cols-5 sm:grid-cols-3">
             <div class="p-4 rounded-2xl card">
-              <div class="font-black text-2xl num" x-text="totals.cash"></div>
+              <div class="font-black text-2xl num" x-text="totals().cash"></div>
               <div class="mt-0.5 font-semibold text-xs tracking-wide uppercase muted">Cash at venues</div>
             </div>
             <div class="p-4 rounded-2xl card">
-              <div class="font-black text-2xl num" x-text="totals.cost"></div>
-              <div class="mt-0.5 font-semibold text-xs tracking-wide uppercase muted"><span x-text="totals.positionCount"></span> positions, at cost</div>
+              <div class="font-black text-2xl num" x-text="totals().cost"></div>
+              <div class="mt-0.5 font-semibold text-xs tracking-wide uppercase muted"><span x-text="totals().positionCount"></span> positions, at cost</div>
             </div>
             <div class="p-4 rounded-2xl card">
-              <div class="font-black text-2xl num" x-text="totals.markValue"></div>
+              <div class="font-black text-2xl num" x-text="totals().markValue"></div>
               <div class="mt-0.5 font-semibold text-xs tracking-wide uppercase muted">Worth now</div>
             </div>
             <div class="p-4 rounded-2xl card">
-              <div class="font-black text-2xl num" :class="totals.unrealizedTone" x-text="totals.unrealized"></div>
+              <div class="font-black text-2xl num" :class="totals().unrealizedTone" x-text="totals().unrealized"></div>
               <div class="mt-0.5 font-semibold text-xs tracking-wide uppercase muted">Unrealized</div>
             </div>
             <div class="p-4 rounded-2xl card">
-              <div class="font-black text-2xl num" :class="totals.realizedTodayTone" x-text="totals.realizedToday"></div>
+              <div class="font-black text-2xl num" :class="totals().realizedTodayTone" x-text="totals().realizedToday"></div>
               <div class="mt-0.5 font-semibold text-xs tracking-wide uppercase muted">Realized today</div>
             </div>
           </section>
 
           {{-- No venue connected: the one thing to do, said once. --}}
-          <section x-show="!loading && accounts.length === 0" x-cloak class="p-8 mt-5 text-center rounded-2xl card">
+          <section x-show="!loading() && accounts().length === 0" x-cloak class="p-8 mt-5 text-center rounded-2xl card">
             <h2 class="display font-black text-xl">No venue connected yet</h2>
             <p class="mt-2 mx-auto max-w-lg leading-relaxed muted">
               Connect Kalshi with an API key and this page shows what that account holds — including positions you took in Kalshi's own app, not only the ones PredictHQ opened.
@@ -409,8 +501,8 @@ function updateBook(path: string, body: Record<string, unknown>): Promise<Respon
           </section>
 
           {{-- Connected accounts, with whatever the venue last said. --}}
-          <section x-show="accounts.length > 0" x-cloak class="flex flex-wrap gap-3 mt-5">
-            <template x-for="account in accounts" :key="account.venue">
+          <section x-show="accounts().length > 0" x-cloak class="flex flex-wrap gap-3 mt-5">
+            <template :for="account in accounts">
               <div class="flex gap-3 items-center px-4 py-3 rounded-xl card">
                 <span class="tag brand" x-text="account.venue"></span>
                 <div class="min-w-0">
@@ -428,7 +520,7 @@ function updateBook(path: string, body: Record<string, unknown>): Promise<Respon
           {{-- A venue that stopped answering. Said plainly, because a stale
                balance that looks live is how somebody trades on a number
                that is hours old. --}}
-          <template x-for="account in broken" :key="'err' + account.venue">
+          <template :for="account in broken">
             <p class="px-4 py-3 mt-3 text-sm rounded-xl card">
               <strong class="neg" x-text="account.venue + ' · ' + account.fault"></strong>
               <span class="muted" x-text="account.error ? '— ' + account.error : '— reconnect it from your account page.'"></span>
@@ -436,7 +528,7 @@ function updateBook(path: string, body: Record<string, unknown>): Promise<Respon
           </template>
 
           {{-- Nothing riding. Not an error, and it should not look like one. --}}
-          <section x-show="!loading && accounts.length > 0 && empty" x-cloak class="p-8 mt-5 text-center rounded-2xl card">
+          <section x-show="!loading() && accounts().length > 0 && empty()" x-cloak class="p-8 mt-5 text-center rounded-2xl card">
             <h2 class="display font-black text-xl">Nothing open right now</h2>
             <p class="mt-2 mx-auto max-w-lg leading-relaxed muted">Your connected venues report no positions and no resting orders. Anything a strategy opens, or you place yourself, appears here within {{ POLL_SECONDS }} seconds.</p>
             <div class="flex flex-wrap gap-3 justify-center mt-6">
@@ -446,13 +538,13 @@ function updateBook(path: string, body: Record<string, unknown>): Promise<Respon
           </section>
 
           {{-- Holdings. --}}
-          <section x-show="positions.length > 0" x-cloak class="overflow-hidden mt-6 rounded-2xl card">
+          <section x-show="positions().length > 0" x-cloak class="overflow-hidden mt-6 rounded-2xl card">
             <div class="flex items-center justify-between px-4 py-3 border-b bd">
               <span class="font-bold">Open positions</span>
-              <span class="text-xs faint"><span x-text="positions.length"></span> held · <span class="num" :class="totals.unrealizedTone" x-text="totals.unrealized"></span> unrealized</span>
+              <span class="text-xs faint"><span x-text="positions().length"></span> held · <span class="num" :class="totals().unrealizedTone" x-text="totals().unrealized"></span> unrealized</span>
             </div>
 
-            <template x-for="position in positions" :key="position.key">
+            <template :for="position in positions">
               <div class="row">
                 <div class="min-w-0">
                   <div class="font-bold truncate" x-text="position.question"></div>
@@ -478,13 +570,13 @@ function updateBook(path: string, body: Record<string, unknown>): Promise<Respon
           </section>
 
           {{-- Orders still working. --}}
-          <section x-show="orders.length > 0" x-cloak class="overflow-hidden mt-5 rounded-2xl card">
+          <section x-show="orders().length > 0" x-cloak class="overflow-hidden mt-5 rounded-2xl card">
             <div class="flex items-center justify-between px-4 py-3 border-b bd">
               <span class="font-bold">Working orders</span>
-              <span class="text-xs faint"><span class="num" x-text="totals.committed"></span> committed</span>
+              <span class="text-xs faint"><span class="num" x-text="totals().committed"></span> committed</span>
             </div>
 
-            <template x-for="order in orders" :key="order.key">
+            <template :for="order in orders">
               <div class="row">
                 <div class="min-w-0">
                   <div class="font-bold truncate" x-text="order.question"></div>
@@ -510,13 +602,13 @@ function updateBook(path: string, body: Record<string, unknown>): Promise<Respon
           {{-- Decisions the engine has made and is waiting on a person for.
                Approving runs the same executor the schedule does, so the
                risk checks are the same ones. --}}
-          <section x-show="pending.length > 0" x-cloak class="overflow-hidden mt-5 rounded-2xl card">
+          <section x-show="pending().length > 0" x-cloak class="overflow-hidden mt-5 rounded-2xl card">
             <div class="flex items-center justify-between px-4 py-3 border-b bd">
               <span class="font-bold">Waiting on you</span>
-              <span class="text-xs faint"><span x-text="pending.length"></span> to review</span>
+              <span class="text-xs faint"><span x-text="pending().length"></span> to review</span>
             </div>
 
-            <template x-for="decision in pending" :key="decision.id">
+            <template :for="decision in pending">
               <div class="row">
                 <div class="min-w-0">
                   <div class="font-bold truncate" x-text="decision.question"></div>
@@ -532,8 +624,8 @@ function updateBook(path: string, body: Record<string, unknown>): Promise<Respon
                 <div class="flex flex-wrap gap-3 items-center justify-end">
                   <div class="figure"><span class="figure-label">Stake</span><span class="font-bold num" x-text="decision.stake"></span></div>
                   <div class="figure"><span class="figure-label">Limit</span><span class="font-bold num" x-text="decision.limit"></span></div>
-                  <button type="button" class="px-3 h-9 font-bold text-sm rounded-lg btn btn-primary" :disabled="busy === decision.id" @click="review(decision.id, true)">Place</button>
-                  <button type="button" class="px-3 h-9 font-bold text-sm rounded-lg btn" :disabled="busy === decision.id" @click="review(decision.id, false)">Skip</button>
+                  <button type="button" class="px-3 h-9 font-bold text-sm rounded-lg btn btn-primary" :disabled="busy() === decision.id" @click="review(decision.id, true)">Place</button>
+                  <button type="button" class="px-3 h-9 font-bold text-sm rounded-lg btn" :disabled="busy() === decision.id" @click="review(decision.id, false)">Skip</button>
                 </div>
               </div>
             </template>
@@ -542,13 +634,13 @@ function updateBook(path: string, body: Record<string, unknown>): Promise<Respon
           {{-- Paper, kept apart from the money above rather than summed into
                it. A simulated gain added to a real balance is a number that
                describes nothing. --}}
-          <section x-show="paper.length > 0" x-cloak class="overflow-hidden mt-5 rounded-2xl card">
+          <section x-show="paper().length > 0" x-cloak class="overflow-hidden mt-5 rounded-2xl card">
             <div class="flex items-center justify-between px-4 py-3 border-b bd">
               <span class="font-bold">Paper positions</span>
-              <span class="text-xs faint">not real money · <span class="num" :class="totals.paperTone" x-text="totals.paperUnrealized"></span></span>
+              <span class="text-xs faint">not real money · <span class="num" :class="totals().paperTone" x-text="totals().paperUnrealized"></span></span>
             </div>
 
-            <template x-for="position in paper" :key="position.key">
+            <template :for="position in paper">
               <div class="row">
                 <div class="min-w-0">
                   <div class="font-bold truncate" x-text="position.question"></div>
@@ -569,13 +661,13 @@ function updateBook(path: string, body: Record<string, unknown>): Promise<Respon
           </section>
 
           {{-- What already happened. The only section here that is finished. --}}
-          <section x-show="settled.length > 0" x-cloak class="overflow-hidden mt-5 rounded-2xl card">
+          <section x-show="settled().length > 0" x-cloak class="overflow-hidden mt-5 rounded-2xl card">
             <div class="flex items-center justify-between px-4 py-3 border-b bd">
               <span class="font-bold">Recently settled</span>
-              <span class="text-xs faint">all time <span class="num" :class="totals.realizedAllTone" x-text="totals.realizedAll"></span></span>
+              <span class="text-xs faint">all time <span class="num" :class="totals().realizedAllTone" x-text="totals().realizedAll"></span></span>
             </div>
 
-            <template x-for="position in settled" :key="position.key">
+            <template :for="position in settled">
               <div class="row">
                 <div class="min-w-0">
                   <div class="font-bold truncate" x-text="position.question"></div>
