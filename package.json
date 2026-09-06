@@ -70,13 +70,13 @@
   },
   "dependencies": {
     "@polymarket/clob-client-v2": "^1.1.0",
-    "@stacksjs/stx": "0.2.277",
-    "bun-plugin-stx": "0.2.277",
+    "@stacksjs/stx": "0.2.278",
+    "bun-plugin-stx": "0.2.278",
     "stacks": "0.72.74",
-    "stripe": "^22.5.0",
+    "stripe": "^22.6.1",
     "ts-charts": "github:stacksjs/ts-charts",
     "ts-web-scraper": "^0.1.10",
-    "viem": "^2.55.11"
+    "viem": "^2.56.3"
   },
   "devDependencies": {
     "better-dx": "^0.2.15"
