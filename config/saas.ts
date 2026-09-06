@@ -19,8 +19,7 @@ import type { SaasConfig } from '@stacksjs/types'
  * plan tier is the first segment and everything after it is billing
  * cadence.
  */
-export default {
-  plans: [
+export const plans = [
     {
       productName: 'PredictHQ Signal',
       description: 'Every market, the full trade tape, and the decisions the engine would make, with the evidence behind each one.',
@@ -93,7 +92,10 @@ export default {
         version: '1.0.0',
       },
     },
-  ],
+  ] satisfies NonNullable<SaasConfig['plans']>
+
+export default {
+  plans,
 
   webhook: {
     endpoint: '/api/billing/webhook',

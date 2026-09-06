@@ -1,5 +1,6 @@
 import { config } from '@stacksjs/config'
 import { response } from '@stacksjs/router'
+import { plans } from '../../../config/saas'
 import { tierFrom } from '../../Services/billing/entitlements'
 
 /**
@@ -86,7 +87,7 @@ interface UserLike {
 
 /** Is this a plan key we actually publish? */
 function isConfiguredPlan(planKey: string): boolean {
-  return (config.saas?.plans ?? []).some(
+  return plans.some(
     plan => (plan.pricing ?? []).some(pricing => pricing.key === planKey),
   )
 }

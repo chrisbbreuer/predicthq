@@ -63,6 +63,20 @@ describe('shared marketing shell', () => {
     expect(pricing).not.toContain('refreshed every five minutes')
   })
 
+  it('renders PredictHQ plans from the same source checkout validates', async () => {
+    const pricing = await Bun.file('resources/views/pricing.stx').text()
+    const checkout = await Bun.file('app/Actions/Billing/CreateSubscriptionCheckout.ts').text()
+    const { plans } = await import('../../config/saas')
+
+    expect(pricing).toContain("import { plans } from '../../config/saas'")
+    expect(checkout).toContain("import { plans } from '../../../config/saas'")
+    expect(plans.map(plan => plan.productName)).toEqual([
+      'PredictHQ Signal',
+      'PredictHQ Auto',
+      'PredictHQ Desk',
+    ])
+  })
+
   it('keeps the prediction-market loop and live desk on their realtime paths', async () => {
     const scheduler = await Bun.file('app/Scheduler.ts').text()
     const markets = await Bun.file('resources/views/markets.stx').text()

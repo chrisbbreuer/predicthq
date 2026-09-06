@@ -10,12 +10,11 @@
  * Checkout posts a plan KEY to /api/billing/checkout, never a Stripe
  * price id: the tier is resolved server-side from our own config.
  *
- * Read through `@stacksjs/config` rather than importing config/saas.ts
- * directly. A default import resolves to an empty module in the stx
- * server scope, which fails silently: the const is simply undefined and
- * every interpolation after it renders as literal `{{ }}`.
+ * Read the named plan export directly. The framework-wide config bundle
+ * carries its package defaults during static generation, which would put
+ * the Stacks starter plans on this page instead of PredictHQ's plans.
  */
-import { config } from '@stacksjs/config'
+import { plans } from '../../config/saas'
 
 /** What each tier actually unlocks, keyed by the metadata tier name. */
 const tierFeatures = {
@@ -40,7 +39,7 @@ const tierFeatures = {
   ],
 }
 
-const tiers = (config.saas?.plans ?? []).map((plan) => {
+const tiers = plans.map((plan) => {
   const tier = plan.metadata?.tier ?? ''
   const monthly = plan.pricing.find(p => p.interval === 'month')
   const yearly = plan.pricing.find(p => p.interval === 'year')
@@ -64,7 +63,7 @@ const tiers = (config.saas?.plans ?? []).map((plan) => {
 /**
  * The capability list as markup.
  *
- * Built here rather than looped in the template: a nested @foreach whose
+ * Built here rather than looped in the template: a nested server loop whose
  * body is a single attributed element compiles to a client-side `@for`,
  * which has no access to server data and renders an empty list with no
  * error. The input is the static copy above, never user input.
@@ -205,7 +204,7 @@ function billingHeaders(): Record<string, string> {
               </button>
 
               <!-- Rendered as one interpolation rather than an inner
-                   @foreach: a nested loop whose body is a single
+                   server loop: a nested loop whose body is a single
                    attributed element compiles to a client `@for`, which
                    cannot see server data and silently renders nothing.
                    `featuresHtml` is built from our own static copy in the

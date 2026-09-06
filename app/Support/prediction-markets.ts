@@ -3,6 +3,9 @@ import { Database } from './db'
 /** Traders need this many scored fills before ranking as smart money. */
 const MIN_RESOLVED = 2
 
+/** Keep the public graph legible and below Vitess' 10k result-row ceiling. */
+const MAX_GRAPH_LINKS = 160
+
 export interface SmartTrader {
   id: number
   venue: string
@@ -163,7 +166,9 @@ export async function loadGraph(traderLimit = 40, database?: Database): Promise<
       FROM market_trades t
       WHERE t.market_trader_id IN (${placeholders})
       GROUP BY t.market_trader_id, t.prediction_market_id
-    `).all(...ids)
+      ORDER BY notional DESC
+      LIMIT ?
+    `).all(...ids, MAX_GRAPH_LINKS)
 
     const marketIds = [...new Set(flows.map(f => f.mid))]
     const markets = marketIds.length

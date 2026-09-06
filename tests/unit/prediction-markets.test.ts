@@ -174,4 +174,36 @@ describe('support query helpers', () => {
     expect(link?.losses).toBe(0)
     expect(() => JSON.stringify(graph)).not.toThrow()
   })
+
+  it('caps the public graph before Vitess reaches its result-row ceiling', async () => {
+    const capDir = mkdtempSync(join(tmpdir(), 'ob-pm-graph-cap-'))
+    const capDb = schemaFor(join(capDir, 'test.sqlite'), TABLES)
+
+    try {
+      seed(capDb)
+      await runAnalytics(capDb)
+
+      const now = '2026-07-07T00:00:00.000Z'
+      const market = capDb.prepare(
+        'INSERT INTO prediction_markets (venue, external_id, question, category, status, result, volume, liquidity, last_price, ends_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      )
+      const trade = capDb.prepare(
+        'INSERT INTO market_trades (prediction_market_id, market_trader_id, venue, external_id, side, price, size, notional, is_winner, traded_at, created_at, updated_at) VALUES (?, 1, ?, ?, ?, ?, ?, ?, -1, ?, ?, ?)',
+      )
+
+      for (let index = 0; index < 200; index++) {
+        const result = market.run('polymarket', `cap-market-${index}`, `Cap market ${index}?`, '', 'open', '', 1000 + index, 100, 0.5, now, now, now)
+        trade.run(Number(result.lastInsertRowid), 'polymarket', `cap-trade-${index}`, 'yes', 0.5, 10, 5 + index, now, now, now)
+      }
+
+      const { loadGraph } = await import('../../app/Support/prediction-markets')
+      const graph = await loadGraph(40, capDb)
+      expect(graph.links).toHaveLength(160)
+      expect(graph.nodes.length).toBeLessThanOrEqual(200)
+    }
+    finally {
+      capDb.close()
+      rmSync(capDir, { recursive: true, force: true })
+    }
+  })
 })
