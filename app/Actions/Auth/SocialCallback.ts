@@ -1,6 +1,6 @@
 import { Database } from '../../Support/db'
 import { Action } from '@stacksjs/actions'
-import { Auth } from '@stacksjs/auth'
+import { Auth, authCookie } from '@stacksjs/auth'
 import { config } from '@stacksjs/config'
 import { log } from '@stacksjs/logging'
 import { response } from '@stacksjs/router'
@@ -207,7 +207,11 @@ export function expiredOauthStateCookie(provider: string): string {
 
 /** Cookie contract consumed by the framework Auth middleware. */
 export function accessTokenCookie(token: string, expiresIn: number): string {
-  const name = config.auth?.defaultTokenName || 'auth-token'
   const maxAge = Math.max(1, Math.floor(Number(expiresIn) || 1))
-  return `${name}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`
+  return authCookie(token, {
+    maxAge,
+    path: '/',
+    secure: true,
+    sameSite: 'Lax',
+  })
 }

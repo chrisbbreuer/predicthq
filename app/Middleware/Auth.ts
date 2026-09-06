@@ -1,23 +1,9 @@
-import { Auth, sessionUser } from '@stacksjs/auth'
-import { config } from '@stacksjs/config'
+import { Auth, requestToken, sessionUser } from '@stacksjs/auth'
 import { HttpError } from '@stacksjs/error-handling'
 import { Middleware } from '@stacksjs/router'
 
-function bearerToken(request: any): string | null {
-  if (typeof request.bearerToken === 'function') {
-    const token = request.bearerToken()
-    if (token)
-      return token
-  }
-
-  const header
-    = (typeof request.header === 'function' && request.header('authorization'))
-      || request.headers?.get?.('authorization')
-      || request.headers?.get?.('Authorization')
-
-  return typeof header === 'string' && header.startsWith('Bearer ')
-    ? header.slice(7)
-    : null
+export function accessTokenFromRequest(request: any): string | null {
+  return requestToken(request)
 }
 
 async function stampTokenUser(request: any, token: string): Promise<void> {
@@ -35,16 +21,9 @@ export default new Middleware({
   priority: 1,
 
   async handle(request) {
-    const token = bearerToken(request)
+    const token = accessTokenFromRequest(request)
     if (token) {
       await stampTokenUser(request, token)
-      return
-    }
-
-    const tokenCookieName = config.auth?.defaultTokenName || 'auth-token'
-    const cookieToken = request.cookie?.(tokenCookieName)
-    if (cookieToken) {
-      await stampTokenUser(request, cookieToken)
       return
     }
 

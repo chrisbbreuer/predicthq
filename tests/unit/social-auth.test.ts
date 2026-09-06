@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 import { accessTokenCookie, exchangeGoogleCode, expiredOauthStateCookie } from '../../app/Actions/Auth/SocialCallback'
 import { oauthStateCookie } from '../../app/Actions/Auth/SocialRedirect'
+import { accessTokenFromRequest } from '../../app/Middleware/Auth'
 
 describe('social authentication cookie', () => {
   it('uses the auth middleware cookie name and secure browser flags', () => {
@@ -12,6 +13,17 @@ describe('social authentication cookie', () => {
     expect(cookie).toContain('Secure')
     expect(cookie).toContain('SameSite=Lax')
     expect(cookie).toContain('Max-Age=900')
+  })
+
+  it('round-trips an encoded access token through the auth middleware', () => {
+    const token = '7|session:token/with+punctuation='
+    const setCookie = accessTokenCookie(token, 900)
+    const cookie = setCookie.split(';', 1)[0]
+    const request = new Request('https://predicthq.org/api/positions', {
+      headers: { cookie },
+    })
+
+    expect(accessTokenFromRequest(request)).toBe(token)
   })
 })
 
