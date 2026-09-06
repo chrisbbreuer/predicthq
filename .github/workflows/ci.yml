@@ -203,6 +203,16 @@ jobs:
             echo "available=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Install Deploy SSH Key
+        if: steps.deploy-credentials.outputs.available == 'true'
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_SSH_KEY" | tr -d '\r' > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+          ssh-keygen -y -f "$HOME/.ssh/id_ed25519" > "$HOME/.ssh/id_ed25519.pub"
+
       - name: Deploy
         if: steps.deploy-credentials.outputs.available == 'true'
         env:
