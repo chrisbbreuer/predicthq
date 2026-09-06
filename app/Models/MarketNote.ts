@@ -50,7 +50,7 @@ export default defineModel({
     // The display name is stored alongside rather than joined, so a thread
     // renders in one query and survives the account being deleted.
     userId: {
-      type: 'number',
+      type: 'bigint',
       fillable: true,
       validation: { rule: schema.number().min(1).optional() },
       factory: () => null,

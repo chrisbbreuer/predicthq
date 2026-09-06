@@ -32,7 +32,7 @@ export default defineModel({
 
   attributes: {
     userId: {
-      type: 'number',
+      type: 'bigint',
       fillable: true,
       validation: { rule: schema.number().min(1) },
       factory: faker => faker.number.int({ min: 1, max: 100 }),

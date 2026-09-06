@@ -24,6 +24,7 @@ export default defineModel({
 
   attributes: {
     userId: {
+      type: 'bigint',
       required: false,
       fillable: true,
       validation: {

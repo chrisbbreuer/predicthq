@@ -13,6 +13,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
+import AlertSubscription from '../../app/Models/AlertSubscription'
+import ApiKey from '../../app/Models/ApiKey'
+import ExchangeAccount from '../../app/Models/ExchangeAccount'
+import MarketNote from '../../app/Models/MarketNote'
+import NotificationDelivery from '../../app/Models/NotificationDelivery'
+import TradingStrategy from '../../app/Models/TradingStrategy'
 import { auditVitessMigrations, configuredKeyspaceIsSharded, keyspaceIsSharded } from '../../app/Services/schema'
 
 let root: string
@@ -135,5 +141,21 @@ describe('the committed migrations', () => {
     // Against the real directory, not a fixture. This is the assertion
     // that would have caught the tables generated under the wrong flag.
     expect(auditVitessMigrations(process.cwd(), false)).toEqual([])
+  })
+})
+
+describe('user foreign keys', () => {
+  it('stay aligned with the bigint users primary key', () => {
+    const models = [
+      AlertSubscription,
+      ApiKey,
+      ExchangeAccount,
+      MarketNote,
+      NotificationDelivery,
+      TradingStrategy,
+    ]
+
+    for (const model of models)
+      expect(model.attributes.userId.type).toBe('bigint')
   })
 })
