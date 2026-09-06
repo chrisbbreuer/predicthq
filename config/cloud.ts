@@ -691,9 +691,9 @@ export const tsCloud: TsCloudConfig = {
    * a way they do not on a dedicated server: eleven projects share this
    * machine, and 3000/3001/3010/3011/3024/3032/3040/3049/3060/3100 are
    * already claimed by other tenants (plus each one's `+1`/`+8` sidecar).
-   * 3070/3071 sit clear of all of them. Picking an occupied port does not
-   * fail loudly — the second service simply cannot bind, and the tenant that
-   * was already there keeps serving.
+   * 3070/3071 and 3074-3076 are reserved for this app. Picking an occupied
+   * port does not fail loudly — the second service simply cannot bind, and
+   * the tenant that was already there keeps serving.
    */
   sites: {
     main: {
@@ -775,7 +775,7 @@ export const tsCloud: TsCloudConfig = {
     scheduler: {
       root: '.',
       start: 'bun node_modules/@stacksjs/buddy/dist/cli.js schedule:run',
-      port: 3072,
+      port: 3074,
       // 331M resident, 466M peak, never throttled.
       memoryHigh: '1G',
       memoryMax: '1536M',
@@ -786,7 +786,7 @@ export const tsCloud: TsCloudConfig = {
     worker: {
       root: '.',
       start: 'bun node_modules/@stacksjs/buddy/dist/cli.js queue:work --concurrency 2',
-      port: 3073,
+      port: 3075,
       // 94M resident, 382M peak, never throttled. The peak is what matters
       // here rather than the resident figure: this runs two jobs at once, so
       // its high-water mark is set by the largest pair it has had in hand.
@@ -799,7 +799,7 @@ export const tsCloud: TsCloudConfig = {
     oddsWatcher: {
       root: '.',
       start: 'bun node_modules/@stacksjs/buddy/dist/cli.js odds:watch',
-      port: 3074,
+      port: 3076,
       // 195M resident, 219M peak, never throttled. A long-lived poller with a
       // flat profile, so it needs the least of the five.
       memoryHigh: '512M',
