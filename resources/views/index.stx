@@ -210,7 +210,7 @@ const navActive = 'board'
       format: (localStorage.getItem('ob-format') || 'american'),
       live: {{ liveJson }},
       flash: {},
-      liveUrl: predicthqRealtime.url('{{ broadcastPort }}'),
+      liveConnection: null,
       token: (localStorage.getItem('ob-token') || (self.crypto && crypto.randomUUID ? crypto.randomUUID() : 'tok-' + Math.random().toString(36).slice(2))),
       cat: 'all',
       stake: 25,
@@ -229,12 +229,10 @@ const navActive = 'board'
       fmt(d) { return this.format === 'percent' ? (100 / d).toFixed(1) + '%' : this.format === 'price' ? Math.round(100 / d) + '¢' : this.american(d) },
       px(sel, book, fallback) { const v = this.live[sel + ':' + book]; const d = (v == null ? fallback : v); return d == null ? '-' : this.fmt(d) },
       flashClass(sel, book) { return this.flash[sel + ':' + book] || '' },
+      init() { this.connectLive() },
       connectLive() {
-        try {
-          const ws = new WebSocket(this.liveUrl)
-          ws.onopen = () => ws.send(JSON.stringify({ event: 'subscribe', channel: 'odds' }))
-          ws.onmessage = (e) => {
-            let msg; try { msg = JSON.parse(e.data) } catch { return }
+        this.liveConnection = predicthqRealtime.connect('{{ broadcastPort }}', 'odds', {
+          onMessage: (msg) => {
             if (msg.channel !== 'odds' || msg.event !== 'board:updated' || !(msg.data && msg.data.events)) return
             const next = { ...this.live }; const flashes = {}
             for (const ev of msg.data.events) for (const s of ev.selections) for (const q of s.quotes) {
@@ -245,10 +243,8 @@ const navActive = 'board'
             }
             this.live = next; this.flash = flashes
             setTimeout(() => { this.flash = {} }, 1200)
-          }
-          ws.onclose = () => setTimeout(() => this.connectLive(), 5000)
-        }
-        catch (err) { /* no realtime server, board stays on its server-rendered values */ }
+          },
+        })
       },
       persist() { localStorage.setItem('ob-sheet', JSON.stringify(this.sheet)); localStorage.setItem('ob-saved', JSON.stringify(this.saved)); localStorage.setItem('ob-format', this.format); localStorage.setItem('ob-token', this.token) },
       saveSheet() { if (!this.sheet.length) return; const name = (this.sheetName || '').trim() || ('Sheet ' + (this.saved.length + 1)); const legs = this.sheet; this.saved = [...this.saved, { name, legs, parlay: this.parlay() }]; this.sheetName = ''; try { fetch('/api/sheets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: this.token, name, legs }) }).catch(() => {}) } catch (e) { /* offline, kept in localStorage */ } },
@@ -256,7 +252,7 @@ const navActive = 'board'
       deleteSaved(i) { this.saved = this.saved.filter((_, j) => j !== i) }
     }"
   >
-  <div class="app" x-effect="persist()" x-init="connectLive()">
+  <div class="app" x-effect="persist()">
     <!-- nav -->
       @include('nav')
 

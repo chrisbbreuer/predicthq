@@ -97,20 +97,19 @@ const navActive = 'live'
       menu: false,
       theme: predicthqTheme.current(),
       connected: false,
+      liveConnection: null,
       moves: [],
       live: {{ liveJson }},
       selMeta: {{ selMetaJson }},
       bookMeta: {{ bookMetaJson }},
       toggleTheme() { this.theme = predicthqTheme.toggle() }, toggleMenu() { this.menu = !this.menu },
       clock() { const d = new Date(); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) },
+      init() { this.connectLive() },
       connectLive() {
-        try {
-          const ws = new WebSocket(predicthqRealtime.url('{{ broadcastPort }}'))
-          ws.onopen = () => { ws.send(JSON.stringify({ event: 'subscribe', channel: 'odds' })); ws.send(JSON.stringify({ event: 'subscribe', channel: 'alerts' })) }
-          ws.onmessage = (e) => {
-            let msg; try { msg = JSON.parse(e.data) } catch { return }
-            if (msg.event === 'subscription_succeeded')
-              this.connected = true
+        this.liveConnection = predicthqRealtime.connect('{{ broadcastPort }}', ['odds', 'alerts'], {
+          onConnected: () => { this.connected = true },
+          onDisconnected: () => { this.connected = false },
+          onMessage: (msg) => {
             if (msg.channel === 'odds' && msg.event === 'board:updated' && msg.data && msg.data.events) {
               const next = { ...this.live }; const fresh = []
               for (const ev of msg.data.events) for (const s of ev.selections) for (const q of s.quotes) {
@@ -127,13 +126,10 @@ const navActive = 'live'
             if (msg.channel === 'alerts' && msg.event === 'arbitrage' && msg.data) {
               this.moves = [{ kind: 'arb', time: this.clock(), title: msg.data.title, league: msg.data.league, profit: (Number(msg.data.profitPct) || 0).toFixed(2) }, ...this.moves].slice(0, 60)
             }
-          }
-          ws.onclose = () => { this.connected = false; setTimeout(() => this.connectLive(), 5000) }
-        }
-        catch (err) { /* no realtime server, the recent feed still renders */ }
+          },
+        })
       }
     }"
-    x-init="connectLive()"
   >
   <div class="app">
       @include('nav')

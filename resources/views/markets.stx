@@ -148,6 +148,7 @@ const navActive = 'markets'
       ty: 0,
       panning: false,
       connected: false,
+      flowConnection: null,
       refreshing: false,
       leaders: {{ leadersJson }},
       whales: {{ whalesJson }},
@@ -156,20 +157,20 @@ const navActive = 'markets'
       stats: {{ statsJson }},
       px: 0,
       py: 0,
+      init() {
+        this.connectFlow()
+        this.refreshFlow()
+        setInterval(() => this.refreshFlow(), 60000)
+      },
       connectFlow() {
-        try {
-          const ws = new WebSocket(predicthqRealtime.url('{{ broadcastPort }}'))
-          ws.onopen = () => ws.send(JSON.stringify({ event: 'subscribe', channel: 'prediction-markets' }))
-          ws.onclose = () => { this.connected = false; setTimeout(() => this.connectFlow(), 5000) }
-          ws.onmessage = (event) => {
-            let message; try { message = JSON.parse(event.data) } catch { return }
-            if (message.channel === 'prediction-markets' && message.event === 'subscription_succeeded')
-              this.connected = true
+        this.flowConnection = predicthqRealtime.connect('{{ broadcastPort }}', 'prediction-markets', {
+          onConnected: () => { this.connected = true },
+          onDisconnected: () => { this.connected = false },
+          onMessage: (message) => {
             if (message.channel === 'prediction-markets' && message.event === 'flow:updated')
               this.refreshFlow()
-          }
-        }
-        catch { this.connected = false }
+          },
+        })
       },
       money(value) {
         const amount = Number(value) || 0
@@ -289,7 +290,6 @@ const navActive = 'markets'
         return 'left:' + Math.min(80, Math.max(2, left)) + '%;top:' + Math.min(88, Math.max(2, top)) + '%'
       }
     }"
-    x-init="connectFlow(); refreshFlow(); setInterval(() => refreshFlow(), 60000)"
   >
   <div class="app">
       @include('nav')

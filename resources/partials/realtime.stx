@@ -26,5 +26,33 @@
       const host = port ? location.hostname + ':' + port : location.host
       return 'ws://' + host + '/ws'
     },
+
+    /**
+     * Keep socket lifecycle and reconnect handling in Stacks' native
+     * composable while speaking ts-broadcasting's `event` protocol.
+     */
+    connect(port, channels, handlers = {}) {
+      const subscribedChannels = Array.isArray(channels) ? channels : [channels]
+      const connection = useWebSocket(this.url(port), {
+        immediate: false,
+        maxReconnects: 1000000,
+        reconnectDelay: 1000,
+        onOpen: () => {
+          for (const channel of subscribedChannels)
+            connection.send(JSON.stringify({ event: 'subscribe', channel }))
+        },
+        onMessage: (message) => {
+          if (!message || typeof message !== 'object') return
+          if (message.event === 'subscription_succeeded')
+            handlers.onConnected?.(message)
+          handlers.onMessage?.(message)
+        },
+        onClose: () => handlers.onDisconnected?.(),
+        onError: error => handlers.onError?.(error),
+      })
+
+      connection.connect()
+      return connection
+    },
   }
 </script>
