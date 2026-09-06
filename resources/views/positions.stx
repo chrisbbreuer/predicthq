@@ -30,6 +30,30 @@ const pageDescription = 'Every open position, working order, and pending decisio
 const POLL_SECONDS = 10
 </script>
 
+<script client>
+import { useAuth } from '@stacksjs/browser/composables/useAuth'
+import { withCsrfHeader } from '@stacksjs/browser/composables/csrf'
+
+const bookAuth = useAuth()
+
+async function completeBookSignIn(): Promise<void> {
+  await bookAuth.completeSocialLogin()
+}
+
+function readBook(path: string): Promise<Response> {
+  return bookAuth.authFetch(path, { credentials: 'same-origin' })
+}
+
+function updateBook(path: string, body: Record<string, unknown>): Promise<Response> {
+  return bookAuth.authFetch(path, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: withCsrfHeader({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body),
+  })
+}
+</script>
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -129,17 +153,6 @@ const POLL_SECONDS = 10
         return ('0' + at.getHours()).slice(-2) + ':' + ('0' + at.getMinutes()).slice(-2) + ':' + ('0' + at.getSeconds()).slice(-2)
       },
       day(stamp) { return stamp ? stamp.slice(0, 10) : '' },
-      headers(json) {
-        const head = { Accept: 'application/json' }
-        if (json) head['Content-Type'] = 'application/json'
-        try {
-          const token = localStorage.getItem('token')
-          if (token) head.Authorization = 'Bearer ' + token
-        }
-        catch (e) { /* private mode: fall back to the session cookie */ }
-        return head
-      },
-
       /* One market and side, ready to render. */
       holding(row, paper) {
         const marked = Number(row.mark) > 0
@@ -266,10 +279,7 @@ const POLL_SECONDS = 10
 
       async load(fromVenue) {
         try {
-          const response = await fetch('/api/trading/positions' + (fromVenue ? '?refresh=1' : ''), {
-            headers: this.headers(false),
-            credentials: 'same-origin',
-          })
+          const response = await readBook('/api/trading/positions' + (fromVenue ? '?refresh=1' : ''))
 
           if (response.status === 401) {
             this.signedIn = false
@@ -301,12 +311,7 @@ const POLL_SECONDS = 10
         this.busy = id
         this.note = ''
         try {
-          const response = await fetch('/api/trading/decisions/' + id + '/review', {
-            method: 'POST',
-            headers: this.headers(true),
-            credentials: 'same-origin',
-            body: JSON.stringify({ approve: approve }),
-          })
+          const response = await updateBook('/api/trading/decisions/' + id + '/review', { approve: approve })
           const data = await response.json()
           if (!response.ok) throw new Error(data.message || data.error || ('Request failed (' + response.status + ')'))
           this.note = approve
@@ -322,8 +327,9 @@ const POLL_SECONDS = 10
         }
       },
 
-      start() {
-        this.load(true)
+      async start() {
+        await completeBookSignIn()
+        await this.load(true)
         setInterval(() => { this.load(true) }, {{ POLL_SECONDS }} * 1000)
       },
     }"

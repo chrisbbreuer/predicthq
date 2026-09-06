@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test'
+import { readSessionHandoff } from '@stacksjs/composables'
 import { accessTokenCookie, exchangeGoogleCode, expiredOauthStateCookie, oauthSuccess } from '../../app/Actions/Auth/SocialCallback'
 import { oauthStateCookie } from '../../app/Actions/Auth/SocialRedirect'
 import { accessTokenFromRequest } from '../../app/Middleware/Auth'
@@ -26,11 +27,23 @@ describe('social authentication cookie', () => {
     expect(accessTokenFromRequest(request)).toBe(token)
   })
 
-  it('delivers the auth cookie as the only cookie on the success redirect', () => {
-    const redirect = oauthSuccess('browser-token', 900)
+  it('hands the session to the browser and also sets the auth cookie', () => {
+    const redirect = oauthSuccess({
+      token: 'browser-token',
+      refreshToken: 'refresh-token',
+      expiresIn: 900,
+      user: { id: 7, email: 'person@example.com', name: 'Person' },
+    })
 
-    expect(redirect.status).toBe(303)
-    expect(redirect.headers.get('location')).toBe('/scores/nfl/today')
+    expect(redirect.status).toBe(302)
+    const location = redirect.headers.get('location') ?? ''
+    expect(location.startsWith('/positions#stx_auth=')).toBeTrue()
+    expect(readSessionHandoff(location.slice(location.indexOf('#')))).toEqual({
+      token: 'browser-token',
+      refreshToken: 'refresh-token',
+      expiresIn: 900,
+      user: { id: 7, email: 'person@example.com', name: 'Person' },
+    })
     expect(redirect.headers.getSetCookie()).toEqual([
       accessTokenCookie('browser-token', 900),
     ])

@@ -4,6 +4,7 @@ import { Auth, authCookie } from '@stacksjs/auth'
 import { config } from '@stacksjs/config'
 import { log } from '@stacksjs/logging'
 import { response } from '@stacksjs/router'
+import { socialHandoffRedirect } from '@stacksjs/socials'
 import { socialProvider } from '../../Support/auth'
 
 /**
@@ -119,15 +120,20 @@ export default new Action({
       }
 
       // Creating or matching a user is only half a sign-in. Mint the same
-      // token pack as password authentication and keep the access token in a
-      // secure ambient cookie so the redirected browser is authenticated on
-      // its very next request. Without this, OAuth appeared to succeed but
-      // every auth-gated page immediately returned 401.
+      // token pack as password authentication, hand it to the browser through
+      // the framework-owned URL fragment format, and keep the access token in
+      // a secure ambient cookie for server-rendered requests. The fragment is
+      // consumed and removed by useAuth().completeSocialLogin() on /positions.
       const login = await Auth.loginUsingId(userId)
       if (!login)
         return oauthFailure(name, 'provider')
 
-      return oauthSuccess(login.token, login.expiresIn)
+      return oauthSuccess({
+        token: login.token,
+        refreshToken: login.refreshToken,
+        expiresIn: login.expiresIn,
+        user: { id: userId, email, name: displayName },
+      })
     }
     finally {
       db.close()
@@ -192,14 +198,17 @@ function oauthFailure(provider: string, error: string): Response {
   return new Response(redirect.body, { status: redirect.status, statusText: redirect.statusText, headers })
 }
 
-export function oauthSuccess(token: string, expiresIn: number): Response {
-  return new Response(null, {
-    status: 303,
-    headers: {
-      Location: '/scores/nfl/today',
-      'Set-Cookie': accessTokenCookie(token, expiresIn),
-    },
-  })
+interface BrowserSession {
+  token: string
+  refreshToken?: string
+  expiresIn?: number
+  user?: unknown
+}
+
+export function oauthSuccess(session: BrowserSession): Response {
+  const redirect = socialHandoffRedirect(session, { redirectTo: '/positions' })
+  redirect.headers.append('Set-Cookie', accessTokenCookie(session.token, session.expiresIn ?? 3600))
+  return redirect
 }
 
 export function expiredOauthStateCookie(provider: string): string {
