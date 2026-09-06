@@ -38,7 +38,9 @@ import { useAuth } from '@stacksjs/browser/composables/useAuth'
 const bookAuth = useAuth()
 const loading = state(true)
 const live = state(false)
-const signedIn = state(true)
+// No private section is revealed until `/api/trading/positions` confirms the
+// current PredictHQ session. The server-rendered document carries no book data.
+const signedIn = state(false)
 const error = state('')
 const note = state('')
 const busy = state(0)
@@ -51,21 +53,25 @@ const orders = state<any[]>([])
 const pending = state<any[]>([])
 const settled = state<any[]>([])
 const empty = state(false)
-const totals = state({
-  cash: '$0.00',
-  cost: '$0.00',
-  markValue: '$0.00',
-  unrealized: '+$0.00',
-  unrealizedTone: 'muted',
-  realizedToday: '+$0.00',
-  realizedTodayTone: 'muted',
-  realizedAll: '+$0.00',
-  realizedAllTone: 'muted',
-  committed: '$0.00',
-  paperUnrealized: '+$0.00',
-  paperTone: 'muted',
-  positionCount: 0,
-})
+const totals = state(blankTotals())
+
+function blankTotals(): any {
+  return {
+    cash: '$0.00',
+    cost: '$0.00',
+    markValue: '$0.00',
+    unrealized: '+$0.00',
+    unrealizedTone: 'muted',
+    realizedToday: '+$0.00',
+    realizedTodayTone: 'muted',
+    realizedAll: '+$0.00',
+    realizedAllTone: 'muted',
+    committed: '$0.00',
+    paperUnrealized: '+$0.00',
+    paperTone: 'muted',
+    positionCount: 0,
+  }
+}
 
 function usd(value: unknown): string {
   const amount = Number(value) || 0
@@ -125,16 +131,73 @@ function day(value: unknown): string {
   return value ? String(value).slice(0, 10) : ''
 }
 
+function kickoff(value: unknown): string {
+  const parsed = new Date(String(value || ''))
+  if (!Number.isFinite(parsed.getTime()))
+    return 'Scheduled'
+
+  return parsed.toLocaleString([], {
+    weekday: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+function gameStatus(leg: any): string {
+  if (leg.state === 'in')
+    return leg.clock || leg.status || 'Live'
+  if (leg.state === 'post')
+    return leg.status || 'Final'
+  if (leg.state === 'pre')
+    return kickoff(leg.startsAt)
+  return leg.status || 'Waiting for matchup'
+}
+
+function scorecard(value: any): any {
+  if (!value || !Array.isArray(value.legs))
+    return null
+
+  const summary: string[] = []
+  if (Number(value.live) > 0)
+    summary.push(value.live + ' live')
+  if (Number(value.final) > 0)
+    summary.push(value.final + ' final')
+  if (Number(value.upcoming) > 0)
+    summary.push(value.upcoming + ' upcoming')
+  if (Number(value.missing) > 0)
+    summary.push(value.missing + ' waiting for matchup')
+
+  return {
+    total: Number(value.total) || value.legs.length,
+    summary: summary.join(' · '),
+    legs: value.legs.map((leg: any, index: number) => ({
+      key: String(index) + leg.team,
+      href: leg.gameUrl || '/scores/ncaaf/today',
+      choice: String(leg.choice || 'yes').toUpperCase(),
+      team: leg.team,
+      opponent: leg.opponent || 'Matchup not published',
+      selectedScore: leg.selectedScore == null ? '—' : String(leg.selectedScore),
+      opponentScore: leg.opponentScore == null ? '—' : String(leg.opponentScore),
+      status: gameStatus(leg),
+      standing: leg.standing,
+      tone: leg.tone,
+      live: leg.state === 'in',
+      found: leg.found,
+    })),
+  }
+}
+
 function holding(row: any, isPaper: boolean): any {
   const marked = Number(row.mark) > 0
+  const tracker = scorecard(row.scorecard)
   return {
     key: row.venue + row.marketExternalId + row.side + (isPaper ? 'p' : ''),
-    question: row.question,
+    question: tracker ? tracker.total + '-leg college football parlay' : row.question,
     ticker: row.marketExternalId,
     venue: row.venue,
     side: String(row.side || '').toUpperCase(),
     sideClass: String(row.side || '').toLowerCase() === 'no' ? 'no' : 'yes',
-    outcome: row.outcomeLabel || '',
+    outcome: tracker ? '' : (row.outcomeLabel || ''),
     strategies: (row.strategies || []).map((strategy: any) => strategy.name).join(', '),
     hand: row.source === 'venue',
     closes: day(row.endsAt),
@@ -144,7 +207,21 @@ function holding(row: any, isPaper: boolean): any {
     value: usd(row.markValue),
     pnl: marked ? signed(row.unrealized) : '—',
     pnlTone: marked ? tone(row.unrealized) : 'muted',
+    scorecard: tracker,
   }
+}
+
+function clearPrivateBook(): void {
+  accounts.set([])
+  broken.set([])
+  positions.set([])
+  paper.set([])
+  orders.set([])
+  pending.set([])
+  settled.set([])
+  totals.set(blankTotals())
+  empty.set(false)
+  stamp.set('')
 }
 
 function apply(data: any): void {
@@ -326,6 +403,7 @@ async function load(fromVenue = false): Promise<void> {
     if (response.status === 401) {
       signedIn.set(false)
       live.set(false)
+      clearPrivateBook()
       return
     }
 
@@ -408,6 +486,13 @@ onMount(start)
       .figure { text-align: right; min-width: 58px; }
       .figure-label { display: block; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); font-weight: 700; }
 
+      .position-scorecard { grid-column: 1 / -1; border-top: 1px solid var(--border); padding-top: 12px; }
+      .score-leg { min-width: 0; border: 1px solid var(--border); background: color-mix(in srgb, var(--surface) 78%, transparent); }
+      .score-leg:hover { border-color: var(--border-strong); }
+      .score-leg.live { border-color: color-mix(in srgb, var(--neg) 35%, var(--border)); }
+      .score-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; }
+      .score-dot { width: 7px; height: 7px; border-radius: 9999px; background: var(--neg); animation: ping 2.4s ease-out infinite; }
+
       .tag { display: inline-grid; place-items: center; padding: 1px 7px; border-radius: 9999px; font-size: 10px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; border: 1px solid var(--border-strong); color: var(--muted); }
       .tag.yes { color: var(--pos); border-color: color-mix(in srgb, var(--pos) 45%, transparent); }
       .tag.no { color: var(--neg); border-color: color-mix(in srgb, var(--neg) 45%, transparent); }
@@ -419,7 +504,7 @@ onMount(start)
         .figure { text-align: left; }
       }
       @media (prefers-reduced-motion: reduce) {
-        .live-dot.on { animation: none; }
+        .live-dot.on, .score-dot { animation: none; }
       }
     </style>
   </head>
@@ -455,7 +540,7 @@ onMount(start)
         <p x-show="note()" x-cloak class="px-4 py-3 mt-5 text-sm rounded-xl card" role="status" x-text="note()"></p>
 
         {{-- Not signed in. Nothing here is public, so this is the whole page. --}}
-        <section x-show="!signedIn()" x-cloak class="p-8 mt-6 text-center rounded-2xl card">
+        <section x-show="!loading() && !signedIn()" x-cloak class="p-8 mt-6 text-center rounded-2xl card">
           <h2 class="display font-black text-xl">Sign in to see your book</h2>
           <p class="mt-2 mx-auto max-w-md leading-relaxed muted">Positions, orders, and P&amp;L are private to the account that holds them. Sign in, connect a venue, and this page fills itself.</p>
           <div class="flex flex-wrap gap-3 justify-center mt-6">
@@ -565,6 +650,48 @@ onMount(start)
                   <div class="figure"><span class="figure-label">Value</span><span class="font-bold num" x-text="position.value"></span></div>
                   <div class="figure"><span class="figure-label">P&amp;L</span><span class="font-black num" :class="position.pnlTone" x-text="position.pnl"></span></div>
                 </div>
+
+                <template :if="position.scorecard">
+                  <div class="position-scorecard">
+                    <div class="flex flex-wrap gap-2 items-center justify-between mb-2.5">
+                      <div class="flex gap-2 items-center">
+                        <span class="font-black text-sm">Live leg tracker</span>
+                        <span class="tag brand" x-text="position.scorecard.total + ' legs'"></span>
+                      </div>
+                      <span class="text-xs faint" x-text="position.scorecard.summary"></span>
+                    </div>
+
+                    <div class="score-grid">
+                      <template :for="leg in position.scorecard.legs">
+                        <a :href="leg.href" data-no-router class="block p-3 rounded-xl score-leg" :class="leg.live ? 'live' : ''">
+                          <div class="flex gap-2 items-center justify-between">
+                            <div class="flex gap-1.5 items-center min-w-0">
+                              <span x-show="leg.live" class="score-dot shrink-0"></span>
+                              <span class="font-bold text-[11px] truncate" :class="leg.live ? 'neg' : 'faint'" x-text="leg.status"></span>
+                            </div>
+                            <span class="font-black text-[11px] uppercase" :class="leg.tone" x-text="leg.standing"></span>
+                          </div>
+
+                          <div class="flex gap-3 items-center mt-2.5">
+                            <div class="min-w-0 grow">
+                              <div class="flex gap-1.5 items-center min-w-0">
+                                <span class="tag" :class="leg.tone" x-text="leg.choice"></span>
+                                <span class="font-black text-sm truncate" x-text="leg.team"></span>
+                              </div>
+                              <div class="mt-1 text-xs truncate faint" x-text="'vs ' + leg.opponent"></div>
+                            </div>
+
+                            <div class="flex gap-2 items-baseline shrink-0" x-show="leg.found">
+                              <span class="font-black text-xl num" :class="leg.tone" x-text="leg.selectedScore"></span>
+                              <span class="text-xs faint">–</span>
+                              <span class="font-bold text-sm num muted" x-text="leg.opponentScore"></span>
+                            </div>
+                          </div>
+                        </a>
+                      </template>
+                    </div>
+                  </div>
+                </template>
               </div>
             </template>
           </section>

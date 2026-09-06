@@ -14,6 +14,8 @@
 
 export interface Team {
   abbreviation: string
+  /** School/city name without the mascot, useful when matching venue legs. */
+  location: string
   name: string
   shortName: string
   logo: string | null
@@ -43,6 +45,10 @@ export interface League {
   label: string
   /** ESPN's `{sport}/{league}` path segment. */
   path: string
+  /** College football is split across FBS and FCS scoreboards. */
+  groups?: string[]
+  /** ESPN silently falls back to 25 when an excessive limit is requested. */
+  limit?: number
 }
 
 /**
@@ -53,6 +59,7 @@ export interface League {
  */
 export const LEAGUES: League[] = [
   { key: 'nfl', label: 'NFL', path: 'football/nfl' },
+  { key: 'ncaaf', label: 'College Football', path: 'football/college-football', groups: ['80', '81'], limit: 100 },
   { key: 'nba', label: 'NBA', path: 'basketball/nba' },
   { key: 'mlb', label: 'MLB', path: 'baseball/mlb' },
   { key: 'nhl', label: 'NHL', path: 'hockey/nhl' },
@@ -73,6 +80,7 @@ function toTeam(competitor: any): Team {
   const team = competitor?.team ?? {}
   return {
     abbreviation: String(team.abbreviation ?? '').slice(0, 5),
+    location: String(team.location ?? ''),
     name: String(team.displayName ?? team.name ?? 'Unknown'),
     shortName: String(team.shortDisplayName ?? team.abbreviation ?? ''),
     // The scoreboard exposes `logo`; the summary header exposes `logos[]`
@@ -99,30 +107,49 @@ function toTeam(competitor: any): Team {
  */
 export async function fetchScoreboard(leagueKey: string, date?: string): Promise<Game[]> {
   const league = leagueFor(leagueKey)
-  const url = new URL(`https://site.api.espn.com/apis/site/v2/sports/${league.path}/scoreboard`)
-  if (date)
-    url.searchParams.set('dates', date)
+  const groups = league.groups?.length ? league.groups : [null]
+  const payloads = await Promise.all(groups.map(async (group) => {
+    // The older `site.api` hostname rejects Bun's TLS client at the edge.
+    // `site.web.api` serves the same public site payload and is reachable by
+    // the production runtime rather than only by browser-shaped clients.
+    const url = new URL(`https://site.web.api.espn.com/apis/site/v2/sports/${league.path}/scoreboard`)
+    if (date)
+      url.searchParams.set('dates', date)
+    if (group)
+      url.searchParams.set('groups', group)
+    if (league.limit)
+      url.searchParams.set('limit', String(league.limit))
 
-  let payload: any
-  try {
-    const res = await fetch(url, {
-      headers: { accept: 'application/json' },
-      // A scoreboard that has not answered in eight seconds is not a
-      // scoreboard worth blocking a page render on.
-      signal: AbortSignal.timeout(8000),
-    })
-    if (!res.ok)
+    try {
+      const res = await fetch(url, {
+        headers: { accept: 'application/json' },
+        // A scoreboard that has not answered in eight seconds is not a
+        // scoreboard worth blocking a page render on.
+        signal: AbortSignal.timeout(8000),
+      })
+      if (!res.ok)
+        return []
+      const payload: any = await res.json()
+      return Array.isArray(payload?.events) ? payload.events : []
+    }
+    catch {
+      // Network failure, timeout, or unparseable body. The page renders its
+      // empty state; an undocumented upstream going quiet is not an outage
+      // worth failing the request over.
       return []
-    payload = await res.json()
-  }
-  catch {
-    // Network failure, timeout, or unparseable body. The page renders its
-    // empty state; an undocumented upstream going quiet is not an outage
-    // worth failing the request over.
-    return []
-  }
+    }
+  }))
 
-  const events: any[] = Array.isArray(payload?.events) ? payload.events : []
+  // FBS and FCS overlap whenever schools from the two subdivisions play.
+  // Keep one copy of a game rather than making one parlay leg appear twice.
+  const seen = new Set<string>()
+  const events: any[] = payloads.flat().filter((event) => {
+    const id = String(event?.id ?? '')
+    if (!id || seen.has(id))
+      return false
+    seen.add(id)
+    return true
+  })
 
   return events.flatMap((event) => {
     const competition = event?.competitions?.[0]
@@ -226,6 +253,7 @@ const STAT_PICKS: Record<string, string[]> = {
   mlb: ['hits', 'runs', 'homeRuns', 'RBIs', 'strikeouts', 'walks'],
   nba: ['fieldGoalPct', 'threePointFieldGoalPct', 'freeThrowPct', 'totalRebounds', 'assists', 'turnovers'],
   nfl: ['totalYards', 'netPassingYards', 'rushingYards', 'firstDowns', 'turnovers', 'possessionTime'],
+  ncaaf: ['totalYards', 'netPassingYards', 'rushingYards', 'firstDowns', 'turnovers', 'possessionTime'],
   nhl: ['shotsTotal', 'powerPlayGoals', 'faceoffsWon', 'penaltyMinutes', 'hits', 'blockedShots'],
   epl: ['possessionPct', 'totalShots', 'shotsOnTarget', 'foulsCommitted', 'wonCorners', 'saves'],
   atp: ['aces', 'doubleFaults', 'firstServePointsWon', 'breakPoints', 'totalPointsWon', 'winners'],
@@ -262,7 +290,7 @@ function flatStats(team: any): Map<string, string> {
  */
 export async function fetchGame(leagueKey: string, eventId: string): Promise<GameDetail | null> {
   const league = leagueFor(leagueKey)
-  const url = `https://site.api.espn.com/apis/site/v2/sports/${league.path}/summary?event=${encodeURIComponent(eventId)}`
+  const url = `https://site.web.api.espn.com/apis/site/v2/sports/${league.path}/summary?event=${encodeURIComponent(eventId)}`
 
   let d: any
   try {

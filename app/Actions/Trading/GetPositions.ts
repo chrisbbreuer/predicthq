@@ -1,8 +1,10 @@
 import type { Database as Db } from '../../Support/db'
+import type { PositionScorecard } from '../../Services/trading/position-scores'
 import { Database } from '../../Support/db'
 import { authenticatedUserId } from '../../Support/request-auth'
 import { response } from '@stacksjs/router'
 import { syncAccounts } from '../../Services/trading/account-sync'
+import { positionScorecards, scorecardKey } from '../../Services/trading/position-scores'
 
 /**
  * GET /api/trading/positions — the whole live book, in one read.
@@ -181,6 +183,7 @@ export interface Holding {
   source: string
   openedAt: string
   strategies: Array<{ name: string, mode: string, size: number, cost: number }>
+  scorecard?: PositionScorecard | null
 }
 
 export default {
@@ -271,6 +274,9 @@ export default {
 
       const live = holdings.filter(holding => holding.source !== 'paper')
       const paper = holdings.filter(holding => holding.source === 'paper')
+      // A score provider going quiet must never hide the portfolio itself.
+      // The cards simply fall back to no scorecard until the next poll.
+      const scorecards = await positionScorecards(live).catch(() => new Map())
 
       return {
         refreshedFromVenue: refreshed,
@@ -301,7 +307,12 @@ export default {
           paperPositions: paper.length,
           paperUnrealized: round(paper.reduce((sum, holding) => sum + holding.unrealized, 0)),
         },
-        positions: holdings,
+        positions: holdings.map(holding => ({
+          ...holding,
+          scorecard: holding.source === 'paper'
+            ? null
+            : scorecards.get(scorecardKey(holding)) ?? null,
+        })),
         orders: working,
         pending: pending.map(decision => ({
           id: decision.id,
