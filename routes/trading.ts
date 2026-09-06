@@ -41,6 +41,14 @@ route.group({ middleware: ['auth', 'throttle:60,1'] }, () => {
   // They are private to their owner, even when the underlying market is public.
   route.get('/trading/decisions', 'Actions/Trading/GetDecisions')
 
+  // The live book behind /positions: holdings, working orders, pending
+  // decisions, and what each is worth. Sits in this group rather than
+  // beside the account write below despite reaching a venue on
+  // `?refresh=1`, because the venue read is bounded inside the action —
+  // it re-reads at most once every ten seconds however often it is
+  // called, so the polling budget is the one a page needs.
+  route.get('/trading/positions', 'Actions/Trading/GetPositions')
+
   // What the strategies actually returned. Every other endpoint here
   // describes intent; this one describes outcome.
   route.get('/trading/performance', 'Actions/Trading/GetPerformance')

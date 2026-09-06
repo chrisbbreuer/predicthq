@@ -11,8 +11,9 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import process from 'node:process'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { auditVitessMigrations, keyspaceIsSharded } from '../../app/Services/schema'
+import { auditVitessMigrations, configuredKeyspaceIsSharded, keyspaceIsSharded } from '../../app/Services/schema'
 
 let root: string
 
@@ -53,6 +54,40 @@ describe('reading the sharding flag', () => {
 
   it('reads anything else as sharded', () => {
     expect(keyspaceIsSharded('true')).toBe(true)
+  })
+})
+
+/**
+ * The environment-reading half, pinned separately.
+ *
+ * These set the variable rather than trusting whatever the developer's
+ * `.env` happens to hold. `.env.example` ships `DB_VITESS_SHARDED=false`,
+ * so a suite that read the ambient value would pass or fail depending on
+ * whether the person running it had copied that file — which is how the
+ * absent-value case above used to break on a fresh checkout.
+ */
+describe('reading the sharding flag from the environment', () => {
+  const original = process.env.DB_VITESS_SHARDED
+
+  afterEach(() => {
+    if (original === undefined)
+      delete process.env.DB_VITESS_SHARDED
+    else
+      process.env.DB_VITESS_SHARDED = original
+  })
+
+  it('assumes sharded when the variable is absent', () => {
+    delete process.env.DB_VITESS_SHARDED
+
+    expect(configuredKeyspaceIsSharded()).toBe(true)
+  })
+
+  it('takes the variable at its word when it is set', () => {
+    process.env.DB_VITESS_SHARDED = 'false'
+    expect(configuredKeyspaceIsSharded()).toBe(false)
+
+    process.env.DB_VITESS_SHARDED = 'true'
+    expect(configuredKeyspaceIsSharded()).toBe(true)
   })
 })
 

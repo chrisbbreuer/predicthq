@@ -4,6 +4,7 @@ import { authenticatedUserId } from '../../Support/request-auth'
 import { requestBoolean, requestString } from '../../Support/request-input'
 import { response } from '@stacksjs/router'
 import { assertUsable, CredentialError, maskIdentifier, sealCredentials } from '../../Services/trading/credentials'
+import { syncAccounts } from '../../Services/trading/account-sync'
 import { clientFor } from '../../Services/trading/execute'
 import { jurisdictionObjection } from '../../Services/trading/eligibility'
 
@@ -108,12 +109,27 @@ export default {
         updated_at: now,
       })
 
+      /*
+       * Mirror the account before answering.
+       *
+       * Connecting is the moment a user goes looking for their positions,
+       * and without this the portfolio page greets them with an empty
+       * book until its next refresh — which reads, correctly enough, as
+       * the connection not having worked. Best effort: the credentials
+       * are already proved by the balance read above, so a slow position
+       * endpoint must not turn a successful connection into an error.
+       */
+      const mirrored = await syncAccounts(db, { userId })
+        .then(summary => summary.synced > 0)
+        .catch(() => false)
+
       return {
         venue,
         label,
         maskedIdentifier: masked,
         status: 'active',
         balance,
+        mirrored,
       }
     }
     finally {

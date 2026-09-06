@@ -3,7 +3,7 @@ import process from 'node:process'
 import { log } from '@stacksjs/cli'
 import { ExitCode } from '@stacksjs/types'
 import { allAdapters, booksWithoutAdapters } from '../Services/odds/books'
-import { auditVitessMigrations, keyspaceIsSharded } from '../Services/schema'
+import { auditVitessMigrations, configuredKeyspaceIsSharded } from '../Services/schema'
 
 /**
  * `buddy preflight` — what will this deployment actually be able to do?
@@ -199,7 +199,7 @@ export default function (cli: CLI) {
         console.log('     These contribute nothing until an adapter exists, and their absence is indistinguishable from a quiet book.')
       }
 
-      const sharded = keyspaceIsSharded()
+      const sharded = configuredKeyspaceIsSharded()
       const schemaProblems = process.env.DB_CONNECTION === 'vitess' ? auditVitessMigrations() : []
 
       if (process.env.DB_CONNECTION === 'vitess') {

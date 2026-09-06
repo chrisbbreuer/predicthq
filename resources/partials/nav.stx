@@ -17,6 +17,7 @@ const NAV_LINKS = [
   { href: '/scores/nfl/today', key: 'scores', label: 'Scores', router: false },
   { href: '/markets', key: 'markets', label: 'Smart money', router: false },
   { href: '/community', key: 'community', label: 'Community', router: false },
+  { href: '/positions', key: 'positions', label: 'My book', router: false },
   { href: '/features', key: 'features', label: 'Features', router: false },
   { href: '/compare', key: 'compare', label: 'Compare', router: false },
   { href: '/pricing', key: 'pricing', label: 'Pricing', router: false },

@@ -31,6 +31,11 @@ minute, fills become positions, and positions settle against the market's own
 result. That is what makes hit rate, realized return, and drawdown answerable,
 and it is what the risk limits are computed from.
 
+**Your book.** The same pass asks each connected account what it holds and what
+is still resting, so `/positions` is the whole account rather than our half of
+it — a position taken by hand in Kalshi's own app appears beside the ones a
+strategy opened, marked to the current price.
+
 ## Requirements
 
 - **Bun ≥ 1.3.14** — installed and pinned by [Pantry](https://github.com/home-lang/pantry) via `deps.yaml`
@@ -65,7 +70,7 @@ fallback.
 | `app/Support/` | Pure domain logic — odds math, board assembly, branding |
 | `app/Services/trading/` | Evidence, judgement, execution, reconciliation, positions |
 | `routes/` | HTTP routes, registered through `app/Routes.ts` |
-| `resources/views/` | stx templates for the board, live feed, and smart money |
+| `resources/views/` | stx templates for the board, live feed, smart money, and your book |
 | `config/` | Typed configuration, one file per subsystem |
 
 Framework internals live under `storage/framework/` and come from the published

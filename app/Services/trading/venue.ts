@@ -43,6 +43,27 @@ export interface VenuePosition {
   avgPrice: number
 }
 
+/**
+ * An order the venue says is still working, whoever placed it.
+ *
+ * Distinct from `PlaceOrderResult`, which answers "what became of the
+ * order I sent" and is keyed by an order we already know about. This
+ * answers "what is resting on this account", including the orders a user
+ * placed in the venue's own app, which we have no other way to learn.
+ */
+export interface VenueOrder {
+  externalOrderId: string
+  marketExternalId: string
+  side: string
+  limitPrice: number
+  /** Contracts the order was for. */
+  size: number
+  /** Contracts still unfilled — what the order actually commits. */
+  remainingSize: number
+  /** Venue timestamp, ISO 8601, or '' when it does not report one. */
+  placedAt: string
+}
+
 export interface TradingClient {
   readonly venue: Venue
   /** Whether replaying placeOrder after an unknown response is venue-idempotent. */
@@ -50,6 +71,13 @@ export interface TradingClient {
   /** Reads the balance. Doubles as the credential health check. */
   fetchBalance: () => Promise<VenueBalance>
   fetchPositions: () => Promise<VenuePosition[]>
+  /**
+   * Everything resting on the account. Optional: a venue whose API
+   * cannot list orders it was not asked about simply omits it, and the
+   * account sync reports no resting orders rather than pretending there
+   * are none.
+   */
+  fetchOpenOrders?: () => Promise<VenueOrder[]>
   placeOrder: (request: PlaceOrderRequest) => Promise<PlaceOrderResult>
   fetchOrder: (externalOrderId: string) => Promise<PlaceOrderResult | null>
   cancelOrder: (externalOrderId: string) => Promise<boolean>

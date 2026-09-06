@@ -30,13 +30,32 @@ export interface SchemaProblem {
   detail: string
 }
 
-/** True when the keyspace is sharded, read the way the generator reads it. */
-export function keyspaceIsSharded(value: string | undefined = process.env.DB_VITESS_SHARDED): boolean {
+/**
+ * What a given flag value means, read the way the generator reads it.
+ *
+ * Pure, and takes the value rather than defaulting to the environment.
+ * The obvious spelling — a default parameter of
+ * `process.env.DB_VITESS_SHARDED` — cannot tell "nobody passed one" from
+ * "somebody passed undefined", because JavaScript applies the default to
+ * both. That makes the absent case untestable and, worse, makes the
+ * answer depend on the caller's shell: a developer with the variable in
+ * their `.env` gets a different result from the same call than one
+ * without, and the test pinning the absent case fails on the first
+ * machine to copy `.env.example`.
+ *
+ * Reading the environment is a separate act with a separate name below.
+ */
+export function keyspaceIsSharded(value: string | undefined): boolean {
   const raw = value?.trim().toLowerCase()
   if (raw === undefined || raw === '')
     return true
 
   return !['0', 'false', 'no', 'off'].includes(raw)
+}
+
+/** The flag as this process is actually configured. */
+export function configuredKeyspaceIsSharded(): boolean {
+  return keyspaceIsSharded(process.env.DB_VITESS_SHARDED)
 }
 
 /**
@@ -50,7 +69,7 @@ export function keyspaceIsSharded(value: string | undefined = process.env.DB_VIT
  */
 export function auditVitessMigrations(
   root: string = process.cwd(),
-  sharded: boolean = keyspaceIsSharded(),
+  sharded: boolean = configuredKeyspaceIsSharded(),
 ): SchemaProblem[] {
   const dir = join(root, VITESS_DIR)
 

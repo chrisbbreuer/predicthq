@@ -1,0 +1,601 @@
+<script server>
+/**
+ * PredictHQ: your book.
+ *
+ * Everything the signed-in user has riding right now — holdings marked
+ * to the current price, orders still working, decisions waiting on a
+ * person, and what has already settled.
+ *
+ * Client-rendered, unlike the odds board next door, and deliberately so:
+ * every number here is private to one user. Server-rendering it would
+ * put one account's positions into a document the page cache treats like
+ * any other, and the failure mode of that mistake is somebody else's
+ * portfolio. The page ships empty and fills from
+ * `/api/trading/positions`, which authenticates every call.
+ *
+ * The payload is turned into finished display strings in `apply()` rather
+ * than formatted in the markup. Template expressions here are evaluated
+ * by the stx runtime rather than by a full JavaScript engine, and the
+ * first draft of this page rendered zeroes forever because a getter and
+ * a `.map(s => s.name)` in an attribute failed silently. Everything the
+ * markup reads is now a plain property that was computed in one place.
+ *
+ * @see app/Actions/Trading/GetPositions.ts for the payload.
+ */
+const navActive = 'positions'
+const pageTitle = 'PredictHQ: your book'
+const pageDescription = 'Every open position, working order, and pending decision across your connected venues, marked to the current price.'
+
+/** How often the page re-reads. Matches the venue read floor in the action. */
+const POLL_SECONDS = 10
+</script>
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    @include('head')
+    <style>
+      a { color: inherit; text-decoration: none; }
+      .live-dot { width: 9px; height: 9px; border-radius: 9999px; background: var(--faint); }
+      .live-dot.on { background: var(--pos); animation: ping 2.4s ease-out infinite; }
+      @keyframes ping { 0% { box-shadow: 0 0 0 0 currentColor; opacity: 1; } 70% { box-shadow: 0 0 0 6px transparent; opacity: 0.75; } 100% { box-shadow: 0 0 0 0 transparent; opacity: 1; } }
+
+      /*
+        One row shape for holdings, orders, and settlements. They carry
+        different numbers but the same anatomy — what it is on the left,
+        what it is worth on the right — and giving each its own table put
+        three different column rhythms on one screen.
+      */
+      .row { display: grid; gap: 12px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border); grid-template-columns: minmax(0, 1fr) auto; }
+      .row:last-child { border-bottom: 0; }
+      .row-meta { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin-top: 4px; }
+      .figures { display: flex; gap: 18px; align-items: baseline; justify-content: flex-end; flex-wrap: wrap; }
+      .figure { text-align: right; min-width: 58px; }
+      .figure-label { display: block; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); font-weight: 700; }
+
+      .tag { display: inline-grid; place-items: center; padding: 1px 7px; border-radius: 9999px; font-size: 10px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; border: 1px solid var(--border-strong); color: var(--muted); }
+      .tag.yes { color: var(--pos); border-color: color-mix(in srgb, var(--pos) 45%, transparent); }
+      .tag.no { color: var(--neg); border-color: color-mix(in srgb, var(--neg) 45%, transparent); }
+      .tag.brand { color: var(--accent-strong); border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: var(--accent-weak); }
+
+      @media (max-width: 640px) {
+        .row { grid-template-columns: minmax(0, 1fr); }
+        .figures { justify-content: flex-start; }
+        .figure { text-align: left; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .live-dot.on { animation: none; }
+      }
+    </style>
+  </head>
+
+  <body
+    x-data="{
+      menu: false,
+      theme: predicthqTheme.current(),
+      toggleTheme() { this.theme = predicthqTheme.toggle() },
+      toggleMenu() { this.menu = !this.menu },
+
+      loading: true,
+      live: false,
+      signedIn: true,
+      error: '',
+      note: '',
+      busy: 0,
+      stamp: '',
+      accounts: [],
+      broken: [],
+      totals: { cash: '$0.00', cost: '$0.00', markValue: '$0.00', unrealized: '+$0.00', unrealizedTone: 'muted', realizedToday: '+$0.00', realizedTodayTone: 'muted', realizedAll: '+$0.00', realizedAllTone: 'muted', committed: '$0.00', paperUnrealized: '+$0.00', paperTone: 'muted', positionCount: 0 },
+      positions: [],
+      paper: [],
+      orders: [],
+      pending: [],
+      settled: [],
+      empty: false,
+
+      usd(value) {
+        const n = Number(value) || 0
+        const body = Math.abs(n).toFixed(2)
+        return (n < 0 ? '-$' : '$') + body
+      },
+      signed(value) {
+        const n = Number(value) || 0
+        return (n > 0 ? '+' : '') + this.usd(n)
+      },
+      tone(value) {
+        const n = Number(value) || 0
+        return n > 0 ? 'pos' : (n < 0 ? 'neg' : 'muted')
+      },
+      cents(value) { return Math.round((Number(value) || 0) * 100) + '¢' },
+      count(value) { return String(Math.round((Number(value) || 0) * 100) / 100) },
+      pct(value) { return Math.round((Number(value) || 0) * 100) + '%' },
+      instant(stamp) {
+        if (!stamp) return 0
+        const iso = stamp.indexOf('T') === -1 ? stamp.replace(' ', 'T') + 'Z' : stamp
+        const parsed = Date.parse(iso)
+        return Number.isFinite(parsed) ? parsed : 0
+      },
+      ago(stamp) {
+        const at = this.instant(stamp)
+        if (!at) return ''
+        const seconds = Math.max(0, Math.round((Date.now() - at) / 1000))
+        if (seconds < 60) return seconds + 's ago'
+        if (seconds < 3600) return Math.round(seconds / 60) + 'm ago'
+        if (seconds < 86400) return Math.round(seconds / 3600) + 'h ago'
+        return Math.round(seconds / 86400) + 'd ago'
+      },
+      clock() {
+        const at = new Date()
+        return ('0' + at.getHours()).slice(-2) + ':' + ('0' + at.getMinutes()).slice(-2) + ':' + ('0' + at.getSeconds()).slice(-2)
+      },
+      day(stamp) { return stamp ? stamp.slice(0, 10) : '' },
+      headers(json) {
+        const head = { Accept: 'application/json' }
+        if (json) head['Content-Type'] = 'application/json'
+        try {
+          const token = localStorage.getItem('token')
+          if (token) head.Authorization = 'Bearer ' + token
+        }
+        catch (e) { /* private mode: fall back to the session cookie */ }
+        return head
+      },
+
+      /* One market and side, ready to render. */
+      holding(row, paper) {
+        const marked = Number(row.mark) > 0
+        return {
+          key: row.venue + row.marketExternalId + row.side + (paper ? 'p' : ''),
+          question: row.question,
+          ticker: row.marketExternalId,
+          venue: row.venue,
+          side: String(row.side || '').toUpperCase(),
+          sideClass: String(row.side || '').toLowerCase() === 'no' ? 'no' : 'yes',
+          outcome: row.outcomeLabel || '',
+          strategies: (row.strategies || []).map(function (s) { return s.name }).join(', '),
+          hand: row.source === 'venue',
+          closes: this.day(row.endsAt),
+          size: this.count(row.size),
+          paid: this.cents(row.avgPrice),
+          mark: marked ? this.cents(row.mark) : '—',
+          value: this.usd(row.markValue),
+          pnl: marked ? this.signed(row.unrealized) : '—',
+          pnlTone: marked ? this.tone(row.unrealized) : 'muted',
+        }
+      },
+
+      apply(data) {
+        const rows = data.positions || []
+        const totals = data.totals || {}
+        const live = []
+        const paper = []
+
+        for (const row of rows) {
+          if (row.source === 'paper') paper.push(this.holding(row, true))
+          else live.push(this.holding(row, false))
+        }
+
+        this.accounts = (data.accounts || []).map(function (account) {
+          return {
+            venue: account.venue,
+            balance: (Number(account.balance) < 0 ? '-$' : '$') + Math.abs(Number(account.balance) || 0).toFixed(2),
+            identifier: account.maskedIdentifier,
+            status: account.status,
+            error: account.lastError,
+            syncedAt: account.lastSyncedAt,
+            /* An account can be 'active' and still not answering — a
+               timeout is not a revoked key. Saying 'active' beside the
+               reason it is failing reads as a contradiction, so the
+               headline follows the symptom rather than the status. */
+            fault: account.status === 'active' ? 'not syncing' : account.status,
+          }
+        })
+        this.broken = this.accounts.filter(function (account) { return account.status !== 'active' || account.error })
+
+        this.positions = live
+        this.paper = paper
+
+        this.orders = (data.orders || []).map(function (order, index) {
+          return {
+            key: 'o' + index,
+            question: order.question,
+            venue: order.venue,
+            side: String(order.side || '').toUpperCase(),
+            sideClass: String(order.side || '').toLowerCase() === 'no' ? 'no' : 'yes',
+            outcome: order.outcomeLabel || '',
+            status: order.status,
+            strategy: order.strategy || '',
+            hand: order.source === 'venue',
+            placedAt: order.placedAt,
+            limit: Math.round((Number(order.limitPrice) || 0) * 100) + '¢',
+            left: (Math.round((Number(order.remaining) || 0) * 100) / 100) + ' / ' + (Math.round((Number(order.size) || 0) * 100) / 100),
+            committed: '$' + (Number(order.committed) || 0).toFixed(2),
+          }
+        })
+
+        this.pending = (data.pending || []).map(function (decision) {
+          return {
+            id: decision.id,
+            question: decision.question || decision.venue,
+            side: String(decision.side || '').toUpperCase(),
+            sideClass: String(decision.side || '').toLowerCase() === 'no' ? 'no' : 'yes',
+            outcome: decision.outcomeLabel || '',
+            strategy: decision.strategy,
+            evidence: 'edge ' + Math.round((Number(decision.edge) || 0) * 100) + ' pts · confidence ' + Math.round((Number(decision.confidence) || 0) * 100) + '%',
+            rationale: decision.rationale || '',
+            stake: '$' + (Number(decision.notional) || 0).toFixed(2),
+            limit: Math.round((Number(decision.limitPrice) || 0) * 100) + '¢',
+          }
+        })
+
+        this.settled = (data.settled || []).map(function (position, index) {
+          const realized = Number(position.realized) || 0
+          return {
+            key: 's' + index,
+            question: position.question,
+            outcome: position.outcomeLabel || position.side,
+            result: position.won ? 'won' : 'lost',
+            resultClass: position.won ? 'yes' : 'no',
+            strategy: position.strategy + (position.mode === 'paper' ? ' · paper' : ''),
+            settledAt: position.settledAt,
+            size: String(Math.round((Number(position.size) || 0) * 100) / 100),
+            cost: '$' + (Number(position.cost) || 0).toFixed(2),
+            realized: (realized > 0 ? '+' : '') + (realized < 0 ? '-$' : '$') + Math.abs(realized).toFixed(2),
+            realizedTone: realized > 0 ? 'pos' : (realized < 0 ? 'neg' : 'muted'),
+          }
+        })
+
+        this.totals = {
+          cash: this.usd(totals.cash),
+          cost: this.usd(totals.cost),
+          markValue: this.usd(totals.markValue),
+          unrealized: this.signed(totals.unrealized),
+          unrealizedTone: this.tone(totals.unrealized),
+          realizedToday: this.signed(totals.realizedToday),
+          realizedTodayTone: this.tone(totals.realizedToday),
+          realizedAll: this.signed(totals.realizedAll),
+          realizedAllTone: this.tone(totals.realizedAll),
+          committed: this.usd(totals.committed),
+          paperUnrealized: this.signed(totals.paperUnrealized),
+          paperTone: this.tone(totals.paperUnrealized),
+          positionCount: Number(totals.positions) || 0,
+        }
+
+        this.empty = live.length === 0 && paper.length === 0 && this.orders.length === 0 && this.pending.length === 0
+        this.stamp = this.clock()
+      },
+
+      async load(fromVenue) {
+        try {
+          const response = await fetch('/api/trading/positions' + (fromVenue ? '?refresh=1' : ''), {
+            headers: this.headers(false),
+            credentials: 'same-origin',
+          })
+
+          if (response.status === 401) {
+            this.signedIn = false
+            this.live = false
+            this.loading = false
+            return
+          }
+
+          const data = await response.json()
+          if (!response.ok) throw new Error(data.message || data.error || ('Request failed (' + response.status + ')'))
+
+          this.signedIn = true
+          this.apply(data)
+          this.error = ''
+          this.live = true
+        }
+        catch (err) {
+          /* The last good book stays on screen. A page that blanks on a
+             dropped request is worse than one that says it is stale. */
+          this.error = err && err.message ? err.message : String(err)
+          this.live = false
+        }
+        finally {
+          this.loading = false
+        }
+      },
+
+      async review(id, approve) {
+        this.busy = id
+        this.note = ''
+        try {
+          const response = await fetch('/api/trading/decisions/' + id + '/review', {
+            method: 'POST',
+            headers: this.headers(true),
+            credentials: 'same-origin',
+            body: JSON.stringify({ approve: approve }),
+          })
+          const data = await response.json()
+          if (!response.ok) throw new Error(data.message || data.error || ('Request failed (' + response.status + ')'))
+          this.note = approve
+            ? (data.status === 'executed' ? 'Order placed.' : 'Approved, but no order was placed: ' + (data.reason || 'see the decision feed.'))
+            : 'Decision skipped.'
+          await this.load(true)
+        }
+        catch (err) {
+          this.note = err && err.message ? err.message : String(err)
+        }
+        finally {
+          this.busy = 0
+        }
+      },
+
+      start() {
+        this.load(true)
+        setInterval(() => { this.load(true) }, {{ POLL_SECONDS }} * 1000)
+      },
+    }"
+    x-init="start()"
+  >
+    <div class="app">
+      @include('nav')
+
+      <main class="mx-auto px-4 py-8 sm:px-6 max-w-6xl">
+        <div class="flex flex-wrap gap-3 items-end justify-between">
+          <div>
+            <div class="flex gap-2 items-center">
+              <span class="live-dot" :class="live ? 'on' : ''"></span>
+              <h1 class="display font-black text-3xl tracking-tight sm:text-4xl">Your book</h1>
+            </div>
+            <p class="mt-1 muted">
+              Every position, order, and pending decision across your connected venues — marked to the price right now.
+            </p>
+          </div>
+
+          <div class="flex gap-2 items-center">
+            <span class="text-xs faint num" x-text="loading ? 'loading…' : (stamp ? 'as of ' + stamp : '')"></span>
+            <button type="button" class="px-4 h-9 font-bold text-sm rounded-lg btn" @click="load(true)">Refresh</button>
+          </div>
+        </div>
+
+        <p x-show="error" x-cloak class="px-4 py-3 mt-5 text-sm rounded-xl card" role="status">
+          <span class="neg font-bold">Not updating</span>
+          <span class="muted" x-text="'— ' + error + '. These are the last figures received.'"></span>
+        </p>
+        <p x-show="note" x-cloak class="px-4 py-3 mt-5 text-sm rounded-xl card" role="status" x-text="note"></p>
+
+        {{-- Not signed in. Nothing here is public, so this is the whole page. --}}
+        <section x-show="!signedIn" x-cloak class="p-8 mt-6 text-center rounded-2xl card">
+          <h2 class="display font-black text-xl">Sign in to see your book</h2>
+          <p class="mt-2 mx-auto max-w-md leading-relaxed muted">Positions, orders, and P&amp;L are private to the account that holds them. Sign in, connect a venue, and this page fills itself.</p>
+          <div class="flex flex-wrap gap-3 justify-center mt-6">
+            <a href="/login" data-no-router class="px-5 py-2.5 font-bold text-sm rounded-lg btn btn-primary">Log in</a>
+            <a href="/signup" data-no-router class="px-5 py-2.5 font-bold text-sm rounded-lg btn">Create an account</a>
+          </div>
+        </section>
+
+        <div x-show="signedIn">
+          {{-- Money, five ways: what is uncommitted, what is committed, what
+               that is worth now, the difference, and what today has already
+               banked. --}}
+          <section class="grid gap-3 grid-cols-2 mt-6 lg:grid-cols-5 sm:grid-cols-3">
+            <div class="p-4 rounded-2xl card">
+              <div class="font-black text-2xl num" x-text="totals.cash"></div>
+              <div class="mt-0.5 font-semibold text-xs tracking-wide uppercase muted">Cash at venues</div>
+            </div>
+            <div class="p-4 rounded-2xl card">
+              <div class="font-black text-2xl num" x-text="totals.cost"></div>
+              <div class="mt-0.5 font-semibold text-xs tracking-wide uppercase muted"><span x-text="totals.positionCount"></span> positions, at cost</div>
+            </div>
+            <div class="p-4 rounded-2xl card">
+              <div class="font-black text-2xl num" x-text="totals.markValue"></div>
+              <div class="mt-0.5 font-semibold text-xs tracking-wide uppercase muted">Worth now</div>
+            </div>
+            <div class="p-4 rounded-2xl card">
+              <div class="font-black text-2xl num" :class="totals.unrealizedTone" x-text="totals.unrealized"></div>
+              <div class="mt-0.5 font-semibold text-xs tracking-wide uppercase muted">Unrealized</div>
+            </div>
+            <div class="p-4 rounded-2xl card">
+              <div class="font-black text-2xl num" :class="totals.realizedTodayTone" x-text="totals.realizedToday"></div>
+              <div class="mt-0.5 font-semibold text-xs tracking-wide uppercase muted">Realized today</div>
+            </div>
+          </section>
+
+          {{-- No venue connected: the one thing to do, said once. --}}
+          <section x-show="!loading && accounts.length === 0" x-cloak class="p-8 mt-5 text-center rounded-2xl card">
+            <h2 class="display font-black text-xl">No venue connected yet</h2>
+            <p class="mt-2 mx-auto max-w-lg leading-relaxed muted">
+              Connect Kalshi with an API key and this page shows what that account holds — including positions you took in Kalshi's own app, not only the ones PredictHQ opened.
+            </p>
+            <a href="/account" data-no-router class="inline-flex items-center px-5 py-2.5 mt-6 font-bold text-sm rounded-lg btn btn-primary">Connect a venue →</a>
+          </section>
+
+          {{-- Connected accounts, with whatever the venue last said. --}}
+          <section x-show="accounts.length > 0" x-cloak class="flex flex-wrap gap-3 mt-5">
+            <template x-for="account in accounts" :key="account.venue">
+              <div class="flex gap-3 items-center px-4 py-3 rounded-xl card">
+                <span class="tag brand" x-text="account.venue"></span>
+                <div class="min-w-0">
+                  <div class="font-bold num" x-text="account.balance"></div>
+                  <div class="text-xs truncate faint">
+                    <span x-text="account.identifier"></span>
+                    <span x-text="account.status === 'active' ? '· synced ' + ago(account.syncedAt) : '· ' + account.status"></span>
+                  </div>
+                </div>
+              </div>
+            </template>
+            <a href="/account" data-no-router class="flex items-center px-4 py-3 font-bold text-sm rounded-xl btn">Manage venues</a>
+          </section>
+
+          {{-- A venue that stopped answering. Said plainly, because a stale
+               balance that looks live is how somebody trades on a number
+               that is hours old. --}}
+          <template x-for="account in broken" :key="'err' + account.venue">
+            <p class="px-4 py-3 mt-3 text-sm rounded-xl card">
+              <strong class="neg" x-text="account.venue + ' · ' + account.fault"></strong>
+              <span class="muted" x-text="account.error ? '— ' + account.error : '— reconnect it from your account page.'"></span>
+            </p>
+          </template>
+
+          {{-- Nothing riding. Not an error, and it should not look like one. --}}
+          <section x-show="!loading && accounts.length > 0 && empty" x-cloak class="p-8 mt-5 text-center rounded-2xl card">
+            <h2 class="display font-black text-xl">Nothing open right now</h2>
+            <p class="mt-2 mx-auto max-w-lg leading-relaxed muted">Your connected venues report no positions and no resting orders. Anything a strategy opens, or you place yourself, appears here within {{ POLL_SECONDS }} seconds.</p>
+            <div class="flex flex-wrap gap-3 justify-center mt-6">
+              <a href="/" data-no-router class="px-5 py-2.5 font-bold text-sm rounded-lg btn btn-primary">Open the odds board</a>
+              <a href="/markets" data-no-router class="px-5 py-2.5 font-bold text-sm rounded-lg btn">See what smart money is buying</a>
+            </div>
+          </section>
+
+          {{-- Holdings. --}}
+          <section x-show="positions.length > 0" x-cloak class="overflow-hidden mt-6 rounded-2xl card">
+            <div class="flex items-center justify-between px-4 py-3 border-b bd">
+              <span class="font-bold">Open positions</span>
+              <span class="text-xs faint"><span x-text="positions.length"></span> held · <span class="num" :class="totals.unrealizedTone" x-text="totals.unrealized"></span> unrealized</span>
+            </div>
+
+            <template x-for="position in positions" :key="position.key">
+              <div class="row">
+                <div class="min-w-0">
+                  <div class="font-bold truncate" x-text="position.question"></div>
+                  <div class="row-meta">
+                    <span class="tag" :class="position.sideClass" x-text="position.side"></span>
+                    <span class="text-xs muted" x-show="position.outcome" x-text="position.outcome"></span>
+                    <span class="text-xs faint num" x-text="position.ticker"></span>
+                    <span class="text-xs muted" x-show="position.strategies" x-text="position.strategies"></span>
+                    <span class="text-xs faint" x-show="position.hand">placed outside PredictHQ</span>
+                    <span class="text-xs faint" x-show="position.closes" x-text="'closes ' + position.closes"></span>
+                  </div>
+                </div>
+
+                <div class="figures">
+                  <div class="figure"><span class="figure-label">Size</span><span class="font-bold num" x-text="position.size"></span></div>
+                  <div class="figure"><span class="figure-label">Paid</span><span class="font-bold num" x-text="position.paid"></span></div>
+                  <div class="figure"><span class="figure-label">Now</span><span class="font-bold num" x-text="position.mark"></span></div>
+                  <div class="figure"><span class="figure-label">Value</span><span class="font-bold num" x-text="position.value"></span></div>
+                  <div class="figure"><span class="figure-label">P&amp;L</span><span class="font-black num" :class="position.pnlTone" x-text="position.pnl"></span></div>
+                </div>
+              </div>
+            </template>
+          </section>
+
+          {{-- Orders still working. --}}
+          <section x-show="orders.length > 0" x-cloak class="overflow-hidden mt-5 rounded-2xl card">
+            <div class="flex items-center justify-between px-4 py-3 border-b bd">
+              <span class="font-bold">Working orders</span>
+              <span class="text-xs faint"><span class="num" x-text="totals.committed"></span> committed</span>
+            </div>
+
+            <template x-for="order in orders" :key="order.key">
+              <div class="row">
+                <div class="min-w-0">
+                  <div class="font-bold truncate" x-text="order.question"></div>
+                  <div class="row-meta">
+                    <span class="tag" :class="order.sideClass" x-text="order.side"></span>
+                    <span class="text-xs muted" x-show="order.outcome" x-text="order.outcome"></span>
+                    <span class="text-xs muted" x-text="order.status"></span>
+                    <span class="text-xs faint" x-show="order.strategy" x-text="order.strategy"></span>
+                    <span class="text-xs faint" x-show="order.hand">placed outside PredictHQ</span>
+                    <span class="text-xs faint" x-text="ago(order.placedAt)"></span>
+                  </div>
+                </div>
+
+                <div class="figures">
+                  <div class="figure"><span class="figure-label">Limit</span><span class="font-bold num" x-text="order.limit"></span></div>
+                  <div class="figure"><span class="figure-label">Left</span><span class="font-bold num" x-text="order.left"></span></div>
+                  <div class="figure"><span class="figure-label">Committed</span><span class="font-black num" x-text="order.committed"></span></div>
+                </div>
+              </div>
+            </template>
+          </section>
+
+          {{-- Decisions the engine has made and is waiting on a person for.
+               Approving runs the same executor the schedule does, so the
+               risk checks are the same ones. --}}
+          <section x-show="pending.length > 0" x-cloak class="overflow-hidden mt-5 rounded-2xl card">
+            <div class="flex items-center justify-between px-4 py-3 border-b bd">
+              <span class="font-bold">Waiting on you</span>
+              <span class="text-xs faint"><span x-text="pending.length"></span> to review</span>
+            </div>
+
+            <template x-for="decision in pending" :key="decision.id">
+              <div class="row">
+                <div class="min-w-0">
+                  <div class="font-bold truncate" x-text="decision.question"></div>
+                  <div class="row-meta">
+                    <span class="tag" :class="decision.sideClass" x-text="decision.side"></span>
+                    <span class="text-xs muted" x-show="decision.outcome" x-text="decision.outcome"></span>
+                    <span class="text-xs muted" x-text="decision.strategy"></span>
+                    <span class="text-xs faint num" x-text="decision.evidence"></span>
+                  </div>
+                  <p class="mt-1.5 max-w-xl text-xs leading-relaxed muted" x-show="decision.rationale" x-text="decision.rationale"></p>
+                </div>
+
+                <div class="flex flex-wrap gap-3 items-center justify-end">
+                  <div class="figure"><span class="figure-label">Stake</span><span class="font-bold num" x-text="decision.stake"></span></div>
+                  <div class="figure"><span class="figure-label">Limit</span><span class="font-bold num" x-text="decision.limit"></span></div>
+                  <button type="button" class="px-3 h-9 font-bold text-sm rounded-lg btn btn-primary" :disabled="busy === decision.id" @click="review(decision.id, true)">Place</button>
+                  <button type="button" class="px-3 h-9 font-bold text-sm rounded-lg btn" :disabled="busy === decision.id" @click="review(decision.id, false)">Skip</button>
+                </div>
+              </div>
+            </template>
+          </section>
+
+          {{-- Paper, kept apart from the money above rather than summed into
+               it. A simulated gain added to a real balance is a number that
+               describes nothing. --}}
+          <section x-show="paper.length > 0" x-cloak class="overflow-hidden mt-5 rounded-2xl card">
+            <div class="flex items-center justify-between px-4 py-3 border-b bd">
+              <span class="font-bold">Paper positions</span>
+              <span class="text-xs faint">not real money · <span class="num" :class="totals.paperTone" x-text="totals.paperUnrealized"></span></span>
+            </div>
+
+            <template x-for="position in paper" :key="position.key">
+              <div class="row">
+                <div class="min-w-0">
+                  <div class="font-bold truncate" x-text="position.question"></div>
+                  <div class="row-meta">
+                    <span class="tag" :class="position.sideClass" x-text="position.side"></span>
+                    <span class="text-xs muted" x-show="position.outcome" x-text="position.outcome"></span>
+                    <span class="text-xs muted" x-text="position.strategies"></span>
+                  </div>
+                </div>
+                <div class="figures">
+                  <div class="figure"><span class="figure-label">Size</span><span class="font-bold num" x-text="position.size"></span></div>
+                  <div class="figure"><span class="figure-label">Paid</span><span class="font-bold num" x-text="position.paid"></span></div>
+                  <div class="figure"><span class="figure-label">Now</span><span class="font-bold num" x-text="position.mark"></span></div>
+                  <div class="figure"><span class="figure-label">P&amp;L</span><span class="font-black num" :class="position.pnlTone" x-text="position.pnl"></span></div>
+                </div>
+              </div>
+            </template>
+          </section>
+
+          {{-- What already happened. The only section here that is finished. --}}
+          <section x-show="settled.length > 0" x-cloak class="overflow-hidden mt-5 rounded-2xl card">
+            <div class="flex items-center justify-between px-4 py-3 border-b bd">
+              <span class="font-bold">Recently settled</span>
+              <span class="text-xs faint">all time <span class="num" :class="totals.realizedAllTone" x-text="totals.realizedAll"></span></span>
+            </div>
+
+            <template x-for="position in settled" :key="position.key">
+              <div class="row">
+                <div class="min-w-0">
+                  <div class="font-bold truncate" x-text="position.question"></div>
+                  <div class="row-meta">
+                    <span class="tag" :class="position.resultClass" x-text="position.result"></span>
+                    <span class="text-xs faint" x-text="position.outcome"></span>
+                    <span class="text-xs muted" x-text="position.strategy"></span>
+                    <span class="text-xs faint" x-text="ago(position.settledAt)"></span>
+                  </div>
+                </div>
+                <div class="figures">
+                  <div class="figure"><span class="figure-label">Size</span><span class="font-bold num" x-text="position.size"></span></div>
+                  <div class="figure"><span class="figure-label">Cost</span><span class="font-bold num" x-text="position.cost"></span></div>
+                  <div class="figure"><span class="figure-label">Result</span><span class="font-black num" :class="position.realizedTone" x-text="position.realized"></span></div>
+                </div>
+              </div>
+            </template>
+          </section>
+
+          <p class="mt-6 max-w-3xl text-xs leading-relaxed faint">
+            Positions and balances are read from the venue itself, so what is shown is what the venue reports — including anything you traded in its own app. Prices mark against the last trade seen, which is an estimate of value rather than a price you can sell at.
+          </p>
+        </div>
+      </main>
+
+      @include('footer')
+    </div>
+  </body>
+</html>

@@ -4,6 +4,7 @@ import type {
   PlaceOrderResult,
   TradingClient,
   VenueBalance,
+  VenueOrder,
   VenuePosition,
 } from './venue'
 import { createSign } from 'node:crypto'
@@ -13,6 +14,7 @@ const BASE = process.env.KALSHI_API_BASE_URL || 'https://external-api.kalshi.com
 
 interface KalshiOrder {
   order_id: string
+  ticker?: string
   status?: string
   side?: 'yes' | 'no'
   outcome_side?: 'yes' | 'no'
@@ -23,6 +25,7 @@ interface KalshiOrder {
   maker_fill_cost_dollars?: string
   yes_price_dollars?: string
   no_price_dollars?: string
+  created_time?: string
 }
 
 /**
@@ -42,6 +45,15 @@ export class KalshiTradingClient implements TradingClient {
   readonly supportsIdempotentReplay = true
 
   constructor(private readonly credentials: KalshiCredentials) {}
+
+  /**
+   * The subaccount selector, or nothing when the primary account is in
+   * use. `prefix` is the separator it needs where it lands — '?' when it
+   * opens the query string, '&' when it joins one.
+   */
+  private subaccountQuery(prefix: '?' | '&' = '?'): string {
+    return this.credentials.subaccount === undefined ? '' : `${prefix}subaccount=${this.credentials.subaccount}`
+  }
 
   /**
    * The signature Kalshi expects.
@@ -95,8 +107,7 @@ export class KalshiTradingClient implements TradingClient {
 
   async fetchBalance(): Promise<VenueBalance> {
     // `balance` is in cents.
-    const suffix = this.credentials.subaccount === undefined ? '' : `?subaccount=${this.credentials.subaccount}`
-    const data = await this.request<{ balance: number }>('GET', `/portfolio/balance${suffix}`)
+    const data = await this.request<{ balance: number }>('GET', `/portfolio/balance${this.subaccountQuery()}`)
     return { available: (data.balance ?? 0) / 100 }
   }
 
@@ -107,7 +118,7 @@ export class KalshiTradingClient implements TradingClient {
         position_fp?: string
         market_exposure_dollars?: string
       }>
-    }>('GET', `/portfolio/positions${this.credentials.subaccount === undefined ? '' : `?subaccount=${this.credentials.subaccount}`}`)
+    }>('GET', `/portfolio/positions${this.subaccountQuery()}`)
 
     const positions: VenuePosition[] = []
     for (const p of data.market_positions ?? []) {
@@ -127,6 +138,51 @@ export class KalshiTradingClient implements TradingClient {
     }
 
     return positions
+  }
+
+  /**
+   * Every order still resting on the account, ours or the user's.
+   *
+   * `status=resting` is Kalshi's name for a live limit order. Partially
+   * filled orders are still resting, so the remaining count is read
+   * rather than assumed: an order half filled commits half the capital,
+   * and reporting the initial count would double-count the filled half
+   * that is already a position.
+   */
+  async fetchOpenOrders(): Promise<VenueOrder[]> {
+    const orders: VenueOrder[] = []
+    let cursor = ''
+
+    // Paged, because an account can rest more orders than one page
+    // holds and a truncated list reads as "the rest were cancelled".
+    do {
+      const query = `?status=resting&limit=200${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}${this.subaccountQuery('&')}`
+      const page = await this.request<{ orders?: KalshiOrder[], cursor?: string }>('GET', `/portfolio/orders${query}`)
+
+      for (const order of page.orders ?? []) {
+        if (!order.ticker)
+          continue
+
+        const side = order.outcome_side ?? order.side ?? 'yes'
+        const remaining = Number(order.remaining_count_fp ?? 0)
+        if (!(remaining > 0))
+          continue
+
+        orders.push({
+          externalOrderId: order.order_id,
+          marketExternalId: order.ticker,
+          side,
+          limitPrice: Number(side === 'no' ? order.no_price_dollars : order.yes_price_dollars) || 0,
+          size: Number(order.initial_count_fp ?? remaining) || remaining,
+          remainingSize: remaining,
+          placedAt: order.created_time ?? '',
+        })
+      }
+
+      cursor = page.cursor ?? ''
+    } while (cursor && orders.length < 1000)
+
+    return orders
   }
 
   async placeOrder(request: PlaceOrderRequest): Promise<PlaceOrderResult> {
@@ -196,8 +252,7 @@ export class KalshiTradingClient implements TradingClient {
 
   async cancelOrder(externalOrderId: string): Promise<boolean> {
     try {
-      const suffix = this.credentials.subaccount === undefined ? '' : `?subaccount=${this.credentials.subaccount}`
-      await this.request('DELETE', `/portfolio/events/orders/${encodeURIComponent(externalOrderId)}${suffix}`)
+      await this.request('DELETE', `/portfolio/events/orders/${encodeURIComponent(externalOrderId)}${this.subaccountQuery()}`)
       return true
     }
     catch (error) {
