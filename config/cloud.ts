@@ -16,7 +16,7 @@ const productionRuntimeEnv = {
   DB_VITESS_SHARDED: 'false',
   PORT_API: '3071',
   BROADCAST_HOST: '0.0.0.0',
-  BROADCAST_PORT: '3072',
+  BROADCAST_PORT: '3078',
   BROADCAST_SCHEME: 'ws',
   QUEUE_DRIVER: 'database',
   QUEUE_FAILED_DRIVER: 'database',
@@ -695,7 +695,7 @@ export const tsCloud: TsCloudConfig = {
    * a way they do not on a dedicated server: eleven projects share this
    * machine, and 3000/3001/3010/3011/3024/3032/3040/3049/3060/3100 are
    * already claimed by other tenants (plus each one's `+1`/`+8` sidecar).
-   * 3070/3071/3072 are reserved for this app. Picking an occupied port does not
+   * 3070/3071/3078 are reserved for this app. Picking an occupied port does not
    * fail loudly — the second service simply cannot bind, and the tenant that
    * was already there keeps serving. Background roles are deliberately
    * portless so ts-cloud health-checks their systemd process rather than an
@@ -782,7 +782,7 @@ export const tsCloud: TsCloudConfig = {
       root: '.',
       domain: 'realtime.predicthq.org',
       start: 'bun app/Runtimes/RealtimeScheduler.ts',
-      port: 3072,
+      port: 3078,
       healthCheck: { path: '/health' },
       // 331M resident, 466M peak, never throttled.
       memoryHigh: '1G',
