@@ -106,9 +106,11 @@ const navActive = 'live'
       connectLive() {
         try {
           const ws = new WebSocket(predicthqRealtime.url('{{ broadcastPort }}'))
-          ws.onopen = () => { this.connected = true; ws.send(JSON.stringify({ type: 'subscribe', channel: 'odds' })); ws.send(JSON.stringify({ type: 'subscribe', channel: 'alerts' })) }
+          ws.onopen = () => { ws.send(JSON.stringify({ event: 'subscribe', channel: 'odds' })); ws.send(JSON.stringify({ event: 'subscribe', channel: 'alerts' })) }
           ws.onmessage = (e) => {
             let msg; try { msg = JSON.parse(e.data) } catch { return }
+            if (msg.event === 'subscription_succeeded')
+              this.connected = true
             if (msg.channel === 'odds' && msg.event === 'board:updated' && msg.data && msg.data.events) {
               const next = { ...this.live }; const fresh = []
               for (const ev of msg.data.events) for (const s of ev.selections) for (const q of s.quotes) {

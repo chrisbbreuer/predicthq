@@ -159,10 +159,12 @@ const navActive = 'markets'
       connectFlow() {
         try {
           const ws = new WebSocket(predicthqRealtime.url('{{ broadcastPort }}'))
-          ws.onopen = () => { this.connected = true; ws.send(JSON.stringify({ type: 'subscribe', channel: 'prediction-markets' })) }
+          ws.onopen = () => ws.send(JSON.stringify({ event: 'subscribe', channel: 'prediction-markets' }))
           ws.onclose = () => { this.connected = false; setTimeout(() => this.connectFlow(), 5000) }
           ws.onmessage = (event) => {
             let message; try { message = JSON.parse(event.data) } catch { return }
+            if (message.channel === 'prediction-markets' && message.event === 'subscription_succeeded')
+              this.connected = true
             if (message.channel === 'prediction-markets' && message.event === 'flow:updated')
               this.refreshFlow()
           }

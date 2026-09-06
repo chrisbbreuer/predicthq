@@ -87,6 +87,20 @@ describe('shared marketing shell', () => {
     expect(markets).toContain("fetch('/api/markets/graph', { cache: 'no-store' })")
     expect(markets).toContain('setInterval(() => refreshFlow(), 60000)')
     expect(markets).toContain("channel: 'prediction-markets'")
+    expect(markets).toContain("event: 'subscribe'")
+    expect(markets).toContain("message.event === 'subscription_succeeded'")
     expect(markets).toContain("message.event === 'flow:updated'")
+  })
+
+  it('uses the public TLS websocket and ts-broadcasting protocol', async () => {
+    const realtime = await Bun.file('resources/partials/realtime.stx').text()
+    const live = await Bun.file('resources/views/live.stx').text()
+    const home = await Bun.file('resources/views/index.stx').text()
+
+    expect(realtime).toContain("'wss://realtime.' + apex + '/ws'")
+    expect(realtime).toContain("return 'ws://' + host + '/ws'")
+    expect(live).toContain("event: 'subscribe'")
+    expect(home).toContain("event: 'subscribe'")
+    expect(`${realtime}\n${live}\n${home}`).not.toContain("type: 'subscribe'")
   })
 })

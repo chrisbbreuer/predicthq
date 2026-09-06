@@ -232,7 +232,7 @@ const navActive = 'board'
       connectLive() {
         try {
           const ws = new WebSocket(this.liveUrl)
-          ws.onopen = () => ws.send(JSON.stringify({ type: 'subscribe', channel: 'odds' }))
+          ws.onopen = () => ws.send(JSON.stringify({ event: 'subscribe', channel: 'odds' }))
           ws.onmessage = (e) => {
             let msg; try { msg = JSON.parse(e.data) } catch { return }
             if (msg.channel !== 'odds' || msg.event !== 'board:updated' || !(msg.data && msg.data.events)) return

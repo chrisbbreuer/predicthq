@@ -10,20 +10,21 @@
   that matter.
 
   Both are decided here, once, from the page the visitor actually loaded.
-  `BROADCAST_PORT` still names the port; the including page reads it into
-  `broadcastPort` from its own server scope.
+  Production uses the TLS-routed realtime subdomain; `BROADCAST_PORT` remains
+  the direct local-development port and is read by each including page.
 --}}
 <script>
-  window.predicthqRealtime = {
-    /** wss on a secure page, ws otherwise. Never a hardcoded host. */
+  globalThis.predicthqRealtime = {
+    /** Use the public TLS socket in production and the configured port locally. */
     url(port) {
-      var scheme = location.protocol === 'https:' ? 'wss:' : 'ws:'
+      const secure = location.protocol === 'https:'
+      if (secure) {
+        const apex = location.hostname.replace(/^www\./, '')
+        return 'wss://realtime.' + apex + '/ws'
+      }
 
-      // A reverse proxy terminating TLS usually fronts the socket on the
-      // same origin, so a port is only appended when one is configured
-      // and we are not already on the standard web ports.
-      var host = location.hostname
-      return port ? scheme + '//' + host + ':' + port : scheme + '//' + location.host
+      const host = port ? location.hostname + ':' + port : location.host
+      return 'ws://' + host + '/ws'
     },
   }
 </script>
