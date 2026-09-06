@@ -14,6 +14,7 @@ const productionRuntimeEnv = {
   DB_DATABASE: 'predicthq',
   DB_USERNAME: 'predicthq',
   DB_VITESS_SHARDED: 'false',
+  PORT_API: '3071',
   QUEUE_DRIVER: 'database',
   QUEUE_FAILED_DRIVER: 'database',
 }
@@ -740,14 +741,9 @@ export const tsCloud: TsCloudConfig = {
         // ordinary deploys equally safe and idempotent.
         'bun node_modules/@stacksjs/buddy/dist/cli.js seed --only Sport,Bookmaker',
       ],
-      env: {
-        ...productionRuntimeEnv,
-        // Where `main` proxies /api. On a shared host the server refuses to
-        // guess a port, and rightly so: guessing would forward this app's API
-        // traffic to whichever neighbour happened to hold the default. Must
-        // match the `api` site's port below.
-        PORT_API: '3071',
-      },
+      // Where `main` proxies /api is declared in productionRuntimeEnv so all
+      // private roles share one explicit internal API target.
+      env: productionRuntimeEnv,
     },
 
     // Reached only through main's same-origin /api proxy. No `domain`, so
