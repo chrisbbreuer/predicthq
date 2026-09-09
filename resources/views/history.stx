@@ -72,7 +72,7 @@ async function load(): Promise<void> {
       { label: 'Losses incurred', value: money(stats.lost), detail: 'Sum of negative market results', tone: 'neg', icon: 'i-hugeicons-arrow-down-right-01' },
       { label: 'Win rate', value: stats.winRate === null ? '—' : (stats.winRate * 100).toFixed(1) + '%', detail: stats.wins + ' won · ' + stats.losses + ' lost · ' + stats.breakeven + ' even', tone: '', icon: 'i-hugeicons-target-01' },
     ])
-    extras.set({ fees: money(stats.fees), best: pnl(stats.best), worst: pnl(stats.worst), open: stats.open, markets: stats.bets, unknown: stats.unknownResults })
+    extras.set({ fees: money(stats.fees), best: pnl(stats.best), bestTone: tone(stats.best), worst: pnl(stats.worst), worstTone: tone(stats.worst), open: stats.open, markets: stats.bets, unknown: stats.unknownResults })
     bets.set(data.bets.map((row: any) => {
       const value = row.realized === null ? null : Number(row.realized) - Number(row.fees || 0)
       return { ...row, venueLabel: venueName(row.venue), tradedLabel: money(row.traded), pnlLabel: pnl(value), tone: tone(value), date: date(row.at),
@@ -135,13 +135,13 @@ void initialize()
         <div :if="signedIn()">
           <div class="flex flex-wrap items-center justify-between gap-4 mt-8 mb-5">
             <div class="flex gap-1 p-1 rounded-xl card"><button @click="setMode('live')" :class="mode() === 'live' ? 'btn-primary' : ''" class="px-5 py-2 text-sm font-semibold rounded-lg">Live accounts</button><button @click="setMode('paper')" :class="mode() === 'paper' ? 'btn-primary' : ''" class="px-5 py-2 text-sm font-semibold rounded-lg">Paper trading</button></div>
-            <div class="flex items-center gap-3"><span class="text-xs font-semibold uppercase tracking-wide faint">All time</span><select :model="venue" @change="filter()" aria-label="Exchange" class="input rounded-lg px-3 py-2 text-sm"><option value="">All exchanges</option value="kalshi">Kalshi</option><option value="polymarket-us">Polymarket US</option><option value="polymarket">Polymarket International</option></select></div>
+            <div class="flex items-center gap-3"><span class="text-xs font-semibold uppercase tracking-wide faint">All time</span><select :model="venue" @change="filter()" aria-label="Exchange" class="input rounded-lg px-3 py-2 text-sm"><option value="">All exchanges</option><option value="kalshi">Kalshi</option><option value="polymarket-us">Polymarket US</option><option value="polymarket">Polymarket International</option></select></div>
           </div>
           <div :if="mode() === 'paper'" class="card rounded-xl p-4 mb-4 text-sm muted">Paper trades are simulations. Their results are kept separate from your real money.</div>
           <section class="grid gap-3 sm:grid-cols-2 lg:grid-cols-5" aria-label="Lifetime statistics">
             <template x-for="card in cards()" :key="card.label"><div class="card rounded-xl p-5"><div class="flex items-center justify-between gap-2"><p class="text-xs font-semibold muted" x-text="card.label"></p><i class="h-4 w-4 faint" :class="card.icon"></i></div><p class="text-3xl font-bold tracking-tight num mt-5" :class="card.tone" x-text="card.value"></p><p class="text-xs leading-relaxed faint mt-2" x-text="card.detail"></p></div></template>
           </section>
-          <div class="flex flex-wrap gap-x-7 gap-y-3 mt-5 text-sm muted"><span><strong class="num" x-text="extras().markets"></strong> markets</span><span><strong class="num" x-text="extras().open"></strong> open</span><span>Best result <strong class="pos num" x-text="extras().best"></strong></span><span>Worst result <strong class="neg num" x-text="extras().worst"></strong></span><span>Reported fees <strong class="num" x-text="extras().fees"></strong></span></div>
+          <div class="flex flex-wrap gap-x-7 gap-y-3 mt-5 text-sm muted"><span><strong class="num" x-text="extras().markets"></strong> markets</span><span><strong class="num" x-text="extras().open"></strong> open</span><span>Best result <strong class="num" :class="extras().bestTone" x-text="extras().best"></strong></span><span>Worst result <strong class="num" :class="extras().worstTone" x-text="extras().worst"></strong></span><span>Reported fees <strong class="num" x-text="extras().fees"></strong></span></div>
           <p :if="extras().unknown > 0" class="mt-3 text-sm muted"><span x-text="extras().unknown"></span> markets have no realized result available yet. They are excluded from profit and loss.</p>
           <section class="mt-8 card rounded-2xl overflow-hidden">
             <div class="flex flex-wrap items-center justify-between gap-4 p-5 border-b bd">
