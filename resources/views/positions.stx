@@ -70,6 +70,7 @@ function blankTotals(): any {
     paperUnrealized: '+$0.00',
     paperTone: 'muted',
     positionCount: 0,
+    unpricedCount: 0,
   }
 }
 
@@ -188,7 +189,7 @@ function scorecard(value: any): any {
 }
 
 function holding(row: any, isPaper: boolean): any {
-  const marked = Number(row.mark) > 0
+  const marked = row.mark !== null && row.mark !== undefined && Number.isFinite(Number(row.mark))
   const tracker = scorecard(row.scorecard)
   return {
     key: row.venue + row.marketExternalId + row.side + (isPaper ? 'p' : ''),
@@ -203,8 +204,8 @@ function holding(row: any, isPaper: boolean): any {
     closes: day(row.endsAt),
     size: count(row.size),
     paid: cents(row.avgPrice),
-    mark: marked ? cents(row.mark) : '—',
-    value: usd(row.markValue),
+    mark: marked ? cents(row.mark) : 'Unpriced',
+    value: marked ? usd(row.markValue) : '—',
     pnl: marked ? signed(row.unrealized) : '—',
     pnlTone: marked ? tone(row.unrealized) : 'muted',
     scorecard: tracker,
@@ -300,17 +301,18 @@ function apply(data: any): void {
   totals.set({
     cash: usd(rawTotals.cash),
     cost: usd(rawTotals.cost),
-    markValue: usd(rawTotals.markValue),
-    unrealized: signed(rawTotals.unrealized),
+    markValue: rawTotals.markValue === null ? '—' : usd(rawTotals.markValue),
+    unrealized: rawTotals.unrealized === null ? '—' : signed(rawTotals.unrealized),
     unrealizedTone: tone(rawTotals.unrealized),
     realizedToday: signed(rawTotals.realizedToday),
     realizedTodayTone: tone(rawTotals.realizedToday),
     realizedAll: signed(rawTotals.realizedAll),
     realizedAllTone: tone(rawTotals.realizedAll),
     committed: usd(rawTotals.committed),
-    paperUnrealized: signed(rawTotals.paperUnrealized),
+    paperUnrealized: rawTotals.paperUnrealized === null ? '—' : signed(rawTotals.paperUnrealized),
     paperTone: tone(rawTotals.paperUnrealized),
     positionCount: Number(rawTotals.positions) || 0,
+    unpricedCount: Number(rawTotals.unpricedCount) || 0,
   })
 
   empty.set(livePositions.length === 0 && paperPositions.length === 0 && orders().length === 0 && pending().length === 0)
@@ -564,7 +566,7 @@ onMount(start)
             </div>
             <div class="p-4 rounded-2xl card">
               <div class="font-black text-2xl num" x-text="totals().markValue"></div>
-              <div class="mt-0.5 font-semibold text-xs tracking-wide uppercase muted">Worth now</div>
+              <div class="mt-0.5 font-semibold text-xs tracking-wide uppercase muted" x-text="totals().unpricedCount > 0 ? 'Priced holdings' : 'Worth now'"></div>
             </div>
             <div class="p-4 rounded-2xl card">
               <div class="font-black text-2xl num" :class="totals().unrealizedTone" x-text="totals().unrealized"></div>
@@ -575,6 +577,10 @@ onMount(start)
               <div class="mt-0.5 font-semibold text-xs tracking-wide uppercase muted">Realized today</div>
             </div>
           </section>
+
+          <p x-show="totals().unpricedCount > 0" x-cloak class="mt-3 text-sm muted">
+            <span x-text="totals().unpricedCount"></span> positions are awaiting quotes. Their value and unrealized profit or loss are excluded from the totals until a price is available.
+          </p>
 
           {{-- No venue connected: the one thing to do, said once. --}}
           <section x-show="!loading() && accounts().length === 0" x-cloak class="p-8 mt-5 text-center rounded-2xl card">

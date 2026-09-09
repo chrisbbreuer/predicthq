@@ -29,7 +29,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { mergeHoldings } from '../../app/Actions/Trading/GetPositions'
+import { mergeHoldings, pricedTotals } from '../../app/Actions/Trading/GetPositions'
 import { syncAccounts } from '../../app/Services/trading/account-sync'
 import { VenueError } from '../../app/Services/trading/venue'
 import { schemaFor } from '../support/schema'
@@ -315,13 +315,35 @@ describe('merging the venue mirror with our own book', () => {
     expect(holding.unrealized).toBe(1)
   })
 
-  it('reports no mark at all for a market it has no price for', () => {
-    const [holding] = mergeHoldings([], [mirrorRow({ size: 10, avg_price: 0.3, last_price: 0 })])
+  it('preserves an unknown quote without inventing a loss', () => {
+    const [holding] = mergeHoldings([], [mirrorRow({ size: 10, avg_price: 0.3, last_price: null })])
+    expect(holding).toMatchObject({ cost: 3, mark: null, markValue: null, unrealized: null })
+    expect(pricedTotals([holding])).toEqual({ markValue: null, unrealized: null, unpricedCount: 1 })
+  })
 
-    // Not break-even: an unmarked position is unknown, and showing it at
-    // cost invents a profit of exactly nothing.
-    expect(holding.mark).toBe(0)
-    expect(holding.markValue).toBe(0)
+  it('excludes unknown quotes from combined value and profit or loss', () => {
+    const holdings = mergeHoldings([], [
+      mirrorRow({ size: 10, avg_price: 0.3, last_price: null }),
+      mirrorRow({ market_external_id: 'PRICED', size: 10, avg_price: 0.4, last_price: 0.6 }),
+    ])
+    expect(pricedTotals(holdings)).toEqual({ markValue: 6, unrealized: 2, unpricedCount: 1 })
+  })
+
+  it('marks a valid zero YES quote and its complementary NO quote', () => {
+    const yes = mergeHoldings([], [mirrorRow({ side: 'yes', size: 10, avg_price: 0.3, last_price: 0 })])[0]
+    const no = mergeHoldings([], [mirrorRow({ side: 'no', size: 10, avg_price: 0.3, last_price: 0 })])[0]
+    expect(yes).toMatchObject({ mark: 0, markValue: 0, unrealized: -3 })
+    expect(no).toMatchObject({ mark: 1, markValue: 10, unrealized: 7 })
+    expect(pricedTotals([yes])).toEqual({ markValue: 0, unrealized: -3, unpricedCount: 0 })
+  })
+
+  it('keeps a merged strategy holding unpriced when its quote is missing', () => {
+    const holdings = mergeHoldings([
+      bookRow({ size: 10, cost_basis: 5, last_price: null }),
+      bookRow({ trading_strategy_id: 2, size: 6, cost_basis: 3, last_price: null }),
+    ], [])
+    expect(holdings).toHaveLength(1)
+    expect(holdings[0]).toMatchObject({ size: 16, cost: 8, mark: null, markValue: null, unrealized: null })
   })
 })
 

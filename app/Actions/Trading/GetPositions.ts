@@ -79,7 +79,7 @@ export interface BookRow {
   outcome_label: string
   category: string
   market_status: string
-  last_price: number
+  last_price: number | null
   ends_at: string
 }
 
@@ -94,7 +94,7 @@ export interface MirrorRow {
   outcome_label: string
   category: string
   market_status: string
-  last_price: number
+  last_price: number | null
   ends_at: string
 }
 
@@ -176,9 +176,9 @@ export interface Holding {
   size: number
   avgPrice: number
   cost: number
-  mark: number
-  markValue: number
-  unrealized: number
+  mark: number | null
+  markValue: number | null
+  unrealized: number | null
   /** 'venue' | 'engine' | 'both' | 'paper' */
   source: string
   openedAt: string
@@ -295,8 +295,7 @@ export default {
           cash: round(current.reduce((sum, account) => sum + Number(account.balance), 0)),
           positions: live.length,
           cost: round(live.reduce((sum, holding) => sum + holding.cost, 0)),
-          markValue: round(live.reduce((sum, holding) => sum + holding.markValue, 0)),
-          unrealized: round(live.reduce((sum, holding) => sum + holding.unrealized, 0)),
+          ...pricedTotals(live),
           working: working.length,
           committed: round(working.reduce((sum, order) => sum + order.committed, 0)),
           realizedToday: realized.today,
@@ -305,7 +304,7 @@ export default {
           // purpose: adding a simulated gain to a real balance produces a
           // figure that describes nothing.
           paperPositions: paper.length,
-          paperUnrealized: round(paper.reduce((sum, holding) => sum + holding.unrealized, 0)),
+          paperUnrealized: pricedTotals(paper).unrealized,
         },
         positions: holdings.map(holding => ({
           ...holding,
@@ -418,7 +417,7 @@ function openBook(db: Db, userId: number): Promise<BookRow[]> {
       p.cost_basis, p.opened_at,
       COALESCE(m.question, '') AS question, COALESCE(m.outcome_label, '') AS outcome_label,
       COALESCE(m.category, '') AS category, COALESCE(m.status, '') AS market_status,
-      COALESCE(m.last_price, 0) AS last_price, COALESCE(m.ends_at, '') AS ends_at
+      m.last_price AS last_price, COALESCE(m.ends_at, '') AS ends_at
     FROM exchange_positions p
     JOIN trading_strategies s ON s.id = p.trading_strategy_id
     LEFT JOIN prediction_markets m ON m.id = p.prediction_market_id
@@ -434,7 +433,7 @@ function venueMirror(db: Db, userId: number): Promise<MirrorRow[]> {
       v.venue, v.market_external_id, v.side, v.size, v.avg_price, v.synced_at,
       COALESCE(m.question, '') AS question, COALESCE(m.outcome_label, '') AS outcome_label,
       COALESCE(m.category, '') AS category, COALESCE(m.status, '') AS market_status,
-      COALESCE(m.last_price, 0) AS last_price, COALESCE(m.ends_at, '') AS ends_at
+      m.last_price AS last_price, COALESCE(m.ends_at, '') AS ends_at
     FROM venue_positions v
     JOIN exchange_accounts a ON a.id = v.exchange_account_id
     LEFT JOIN prediction_markets m ON m.id = v.prediction_market_id
@@ -555,7 +554,7 @@ export function mergeHoldings(book: BookRow[], mirror: MirrorRow[]): Holding[] {
     const key = keyFor(row.venue, row.market_external_id, row.side)
     const size = Number(row.size)
     reported.add(key)
-    const price = markFor(Number(row.last_price), row.side)
+    const price = markFor(row.last_price, row.side)
 
     holdings.set(key, {
       venue: row.venue,
@@ -570,8 +569,8 @@ export function mergeHoldings(book: BookRow[], mirror: MirrorRow[]): Holding[] {
       avgPrice: round(Number(row.avg_price)),
       cost: round(size * Number(row.avg_price)),
       mark: price,
-      markValue: round(size * price),
-      unrealized: round(size * price - size * Number(row.avg_price)),
+      markValue: price === null ? null : round(size * price),
+      unrealized: price === null ? null : round(size * price - size * Number(row.avg_price)),
       source: 'venue',
       openedAt: '',
       strategies: [],
@@ -606,7 +605,7 @@ export function mergeHoldings(book: BookRow[], mirror: MirrorRow[]): Holding[] {
 
     // Paper positions are keyed apart from live ones so a simulated and a
     // real holding in the same market never merge into one line.
-    const price = markFor(Number(row.last_price), row.side)
+    const price = markFor(row.last_price, row.side)
     const ownKey = paper ? `paper:${key}:${row.trading_strategy_id}` : key
     const prior = holdings.get(ownKey)
 
@@ -616,8 +615,9 @@ export function mergeHoldings(book: BookRow[], mirror: MirrorRow[]): Holding[] {
       prior.size += size
       prior.cost = round(prior.cost + cost)
       prior.avgPrice = prior.size > 0 ? round(prior.cost / prior.size) : 0
-      prior.markValue = round(prior.size * price)
-      prior.unrealized = round(prior.markValue - prior.cost)
+      prior.mark = price
+      prior.markValue = price === null ? null : round(prior.size * price)
+      prior.unrealized = prior.markValue === null ? null : round(prior.markValue - prior.cost)
       prior.strategies.push(attribution)
       continue
     }
@@ -635,35 +635,38 @@ export function mergeHoldings(book: BookRow[], mirror: MirrorRow[]): Holding[] {
       avgPrice: size > 0 ? round(cost / size) : 0,
       cost: round(cost),
       mark: price,
-      markValue: round(size * price),
-      unrealized: round(size * price - cost),
+      markValue: price === null ? null : round(size * price),
+      unrealized: price === null ? null : round(size * price - cost),
       source: paper ? 'paper' : 'engine',
       openedAt: row.opened_at,
       strategies: [attribution],
     })
   }
 
-  return [...holdings.values()].sort((a, b) => b.markValue - a.markValue)
+  return [...holdings.values()].sort((a, b) => (b.markValue ?? 0) - (a.markValue ?? 0))
 }
 
 function keyFor(venue: string, marketExternalId: string, side: string): string {
   return `${venue}:${marketExternalId}:${side.toLowerCase()}`
 }
 
-/**
- * What one contract is worth right now.
- *
- * Markets are quoted on the YES side, so a NO contract marks at one
- * minus that price — they are the two halves of a dollar. A market we
- * have no price for marks at zero rather than at cost: an unmarked
- * position is not a position at break-even, and showing it as one
- * invents a profit of exactly nothing.
- */
-function markFor(lastPrice: number, side: string): number {
-  if (!Number.isFinite(lastPrice) || lastPrice <= 0)
-    return 0
+/** Exclude unknown quotes from both value and P&L, while reporting their count. */
+export function pricedTotals(holdings: Holding[]): { markValue: number | null, unrealized: number | null, unpricedCount: number } {
+  const priced = holdings.filter(holding => holding.mark !== null)
+  const unavailable = holdings.length > 0 && priced.length === 0
+  return {
+    markValue: unavailable ? null : round(priced.reduce((sum, holding) => sum + (holding.markValue ?? 0), 0)),
+    unrealized: unavailable ? null : round(priced.reduce((sum, holding) => sum + (holding.unrealized ?? 0), 0)),
+    unpricedCount: holdings.length - priced.length,
+  }
+}
 
-  return side.toLowerCase() === 'no' ? round(1 - lastPrice) : round(lastPrice)
+/** Quotes are YES prices; zero is a valid quote, while null means unknown. */
+function markFor(lastPrice: number | null, side: string): number | null {
+  if (lastPrice === null || !Number.isFinite(Number(lastPrice)) || Number(lastPrice) < 0 || Number(lastPrice) > 1)
+    return null
+
+  return side.toLowerCase() === 'no' ? round(1 - Number(lastPrice)) : round(Number(lastPrice))
 }
 
 function round(value: number): number {
