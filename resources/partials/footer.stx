@@ -1,7 +1,7 @@
 <footer class="mt-20 border-t bd" x-data="{ footerTheme: predicthqTheme.current(), toggleFooterTheme() { this.footerTheme = predicthqTheme.toggle() } }">
   <div class="grid gap-8 sm:grid-cols-2 lg:grid-cols-4 mx-auto px-4 py-12 sm:px-6 max-w-6xl">
     <div class="lg:col-span-1">
-      <a href="/" class="flex gap-2.5 items-center">
+      <a href="/" data-no-router class="flex gap-2.5 items-center">
         <span class="grid place-items-center h-8 w-8 p-1.5 rounded-lg brandmark">@include('logo')</span>
         <span class="font-extrabold tracking-tight">Predict<span class="accent">HQ</span></span>
       </a>

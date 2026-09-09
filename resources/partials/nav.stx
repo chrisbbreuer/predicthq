@@ -4,7 +4,7 @@
   x-data="{ menu: false, toggleMenu() { this.menu = !this.menu } }"
 >
   <div class="flex gap-4 items-center justify-between mx-auto px-4 h-16 sm:px-6 max-w-7xl">
-    <a href="/" class="flex gap-2.5 items-center shrink-0" aria-label="PredictHQ home">
+    <a href="/" data-no-router class="flex gap-2.5 items-center shrink-0" aria-label="PredictHQ home">
       <span class="grid place-items-center h-9 w-9 p-2 rounded-xl brandmark">@include('logo')</span>
       <span class="font-extrabold text-lg tracking-tight">Predict<span class="accent">HQ</span></span>
     </a>
