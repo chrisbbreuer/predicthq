@@ -1,8 +1,9 @@
 import type { Attributes } from '@stacksjs/types'
-import { defineModel } from '@stacksjs/orm'
+import { defineModel, selfOwnership } from '@stacksjs/orm'
 import { makeHash } from '@stacksjs/security'
 // soon, these will be auto-imported
 import { schema } from '@stacksjs/validation'
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../password-policy'
 
 export default defineModel({
   name: 'User', // defaults to the sanitized file name
@@ -17,6 +18,11 @@ export default defineModel({
       columns: ['email', 'name'],
     },
   ],
+
+  // A caller may write their own row and no other (stacksjs/stacks#2375). The
+  // owner column IS the primary key here, so without this `User` is the worst
+  // case the issue describes: an authenticated caller able to PATCH any user.
+  ownership: selfOwnership(),
 
   traits: {
     useAuth: {
@@ -57,13 +63,13 @@ export default defineModel({
     },
   },
 
-  hasOne: ['Subscriber', 'Driver', 'Author'],
+  hasOne: ['Subscriber', 'Courier', 'Author'],
 
   hasMany: [
-    'PersonalAccessToken',
     'Customer',
     'TeamMember',
   ],
+
   attributes: {
     name: {
       order: 2,
@@ -98,15 +104,17 @@ export default defineModel({
       hidden: true,
       fillable: true,
       validation: {
-        rule: schema.string().required().min(6).max(255),
+        rule: schema.string().required().min(PASSWORD_MIN_LENGTH).max(PASSWORD_MAX_LENGTH),
         message: {
           required: 'Password is required',
-          min: 'Password must have a minimum of 6 characters',
-          max: 'Password must have a maximum of 255 characters',
+          min: `Password must have a minimum of ${PASSWORD_MIN_LENGTH} characters`,
+          max: `Password must have a maximum of ${PASSWORD_MAX_LENGTH} characters`,
         },
       },
 
-      factory: () => '123456',
+      // Must satisfy the rule above, or seeded users fail their own model's
+      // validation. `123456` did once the minimum moved to 8 (#2226).
+      factory: () => 'password1234',
     },
 
     avatar: {

@@ -8,7 +8,7 @@
  * use stay inside their own clients.
  */
 
-export type Venue = 'kalshi' | 'polymarket'
+export type Venue = 'kalshi' | 'polymarket' | 'polymarket-us'
 
 export interface PlaceOrderRequest {
   /** Venue market identifier (Kalshi ticker, Polymarket token id). */

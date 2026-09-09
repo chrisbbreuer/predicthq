@@ -16,6 +16,16 @@ import { route } from '@stacksjs/router'
 // that cannot reach its database has to fail this, or a load balancer
 // keeps routing to it. See app/Services/health.ts.
 route.get('/health', 'Actions/GetHealth')
+
+route.group({ middleware: ['auth', 'throttle:30,1'] }, () => {
+  route.get('/groups', 'Actions/Groups/ListGroups')
+  route.post('/groups', 'Actions/Groups/CreateGroup')
+  route.post('/groups/invitations/accept', 'Actions/Groups/AcceptGroupInvitation')
+  route.get('/groups/{id}', 'Actions/Groups/GetGroup')
+  route.post('/groups/{id}/invitations', 'Actions/Groups/InviteToGroup')
+  route.delete('/groups/{id}/invitations/{invitationId}', 'Actions/Groups/RevokeGroupInvitation')
+  route.delete('/groups/{id}/members/{userId}', 'Actions/Groups/RemoveGroupMember')
+})
 route.get('/odds', 'Actions/V1/GetBoard')
 route.get('/odds/arbitrage', 'Actions/V1/GetArbitrage')
 route.get('/odds/edges', 'Actions/V1/GetEdges')

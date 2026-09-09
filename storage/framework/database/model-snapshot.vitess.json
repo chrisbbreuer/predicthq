@@ -15717,10 +15717,400 @@
             "type": "index"
           }
         ]
+      },
+      {
+        "table": "group_invitations",
+        "columns": [
+          {
+            "name": "id",
+            "type": "bigint",
+            "isPrimaryKey": true,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": false
+          },
+          {
+            "name": "group_id",
+            "type": "integer",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": false
+          },
+          {
+            "name": "invited_by",
+            "type": "integer",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": false
+          },
+          {
+            "name": "email",
+            "type": "string",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": true,
+            "hasDefault": true,
+            "defaultValue": "",
+            "maxLength": 254
+          },
+          {
+            "name": "token_hash",
+            "type": "string",
+            "isPrimaryKey": false,
+            "isUnique": true,
+            "isNullable": false,
+            "hasDefault": false,
+            "maxLength": 64
+          },
+          {
+            "name": "expires_at",
+            "type": "date",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": false
+          },
+          {
+            "name": "accepted_at",
+            "type": "date",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": true,
+            "hasDefault": false
+          },
+          {
+            "name": "revoked_at",
+            "type": "date",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": true,
+            "hasDefault": false
+          },
+          {
+            "name": "created_at",
+            "type": "datetime",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": true,
+            "defaultValue": "UTC_TIMESTAMP"
+          },
+          {
+            "name": "updated_at",
+            "type": "datetime",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": true,
+            "hasDefault": false
+          }
+        ],
+        "indexes": [
+          {
+            "name": "group_invitations_group",
+            "columns": [
+              "group_id"
+            ],
+            "type": "index"
+          },
+          {
+            "name": "group_invitations_token_hash_unique",
+            "columns": [
+              "token_hash"
+            ],
+            "type": "unique"
+          }
+        ]
+      },
+      {
+        "table": "group_members",
+        "columns": [
+          {
+            "name": "id",
+            "type": "bigint",
+            "isPrimaryKey": true,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": false
+          },
+          {
+            "name": "group_id",
+            "type": "integer",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": false
+          },
+          {
+            "name": "user_id",
+            "type": "integer",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": false
+          },
+          {
+            "name": "role",
+            "type": "enum",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": true,
+            "defaultValue": "member",
+            "enumValues": [
+              "owner",
+              "member"
+            ],
+            "enumTypeName": "group_members_role_type"
+          },
+          {
+            "name": "created_at",
+            "type": "datetime",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": true,
+            "defaultValue": "UTC_TIMESTAMP"
+          },
+          {
+            "name": "updated_at",
+            "type": "datetime",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": true,
+            "hasDefault": false
+          }
+        ],
+        "indexes": [
+          {
+            "name": "group_members_group_user_unique",
+            "columns": [
+              "group_id",
+              "user_id"
+            ],
+            "type": "unique"
+          }
+        ]
+      },
+      {
+        "table": "prediction_groups",
+        "columns": [
+          {
+            "name": "id",
+            "type": "bigint",
+            "isPrimaryKey": true,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": false
+          },
+          {
+            "name": "owner_id",
+            "type": "integer",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": false
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": false,
+            "maxLength": 80
+          },
+          {
+            "name": "description",
+            "type": "string",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": true,
+            "hasDefault": true,
+            "defaultValue": "",
+            "maxLength": 500
+          },
+          {
+            "name": "created_at",
+            "type": "datetime",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": true,
+            "defaultValue": "UTC_TIMESTAMP"
+          },
+          {
+            "name": "updated_at",
+            "type": "datetime",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": true,
+            "hasDefault": false
+          }
+        ],
+        "indexes": []
+      },
+      {
+        "table": "referrals",
+        "columns": [
+          {
+            "name": "id",
+            "type": "bigint",
+            "isPrimaryKey": true,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": false
+          },
+          {
+            "name": "referrer_id",
+            "type": "integer",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": false
+          },
+          {
+            "name": "referred_user_id",
+            "type": "integer",
+            "isPrimaryKey": false,
+            "isUnique": true,
+            "isNullable": false,
+            "hasDefault": false
+          },
+          {
+            "name": "code",
+            "type": "string",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": false,
+            "maxLength": 24
+          },
+          {
+            "name": "status",
+            "type": "enum",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": true,
+            "defaultValue": "registered",
+            "enumValues": [
+              "registered",
+              "qualified"
+            ],
+            "enumTypeName": "referrals_status_type"
+          },
+          {
+            "name": "qualified_at",
+            "type": "date",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": true,
+            "hasDefault": false
+          },
+          {
+            "name": "created_at",
+            "type": "datetime",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": true,
+            "defaultValue": "UTC_TIMESTAMP"
+          },
+          {
+            "name": "updated_at",
+            "type": "datetime",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": true,
+            "hasDefault": false
+          }
+        ],
+        "indexes": [
+          {
+            "name": "referrals_referrer_status",
+            "columns": [
+              "referrer_id",
+              "status"
+            ],
+            "type": "index"
+          },
+          {
+            "name": "referrals_referred_user_id_unique",
+            "columns": [
+              "referred_user_id"
+            ],
+            "type": "unique"
+          }
+        ]
+      },
+      {
+        "table": "referral_codes",
+        "columns": [
+          {
+            "name": "id",
+            "type": "bigint",
+            "isPrimaryKey": true,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": false
+          },
+          {
+            "name": "user_id",
+            "type": "integer",
+            "isPrimaryKey": false,
+            "isUnique": true,
+            "isNullable": false,
+            "hasDefault": false
+          },
+          {
+            "name": "code",
+            "type": "string",
+            "isPrimaryKey": false,
+            "isUnique": true,
+            "isNullable": false,
+            "hasDefault": false,
+            "maxLength": 24
+          },
+          {
+            "name": "created_at",
+            "type": "datetime",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": true,
+            "defaultValue": "UTC_TIMESTAMP"
+          },
+          {
+            "name": "updated_at",
+            "type": "datetime",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": true,
+            "hasDefault": false
+          }
+        ],
+        "indexes": [
+          {
+            "name": "referral_codes_user_id_unique",
+            "columns": [
+              "user_id"
+            ],
+            "type": "unique"
+          },
+          {
+            "name": "referral_codes_code_unique",
+            "columns": [
+              "code"
+            ],
+            "type": "unique"
+          }
+        ]
       }
     ]
   },
-  "hash": "3bbff146ec506e75b9ce2eba2d696191a5c47951ac39ce2ecb6c39939cb5796b",
+  "hash": "6e479deb7c4e3e30afa2f78eeff1411df2efa347bc57b7c977a8f248f6a6c168",
   "dialect": "vitess",
-  "updatedAt": "2026-08-13T18:28:08.252Z"
+  "updatedAt": "2026-09-09T05:38:30.196Z"
 }

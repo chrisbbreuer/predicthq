@@ -1,0 +1,36 @@
+<script server>
+import { loadMarket } from '../../app/Support/market-discovery'
+const navActive = 'home'
+const market = await loadMarket(query.id)
+const pageTitle = market ? `${market.question} | PredictHQ` : 'Market not found | PredictHQ'
+const pageDescription = 'Review the latest captured prediction-market price, volume, and settlement status.'
+const updated = market?.updated_at ? String(market.updated_at) : 'Unavailable'
+</script>
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>@include('head')</head>
+  <body>
+    <div class="app min-h-[100dvh]">
+      @include('nav')
+      <main class="mx-auto max-w-5xl px-4 py-10 sm:px-6">
+        <a href="/" data-no-router class="text-sm muted">← All markets</a>
+        @if (market)
+          <div class="flex items-center gap-3 mt-8"><img src="{{ market.image }}" alt="" width="48" height="48" class="object-contain"><span class="text-sm muted">{{ market.categoryLabel }} · {{ market.venueLabel }}</span></div>
+          <h1 class="mt-5 text-3xl sm:text-4xl font-bold tracking-tight leading-tight">{{ market.question }}</h1>
+          @if (market.outcome_label)<p class="mt-3 text-lg muted">{{ market.outcome_label }}</p>@endif
+          <div class="grid gap-5 mt-8 sm:grid-cols-2">
+            <section class="p-6 rounded-xl card"><h2 class="font-semibold muted">Yes</h2><p class="mt-4 text-5xl font-semibold num pos">{{ market.yes }}</p></section>
+            <section class="p-6 rounded-xl card"><h2 class="font-semibold muted">No</h2><p class="mt-4 text-5xl font-semibold num neg">{{ market.no }}</p></section>
+          </div>
+          <dl class="grid grid-cols-2 sm:grid-cols-3 gap-6 mt-8"><div><dt class="text-sm muted">Volume</dt><dd class="mt-2 font-semibold num">{{ market.volumeLabel }}</dd></div><div><dt class="text-sm muted">Status</dt><dd class="mt-2 font-semibold">{{ market.status }}</dd></div><div><dt class="text-sm muted">Last captured (UTC)</dt><dd class="mt-2 text-sm">{{ updated }}</dd></div></dl>
+          <p class="mt-8 text-sm muted">These are captured market prices, not executable quotes. Check current pricing and market rules at the exchange before trading.</p>
+          <div class="flex flex-wrap gap-3 mt-6"><a href="/positions" data-no-router class="px-5 py-3 btn btn-primary rounded-lg">My book</a><a href="/groups" data-no-router class="px-5 py-3 btn rounded-lg">Your groups</a><a href="/odds" data-no-router class="px-5 py-3 btn rounded-lg">Compare odds</a></div>
+        @else
+          <h1 class="mt-8 font-bold text-3xl">Market not found.</h1><p class="mt-3 muted">This market may have been removed. Browse the latest markets from the home page.</p>
+        @endif
+      </main>
+      @include('footer')
+    </div>
+  </body>
+</html>

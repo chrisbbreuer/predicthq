@@ -1,6 +1,6 @@
 ---
 name: stacks-ai
-description: Use when integrating AI capabilities into a Stacks application — using Anthropic/OpenAI/Ollama/AWS Bedrock drivers, image generation (DALL-E), vision analysis, RAG/vector search, embeddings, MCP (Model Context Protocol) clients, text summarization, sentiment analysis, content classification, personalization, or the buddy AI assistant. Covers @stacksjs/ai and config/ai.ts.
+description: Use when integrating AI capabilities into a Stacks application - using Anthropic/OpenAI/Ollama/AWS Bedrock drivers, image generation (DALL-E), vision analysis, RAG/vector search, embeddings, MCP (Model Context Protocol) clients, text summarization, sentiment analysis, content classification, personalization, or the buddy AI assistant. Covers @stacksjs/ai and config/ai.ts.
 license: MIT
 compatibility: Bun >= 1.3.0, TypeScript
 allowed-tools: Read Edit Write Bash Grep Glob
@@ -56,6 +56,25 @@ const embeddings = await openai.embed('text to embed')
 const image = await openai.generateImage('a sunset over mountains')
 const transcription = await openai.transcribe(audioFile)
 const speech = await openai.textToSpeech('Hello world')
+```
+
+## Provider-Neutral Client
+
+Use the config-driven client for application features that can run against
+Anthropic, OpenAI, or Ollama. Configuration inspection is safe to return from a
+status endpoint because it never includes credentials.
+
+```typescript
+import { createAIClient, getAIProviderConfiguration } from '@stacksjs/ai'
+import aiConfig from './config/ai'
+
+const configuration = getAIProviderConfiguration(aiConfig)
+// { provider: 'openai', model: 'gpt-4o-mini', configured: true, source: 'environment' }
+
+if (configuration.configured) {
+  const client = createAIClient(aiConfig)
+  const result = await client.generate([{ role: 'user', content: 'Draft a launch plan.' }])
+}
 ```
 
 ## Ollama Driver (Local LLMs)

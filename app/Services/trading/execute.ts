@@ -119,6 +119,11 @@ export function isPaper(strategy: Pick<Strategy, 'mode'>): boolean {
 export async function clientFor(sealedCredentials: string): Promise<TradingClient> {
   const credentials = await openCredentials(sealedCredentials)
 
+  if (credentials.venue === 'polymarket-us') {
+    const { PolymarketUsClient } = await import('./polymarket-us')
+    return new PolymarketUsClient(credentials)
+  }
+
   return credentials.venue === 'kalshi'
     ? new KalshiTradingClient(credentials)
     : new PolymarketTradingClient(credentials)

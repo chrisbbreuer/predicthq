@@ -1,10 +1,11 @@
 import { Database } from '../../Support/db'
 import { Action } from '@stacksjs/actions'
-import { Auth, authCookie } from '@stacksjs/auth'
+import { attributeReferral, Auth, authCookie } from '@stacksjs/auth'
 import { config } from '@stacksjs/config'
 import { log } from '@stacksjs/logging'
 import { response } from '@stacksjs/router'
 import { socialHandoffRedirect } from '@stacksjs/socials'
+import { oauthContextCookie, readSignupContext } from '../../Support/signup-context'
 import { socialProvider } from '../../Support/auth'
 
 /**
@@ -69,6 +70,7 @@ export default new Action({
     if (!state || !expectedState || state !== expectedState)
       return oauthFailure(name, 'state')
 
+    const context = readSignupContext(request.cookie?.(`oauth-context-${name}`) ?? request.cookies?.get?.(`oauth-context-${name}`), state)
     const code = String(request.get('code') ?? '')
     if (!code) {
       // The user declined at the provider, or the request was tampered
@@ -112,11 +114,15 @@ export default new Action({
         // No password is set. This account can only be reached through the
         // provider until the user chooses one, which is the correct state
         // rather than a placeholder hash somebody could guess.
-        const created = await db.prepare(
+        userId = await db.transaction(async (transaction) => {
+          const created = await transaction.prepare(
           `INSERT INTO users (name, email, password, created_at, updated_at)
           VALUES (?, ?, '', ?, ?)`,
         ).run(displayName, email, now, now)
-        userId = Number(created.lastInsertRowid)
+        const id = Number(created.lastInsertRowid)
+          if (context.referralCode) await attributeReferral(id, context.referralCode, transaction)
+          return id
+        })
       }
 
       // Creating or matching a user is only half a sign-in. Mint the same
@@ -128,12 +134,15 @@ export default new Action({
       if (!login)
         return oauthFailure(name, 'provider')
 
-      return oauthSuccess({
+      const result = oauthSuccess({
         token: login.token,
         refreshToken: login.refreshToken,
         expiresIn: login.expiresIn,
         user: { id: userId, email, name: displayName },
-      })
+      }, context.invite ? `/groups?invite=${context.invite}` : '/positions')
+      result.headers.append('Set-Cookie', expiredOauthStateCookie(name))
+      result.headers.append('Set-Cookie', oauthContextCookie(name, null, 0))
+      return result
     }
     finally {
       db.close()
@@ -195,6 +204,7 @@ function oauthFailure(provider: string, error: string): Response {
   const redirect = response.redirect(`/login?error=${encodeURIComponent(error)}`, 302)
   const headers = new Headers(redirect.headers)
   headers.append('Set-Cookie', expiredOauthStateCookie(provider))
+  headers.append('Set-Cookie', oauthContextCookie(provider, null, 0))
   return new Response(redirect.body, { status: redirect.status, statusText: redirect.statusText, headers })
 }
 
@@ -205,8 +215,8 @@ interface BrowserSession {
   user?: unknown
 }
 
-export function oauthSuccess(session: BrowserSession): Response {
-  const redirect = socialHandoffRedirect(session, { redirectTo: '/positions' })
+export function oauthSuccess(session: BrowserSession, redirectTo = '/positions'): Response {
+  const redirect = socialHandoffRedirect(session, { redirectTo })
   redirect.headers.append('Set-Cookie', accessTokenCookie(session.token, session.expiresIn ?? 3600))
   return redirect
 }

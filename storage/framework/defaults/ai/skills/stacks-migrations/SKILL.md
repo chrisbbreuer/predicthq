@@ -1,6 +1,6 @@
 ---
 name: stacks-migrations
-description: Use when working with database migrations in a Stacks application — creating migration files, running migrations, fresh migration (drop + recreate), seeding after migration, migration file naming conventions, or the 96+ built-in migration files. For the database API itself (queries, connections, SQL helpers), see stacks-database.
+description: Use when working with database migrations in a Stacks application - creating migration files, running migrations, fresh migration (drop + recreate), seeding after migration, migration file naming conventions, or the 96+ built-in migration files. For the database API itself (queries, connections, SQL helpers), see stacks-database.
 license: MIT
 compatibility: Bun >= 1.3.0, TypeScript, SQLite >= 3.47.2
 allowed-tools: Read Edit Write Bash Grep Glob
@@ -23,7 +23,7 @@ buddy migrate --diff                # show SQL without running
 buddy migrate --auth                # include auth tables
 buddy migrate:fresh                 # drop ALL tables and re-migrate
 buddy migrate:fresh --seed          # drop, migrate, then seed
-buddy migrate:dns                   # DNS-specific migration
+buddy dns:pull                      # live zone as a config/dns.ts block
 buddy make:migration <name>         # create new migration file
 buddy seed                          # seed database
 buddy generate:migrations           # generate migrations from model diffs

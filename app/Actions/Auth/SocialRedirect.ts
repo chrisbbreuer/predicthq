@@ -1,5 +1,6 @@
 import { Action } from '@stacksjs/actions'
 import { response } from '@stacksjs/router'
+import { oauthContextCookie, signupContext } from '../../Support/signup-context'
 import { socialProvider } from '../../Support/auth'
 
 /**
@@ -42,6 +43,7 @@ export default new Action({
     const redirect = response.redirect(url, 302)
     const headers = new Headers(redirect.headers)
     headers.append('Set-Cookie', oauthStateCookie(name, state))
+    headers.append('Set-Cookie', oauthContextCookie(name, { state, ...signupContext(request.get('ref'), request.get('invite')) }))
 
     return new Response(redirect.body, {
       status: redirect.status,

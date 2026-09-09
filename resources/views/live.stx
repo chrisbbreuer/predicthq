@@ -193,7 +193,7 @@ const navActive = 'live'
               <div class="px-4 py-8 text-center text-sm muted">No arbitrage right now.</div>
             @else
               @foreach (arbs as a)
-                <a href="/#arbitrage" class="flex gap-3 items-center justify-between px-4 py-3 border-b hover:opacity-80 bd">
+                <a href="/odds#arbitrage" class="flex gap-3 items-center justify-between px-4 py-3 border-b hover:opacity-80 bd">
                   <div class="min-w-0">
                     <div class="font-bold truncate">{{ a.title }}</div>
                     <div class="text-xs faint">{{ a.league }}</div>

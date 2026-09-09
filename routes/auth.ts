@@ -43,3 +43,6 @@ route.get('/auth/{provider}/callback', 'Actions/Auth/SocialCallback')
  * provider over TLS using our own signing key.
  */
 route.post('/auth/{provider}/callback', 'Actions/Auth/SocialCallback').skipCsrf()
+
+route.get('/referrals', 'Actions/Auth/ReferralSummaryAction').middleware('auth').rateLimit(30, 'minute')
+route.post('/referrals/code', 'Actions/Auth/CreateReferralCodeAction').middleware('auth').rateLimit(10, 'minute')

@@ -95,7 +95,7 @@ describe('shared marketing shell', () => {
   it('uses the public TLS websocket and ts-broadcasting protocol', async () => {
     const realtime = await Bun.file('resources/partials/realtime.stx').text()
     const live = await Bun.file('resources/views/live.stx').text()
-    const home = await Bun.file('resources/views/index.stx').text()
+    const home = await Bun.file('resources/views/odds.stx').text()
 
     expect(realtime).toContain("'wss://realtime.' + apex + '/ws'")
     expect(realtime).toContain("return 'ws://' + host + '/ws'")

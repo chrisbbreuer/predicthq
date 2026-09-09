@@ -92,6 +92,11 @@ export class Statement<T = Record<string, unknown>> {
 export class Database {
   constructor(private readonly executor: SqlExecutor = stacksDb as unknown as SqlExecutor) {}
 
+  /** Share this connection or transaction with native Stacks features. */
+  unsafe(sql: string, values: unknown[] = []): SqlStatement {
+    return this.executor.unsafe(portableSql(sql), parameters(values))
+  }
+
   query<T = Record<string, unknown>>(sql: string): Statement<T> {
     return new Statement<T>(this.executor, sql)
   }

@@ -43,7 +43,7 @@ team (and every agent) sees the same rules.
 ### Commits
 
 - Conventional commit messages (`fix:`, `feat:`, `chore:`, ...).
-- Only commit or push when asked.
+- For requested implementation work, commit and push to `origin main` as the configured user. Never add coauthor trailers.
 
 ### Requirements
 

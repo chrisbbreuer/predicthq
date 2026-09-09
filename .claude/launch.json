@@ -2,10 +2,10 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "predicthq",
+      "name": "frontend",
       "runtimeExecutable": "./buddy",
-      "runtimeArgs": ["dev"],
-      "port": 3000,
+      "runtimeArgs": ["dev:frontend"],
+      "port": 3100,
       "autoPort": true
     }
   ]

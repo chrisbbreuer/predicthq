@@ -72,7 +72,7 @@
     "@polymarket/clob-client-v2": "^1.1.0",
     "@stacksjs/stx": "0.2.277",
     "bun-plugin-stx": "0.2.277",
-    "stacks": "0.72.74",
+    "stacks": "0.74.32",
     "stripe": "^22.5.0",
     "ts-charts": "github:stacksjs/ts-charts",
     "ts-web-scraper": "^0.1.10",

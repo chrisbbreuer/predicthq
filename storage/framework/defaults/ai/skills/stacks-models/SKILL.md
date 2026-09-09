@@ -1,6 +1,6 @@
 ---
 name: stacks-models
-description: Use when working with data models in Stacks — the defineModel() API, model attributes with validation and factories, relationships (hasOne/hasMany/belongsTo/belongsToMany), traits (useAuth, useUuid, useTimestamps, useSearch, useApi, billable, taggable, categorizable, commentable, likeable, observe), computed properties (get/set), model generation, and the 50+ built-in framework models. Covers model definitions and storage/framework/defaults/app/Models/.
+description: Use when working with data models in Stacks - the defineModel() API, model attributes with validation and factories, relationships (hasOne/hasMany/belongsTo/belongsToMany), traits (useAuth, useUuid, useTimestamps, useSearch, useApi, billable, taggable, categorizable, commentable, likeable, observe), computed properties (get/set), model generation, and the 50+ built-in framework models. Covers model definitions and storage/framework/defaults/app/Models/.
 license: MIT
 compatibility: Bun >= 1.3.0, TypeScript, SQLite >= 3.47.2
 allowed-tools: Read Edit Write Bash Grep Glob
@@ -98,11 +98,12 @@ generated model types stay precise.
 | `useUuid` | UUID column alongside the primary key |
 | `useTimestamps` (alias `timestampable`) | `created_at` / `updated_at`. On by default |
 | `useSoftDeletes` (alias `softDeletable`) | `deleted_at` plus soft-delete query scopes |
-| `useAuth` (alias `authenticatable`) | Auth columns; `{ usePasskey: true }` adds passkeys |
+| `useAuth` (alias `authenticatable`) | Auth columns; `{ usePasskey: true }` adds passkeys. Also confers `morphMany: { tokenable: 'PersonalAccessToken' }`, so any authenticatable model can hold API tokens |
 | `useApi` | Generates REST actions and routes: `{ uri, routes, middleware? }` |
 | `useSearch` (alias `searchable`) | Search-engine indexing: `{ displayable, searchable, sortable, filterable }` |
 | `useSocials` | OAuth identities, e.g. `['github']` |
-| `useActivityLog` | Writes an `Activity` row per change |
+| `useActivityLog` | Writes an `activities` feed row per change: `{ logOnly }` / `{ include }` / `{ exclude }` pick the attributes |
+| `useAudit` | Writes a `model_audits` row per change with an old/new diff |
 | `observe` | Emits `{model}:created` / `:updated` / `:deleted` events |
 | `billable` | Stripe methods (`checkout()`, `activeSubscription()`, ...) |
 | `taggable` / `categorizable` / `commentable` / `likeable` | Pivot tables and their relation methods |
@@ -140,6 +141,28 @@ duplicating that relationship column as an attribute.
 `hasManyThrough`, `morphOne`, `morphMany`, `morphTo`, `morphToMany`,
 `morphedByMany`. Each takes an array of model names, or an object form when you
 need to name the foreign key.
+
+The object form is also where a `belongsTo` says what happens to its row when
+the row it points at is deleted:
+
+```ts
+belongsTo: [
+  { model: 'Repository', onDelete: 'cascade' },
+  { model: 'User', foreignKey: 'author_id', onDelete: 'set null' },
+],
+```
+
+`'cascade' | 'set null' | 'restrict' | 'no action'`, enforced by the database
+on the foreign key. Left off, the default applies: the delete is refused while
+a child still points at the row.
+
+Worth declaring rather than deleting children in application code. The order
+has to be right in every place that deletes, forever, and the place that misses
+one leaves rows nothing can reach - while the database applies the rule to
+deletes the application never made: a manual `DELETE`, a restore, another
+service sharing the schema. Not for a polymorphic pair (`commentable_id`
+beside `commentable_type`): those carry no foreign key at all, because a
+constraint would name one table and reject every row pointing at another.
 
 Use the named object form for a many-to-many relation that owns its pivot
 schema. It keeps the relation accessor, migration, pivot defaults, timestamps,
@@ -222,7 +245,10 @@ traits: {
 ```
 
 `buddy seed` walks every model carrying the trait and fills its table from the
-attribute factories. Nothing else is needed - no seeder files, no registration.
+attribute factories. Model fixture data needs no separate seeder or registration.
+Idempotent application bootstrap work can live in `database/seeders` as a
+default-exported class extending `Seeder` from `@stacksjs/database`. Buddy runs
+those application seeders after the model factories.
 
 ```bash
 buddy seed                       # every model with a useSeeder trait

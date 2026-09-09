@@ -1,0 +1,146 @@
+{
+  "nfl": {
+    "path": "/assets/images/markets/nfl.png",
+    "source": "https://static.polymarket.us/images/new-category-icons/Icon-Rugby.png"
+  },
+  "nba": {
+    "path": "/assets/images/markets/nba.png",
+    "source": "https://polymarket-upload.s3.us-east-2.amazonaws.com/league-images/nba-new.png"
+  },
+  "mlb": {
+    "path": "/assets/images/markets/mlb.png",
+    "source": "https://polymarket-upload.s3.us-east-2.amazonaws.com/league-images/MLB.png"
+  },
+  "nhl": {
+    "path": "/assets/images/markets/nhl.png",
+    "source": "https://polymarket-upload.s3.us-east-2.amazonaws.com/league-images/nhl-new.png"
+  },
+  "mls": {
+    "path": "/assets/images/markets/mls.png",
+    "source": "https://polymarket-upload.s3.us-east-2.amazonaws.com/league-images/mls-new.png"
+  },
+  "bun": {
+    "path": "/assets/images/markets/bun.png",
+    "source": "https://polymarket-upload.s3.us-east-2.amazonaws.com/league-images/bundesliga.png"
+  },
+  "lal": {
+    "path": "/assets/images/markets/lal.png",
+    "source": "https://polymarket-upload.s3.us-east-2.amazonaws.com/laliga-us-22e2965558.png"
+  },
+  "epl": {
+    "path": "/assets/images/markets/epl.png",
+    "source": "https://polymarket-upload.s3.us-east-2.amazonaws.com/league-images/EPL.png"
+  },
+  "ucl": {
+    "path": "/assets/images/markets/ucl.png",
+    "source": "https://polymarket-upload.s3.us-east-2.amazonaws.com/league-images/UCL.png"
+  },
+  "wnba": {
+    "path": "/assets/images/markets/wnba.png",
+    "source": "https://polymarket-upload.s3.us-east-2.amazonaws.com/league-images/wcbb.png"
+  },
+  "cfb": {
+    "path": "/assets/images/markets/cfb.png",
+    "source": "https://static.polymarket.us/images/new-category-icons/Icon-Football.png"
+  },
+  "ufc": {
+    "path": "/assets/images/markets/ufc.png",
+    "source": "https://polymarket-upload.s3.us-east-2.amazonaws.com/UFC-0de60b108f.png"
+  },
+  "baseball": {
+    "path": "/assets/images/markets/baseball.png",
+    "source": "https://static.polymarket.us/images/new-category-icons/Icon-Baseball.png"
+  },
+  "motorsports": {
+    "path": "/assets/images/markets/motorsports.png",
+    "source": "https://static.polymarket.us/images/new-category-icons/Icon-Racing.png"
+  },
+  "cricket": {
+    "path": "/assets/images/markets/cricket.png",
+    "source": "https://static.polymarket.us/images/new-category-icons/Icon-Cricket.png"
+  },
+  "espnocho": {
+    "path": "/assets/images/markets/espnocho.png",
+    "source": "https://polymarket-upload.s3.us-east-2.amazonaws.com/red-eight-acc4e8b4e4.png"
+  },
+  "ice-hockey": {
+    "path": "/assets/images/markets/ice-hockey.png",
+    "source": "https://polymarket-upload.s3.us-east-2.amazonaws.com/league-images/nhl-new.png"
+  },
+  "pickleball": {
+    "path": "/assets/images/markets/pickleball.png",
+    "source": "https://polymarket-upload.s3.us-east-2.amazonaws.com/sport-images/pickleball.png"
+  },
+  "mma": {
+    "path": "/assets/images/markets/mma.png",
+    "source": "https://polymarket-upload.s3.us-east-2.amazonaws.com/UFC-0de60b108f.png"
+  },
+  "esports": {
+    "path": "/assets/images/markets/esports.png",
+    "source": "https://static.polymarket.us/images/new-category-icons/Icon-eSports.png"
+  },
+  "basketball": {
+    "path": "/assets/images/markets/basketball.png",
+    "source": "https://static.polymarket.us/images/new-category-icons/Icon-Basketball.png"
+  },
+  "golf": {
+    "path": "/assets/images/markets/golf.png",
+    "source": "https://static.polymarket.us/images/new-category-icons/Icon-Golf.png"
+  },
+  "darts": {
+    "path": "/assets/images/markets/darts.png",
+    "source": "https://static.polymarket.us/images/new-category-icons/Icon-Darts.png"
+  },
+  "table-tennis": {
+    "path": "/assets/images/markets/table-tennis.png",
+    "source": "https://static.polymarket.us/images/new-category-icons/Icon-Table-Tennis.png"
+  },
+  "soccer": {
+    "path": "/assets/images/markets/soccer.png",
+    "source": "https://static.polymarket.us/images/new-category-icons/Icon-Soccer.png"
+  },
+  "tennis": {
+    "path": "/assets/images/markets/tennis.png",
+    "source": "https://static.polymarket.us/images/new-category-icons/Icon-Tennis.png"
+  },
+  "boxing": {
+    "path": "/assets/images/markets/boxing.png",
+    "source": "https://static.polymarket.us/images/new-category-icons/Icon-Boxing.png"
+  },
+  "politics": {
+    "path": "/assets/images/markets/politics.png",
+    "source": "https://static.polymarket.us/images/new-category-icons/Icon-Politics.png"
+  },
+  "crypto": {
+    "path": "/assets/images/markets/crypto.png",
+    "source": "https://static.polymarket.us/images/new-category-icons/Icon-Crypto.png"
+  },
+  "bitcoin": {
+    "path": "/assets/images/markets/bitcoin.png",
+    "source": "https://static.polymarket.us/images/new-category-icons/Icon-Bitcoin.png"
+  },
+  "weather": {
+    "path": "/assets/images/markets/weather.png",
+    "source": "https://static.polymarket.us/images/new-category-icons/Icon-Weather.png"
+  },
+  "culture": {
+    "path": "/assets/images/markets/culture.png",
+    "source": "https://static.polymarket.us/images/new-category-icons/Icon-Culture.png"
+  },
+  "economy": {
+    "path": "/assets/images/markets/economy.png",
+    "source": "https://static.polymarket.us/images/new-category-icons/Icon-Economy.png"
+  },
+  "technology": {
+    "path": "/assets/images/markets/technology.png",
+    "source": "https://static.polymarket.us/images/new-category-icons/Icon-Technology.png"
+  },
+  "sports": {
+    "path": "/assets/images/markets/sports.png",
+    "source": "https://static.polymarket.us/images/new-category-icons/Icon-Sports.png"
+  },
+  "football": {
+    "path": "/assets/images/markets/football.png",
+    "source": "https://static.polymarket.us/images/new-category-icons/Icon-Football.png"
+  }
+}

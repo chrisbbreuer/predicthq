@@ -1,0 +1,749 @@
+<script server>
+/**
+ * PredictHQ: the landing page.
+ *
+ * Three surfaces in one scroll: the positioning, one real trade
+ * candidate with the evidence behind it, and the live odds board that
+ * doubles as proof the data is real. Everything is read through the pure
+ * `app/Support` helpers (no ORM in the stx server scope) and enriched
+ * here so the template stays declarative. Theming and the betting sheet
+ * are client-side (an x-data store on <body>, persisted to localStorage).
+ */
+import { brandFor, iconForSport, teamFor } from '../../app/Support/branding'
+import { loadIntelSummary, loadTopCandidate } from '../../app/Support/intel'
+import { loadBoard } from '../../app/Support/odds'
+import { loadFeedState } from '../../app/Support/pipeline'
+
+const { bookmakers, events, summary } = await loadBoard()
+
+// Whether the prices below are real. Every number on this page is a
+// property of the simulator when they are not, and a page that sells
+// traceable data is the last place that should go unsaid.
+const feed = await loadFeedState()
+
+// The evidence section renders a real candidate off the ingested tape.
+// Both can be empty on a cold database, and the template handles that
+// rather than substituting an invented example: a fabricated demo on a
+// page whose whole claim is traceability would undercut the claim.
+const intel = await loadIntelSummary()
+const candidate = await loadTopCandidate()
+
+const bookById = {}
+for (const b of bookmakers)
+  bookById[b.id] = b
+
+function signed(n) {
+  return `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`
+}
+
+// Build an SVG polyline points string for a sparkline of the price trail.
+function sparkPoints(history, w, h) {
+  if (!history || history.length < 2)
+    return ''
+  const min = Math.min(...history)
+  const max = Math.max(...history)
+  const range = max - min || 1
+  const n = history.length
+  return history
+    .map((v, i) => `${((i / (n - 1)) * w).toFixed(1)},${(h - ((v - min) / range) * (h - 2) - 1).toFixed(1)}`)
+    .join(' ')
+}
+
+// Ordered, de-duplicated category list with its sport icon for the filter.
+const categories = []
+for (const e of events) {
+  if (!categories.some(c => c.name === e.category))
+    categories.push({ name: e.category, icon: iconForSport(e.category) })
+}
+
+const board = events.map((ev) => {
+  const hold = ev.hold
+  const selections = ev.selections.map((s) => {
+    const best = s.bestBookmakerId != null ? bookById[s.bestBookmakerId] : null
+    return {
+      ...s,
+      team: teamFor(s.label),
+      bestBook: best,
+      bestBrand: best ? brandFor(best.slug, best.short) : null,
+      bestDecimalLabel: s.bestPrice != null ? s.bestPrice.toFixed(2) : '-',
+      impliedLabel: `${s.bestImpliedPct.toFixed(1)}%`,
+      edgeLabel: signed(s.edgeVsAvgPct),
+      spark: sparkPoints(s.bestHistory, 60, 16),
+      openLabel: s.bestHistory.length ? s.bestHistory[0].toFixed(2) : '-',
+      sparkColor: (s.bestHistory.length >= 2 && s.bestHistory[s.bestHistory.length - 1] < s.bestHistory[0]) ? 'var(--neg)' : 'var(--pos)',
+      trendArrow: (s.bestHistory.length >= 2 && s.bestHistory[s.bestHistory.length - 1] < s.bestHistory[0]) ? '▼' : '▲',
+      cells: s.quotes.map((q) => {
+        const book = bookById[q.bookmakerId]
+        return {
+          ...q,
+          book,
+          decimalLabel: q.price != null ? q.price.toFixed(2) : '-',
+          impliedLabel: q.price != null ? `${(100 / q.price).toFixed(1)}%` : '-',
+        }
+      }),
+    }
+  })
+  return {
+    ...ev,
+    sport: iconForSport(ev.category),
+    holdLabel: hold ? `${hold.holdPct.toFixed(1)}% hold` : null,
+    arbLabel: hold && hold.isArbitrage ? `+${hold.arbitragePct.toFixed(2)}%` : null,
+    isArb: !!(hold && hold.isArbitrage),
+    home: selections[0]?.team,
+    away: selections[selections.length - 1]?.team,
+    headers: ev.bookmakerIds.map((id) => {
+      const b = bookById[id]
+      return { ...b, brand: brandFor(b.slug, b.short) }
+    }),
+    selections,
+  }
+})
+
+const brandedBooks = bookmakers.map(b => ({ ...b, brand: brandFor(b.slug, b.short) }))
+const arbEvents = board
+  .filter(e => e.isArb)
+  .map(e => ({ ...e, impliedSum: e.hold ? e.hold.bestBookSum : 1 }))
+const arbCount = arbEvents.length
+
+// Initial price map ("selectionId:bookmakerId" -> decimal) the client
+// hydrates into reactive state; realtime `board:updated` messages patch it.
+const liveMap = {}
+for (const ev of board) {
+  for (const s of ev.selections) {
+    for (const c of s.cells) {
+      if (c.price != null)
+        liveMap[`${s.id}:${c.bookmakerId}`] = c.price
+    }
+  }
+}
+const liveJson = JSON.stringify(liveMap)
+// Only the port comes from the server. The scheme and host are decided in
+// the browser by partials/realtime, because this value used to be
+// `ws://localhost:6001`, which pointed every visitor at their own machine.
+const broadcastPort = process.env.BROADCAST_PORT || 6001
+
+const navActive = 'board'
+</script>
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    @include('tokens')
+    @include('realtime')
+    <meta name="description" content="PredictHQ reads the public tape on Kalshi and Polymarket, prices what the flow is worth, and places positions inside limits you set. Every decision shows the data behind it.">
+    <title>PredictHQ: evidence-backed positions on Kalshi and Polymarket</title>
+    <style>
+      [x-cloak] { display: none !important; }
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      a { color: inherit; text-decoration: none; }
+
+      /* Kalshi-style "chance" probability bar */
+      .prob { height: 5px; width: 100%; border-radius: 9999px; background: var(--track); overflow: hidden; }
+      .prob-fill { height: 100%; border-radius: 9999px; background: var(--accent); }
+
+      /* Bookmaker logo tile + team badge */
+      .logo { display: inline-grid; place-items: center; border-radius: 7px; font-weight: 900; letter-spacing: -0.02em; line-height: 1; box-shadow: var(--shadow-sm); }
+      .logo-sm { height: 26px; min-width: 26px; padding: 0 6px; font-size: 10px; }
+      .logo-md { height: 32px; min-width: 32px; padding: 0 8px; font-size: 12px; }
+      .badge { display: inline-grid; place-items: center; height: 30px; width: 30px; border-radius: 9999px; font-size: 10px; font-weight: 900; letter-spacing: -0.02em; box-shadow: var(--shadow-sm); }
+      .badge-lg { height: 40px; width: 40px; font-size: 12px; }
+
+      .chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border-strong); color: var(--muted); background: var(--surface); transition: all 0.15s ease; }
+      .chip:hover { color: var(--text); border-color: var(--accent); }
+      .chip-on { border-color: var(--accent); color: var(--accent-strong); background: var(--accent-weak); }
+
+      .seg { background: var(--surface-2); border: 1px solid var(--border); }
+      .seg-btn { color: var(--muted); transition: all 0.15s ease; white-space: nowrap; }
+      .seg-on { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
+      .btn:hover { border-color: var(--accent); }
+      .btn-primary:hover { filter: brightness(1.05); }
+      .icon-btn:hover { color: var(--text); border-color: var(--accent); }
+
+      .input { background: var(--bg); border: 1px solid var(--border-strong); color: var(--text); }
+      .input:focus { outline: 2px solid var(--accent-weak); border-color: var(--accent); }
+
+      .row-divide { border-top: 1px solid var(--border); }
+      .cell { color: var(--muted); }
+      .best-cell { background: var(--best-bg); color: var(--best-text); box-shadow: inset 0 0 0 1.5px var(--best-ring); }
+      /* Realtime price-move flashes */
+      .live-dot { display: inline-block; width: 8px; height: 8px; border-radius: 9999px; background: var(--neg); animation: ping 1.6s ease-out infinite; }
+      @keyframes ping { 0% { box-shadow: 0 0 0 0 var(--neg); opacity: 1; } 70% { box-shadow: 0 0 0 6px transparent; opacity: 0.7; } 100% { box-shadow: 0 0 0 0 transparent; opacity: 1; } }
+      .flash-up { animation: flashUp 1.1s ease-out; }
+      .flash-down { animation: flashDown 1.1s ease-out; }
+      @keyframes flashUp { 0% { background: var(--pos); color: var(--on-accent); } 100% { background: transparent; } }
+      @keyframes flashDown { 0% { background: var(--neg); color: var(--on-accent); } 100% { background: transparent; } }
+
+      /* Best price doubles as the add-to-sheet control */
+      .pick { border: 1px solid var(--best-ring); background: var(--best-bg); color: var(--best-text); transition: all 0.15s ease; cursor: pointer; }
+      .pick:hover { filter: brightness(1.04); transform: translateY(-1px); }
+      .pick-on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); box-shadow: var(--shadow); }
+
+      .badge-arb { background: var(--accent-weak); color: var(--accent-strong); }
+      .badge-hold { border: 1px solid var(--border); color: var(--muted); }
+
+      .scrim { background: var(--scrim); backdrop-filter: blur(2px); }
+      .drawer { background: var(--surface); border-left: 1px solid var(--border); box-shadow: var(--shadow); }
+
+      .beacon { position: relative; }
+      .beacon::after { content: ""; position: absolute; inset: 0; border-radius: 9999px; animation: pulse 2.6s ease-out infinite; }
+      @keyframes pulse { 0% { box-shadow: 0 0 0 0 var(--accent-weak); } 70% { box-shadow: 0 0 0 9px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+      .board-scroll::-webkit-scrollbar { height: 8px; }
+      .board-scroll::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 9999px; }
+
+      /* Reads as a warning without shouting over the numbers it labels. */
+      .sim-pill {
+        color: var(--neg);
+        background: color-mix(in srgb, var(--neg) 12%, transparent);
+        border: 1px solid color-mix(in srgb, var(--neg) 35%, transparent);
+      }
+      .sim-pill:hover { background: color-mix(in srgb, var(--neg) 18%, transparent); }
+    </style>
+  </head>
+
+  <body
+    x-data="{
+      menu: false,
+      theme: predicthqTheme.current(),
+      format: (localStorage.getItem('ob-format') || 'american'),
+      live: {{ liveJson }},
+      flash: {},
+      liveConnection: null,
+      token: (localStorage.getItem('ob-token') || (self.crypto && crypto.randomUUID ? crypto.randomUUID() : 'tok-' + Math.random().toString(36).slice(2))),
+      cat: 'all',
+      stake: 25,
+      arbStake: 100,
+      sheetOpen: false,
+      sheetName: '',
+      sheet: JSON.parse(localStorage.getItem('ob-sheet') || '[]'),
+      saved: JSON.parse(localStorage.getItem('ob-saved') || '[]'),
+      toggleTheme() { this.theme = this.theme === 'dark' ? 'light' : 'dark' },
+      inSheet(id) { return this.sheet.some(l => l.id === id) },
+      toggleLeg(leg) { this.inSheet(leg.id) ? (this.sheet = this.sheet.filter(l => l.id !== leg.id)) : (this.sheet = [...this.sheet, leg]) },
+      removeLeg(id) { this.sheet = this.sheet.filter(l => l.id !== id) },
+      clearSheet() { this.sheet = [] },
+      parlay() { return this.sheet.reduce((a, l) => a * l.price, 1) },
+      american(d) { return d >= 2 ? '+' + Math.round((d - 1) * 100) : '' + Math.round(-100 / (d - 1)) },
+      fmt(d) { return this.format === 'percent' ? (100 / d).toFixed(1) + '%' : this.format === 'price' ? Math.round(100 / d) + '¢' : this.american(d) },
+      px(sel, book, fallback) { const v = this.live[sel + ':' + book]; const d = (v == null ? fallback : v); return d == null ? '-' : this.fmt(d) },
+      flashClass(sel, book) { return this.flash[sel + ':' + book] || '' },
+      init() { this.connectLive() },
+      connectLive() {
+        this.liveConnection = predicthqRealtime.connect('{{ broadcastPort }}', 'odds', {
+          onMessage: (msg) => {
+            if (msg.channel !== 'odds' || msg.event !== 'board:updated' || !(msg.data && msg.data.events)) return
+            const next = { ...this.live }; const flashes = {}
+            for (const ev of msg.data.events) for (const s of ev.selections) for (const q of s.quotes) {
+              if (q.price == null) continue
+              const key = s.id + ':' + q.bookmakerId; const old = this.live[key]
+              next[key] = q.price
+              if (old != null && q.price !== old) flashes[key] = q.price > old ? 'flash-up' : 'flash-down'
+            }
+            this.live = next; this.flash = flashes
+            setTimeout(() => { this.flash = {} }, 1200)
+          },
+        })
+      },
+      persist() { localStorage.setItem('ob-sheet', JSON.stringify(this.sheet)); localStorage.setItem('ob-saved', JSON.stringify(this.saved)); localStorage.setItem('ob-format', this.format); localStorage.setItem('ob-token', this.token) },
+      saveSheet() { if (!this.sheet.length) return; const name = (this.sheetName || '').trim() || ('Sheet ' + (this.saved.length + 1)); const legs = this.sheet; this.saved = [...this.saved, { name, legs, parlay: this.parlay() }]; this.sheetName = ''; try { fetch('/api/sheets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: this.token, name, legs }) }).catch(() => {}) } catch (e) { /* offline, kept in localStorage */ } },
+      loadSheet(i) { this.sheet = [...this.saved[i].legs]; this.sheetOpen = true },
+      deleteSaved(i) { this.saved = this.saved.filter((_, j) => j !== i) }
+    }"
+  >
+  <div class="app" x-effect="persist()">
+    <!-- nav -->
+      @include('nav')
+
+    <main class="mx-auto px-4 sm:px-6 max-w-7xl">
+      <!-- hero -->
+      <section class="grid gap-10 items-center lg:grid-cols-[1.05fr_0.95fr] lg:gap-16 py-10 lg:py-14">
+        <div>
+          <h1 class="display max-w-2xl font-black leading-[1.05] text-4xl tracking-tight sm:text-5xl">
+            Every account, every call,<br><span class="accent">one place.</span>
+          </h1>
+          <p class="mt-5 max-w-xl leading-relaxed text-lg muted">
+            Connect your venues, compare notes with people trading the same markets, and let your AI automate the rest.
+          </p>
+
+          <div class="flex flex-wrap gap-3 items-center mt-7">
+            <a href="/signup" data-no-router class="px-5 py-3 font-bold text-sm rounded-lg btn btn-primary">Sign up</a>
+            <a href="#evidence" class="px-5 py-3 font-bold text-sm rounded-lg btn">See how it decides</a>
+          </div>
+        </div>
+
+        {{--
+          The panel used to count the intel tape (markets, fills, traders,
+          whales). Those tables are empty until prediction-market ingestion
+          has run, so the first thing a visitor met on a page selling
+          traceable data was four zeros, which reads as a broken product
+          rather than a cold database.
+
+          These four come off the odds board instead. That feed is the
+          always-on one, so the panel is real on a fresh install, and it is
+          proof of the same claim: this is what we are reading right now.
+        --}}
+        @if (summary.eventCount)
+          <div class="p-6 rounded-2xl card sm:p-7">
+            <div class="flex flex-wrap gap-2 items-center justify-between pb-5 border-b bd">
+              <div class="flex gap-2 items-center">
+                <span class="h-2 w-2 rounded-full" style="background:{{ feed.live ? 'var(--pos)' : 'var(--neg)' }}" aria-hidden="true"></span>
+                <span class="font-bold text-xs tracking-wide uppercase muted">Reading right now</span>
+              </div>
+              {{--
+                Linked rather than merely stated: someone who learns the
+                board is simulated immediately wants to know what else is,
+                and the pipeline page is the answer to all of it.
+              --}}
+              @if (!feed.live)
+                <a href="/pipeline" data-no-router class="inline-flex gap-1.5 items-center px-2 py-0.5 font-bold text-[11px] tracking-wide uppercase rounded-full sim-pill">
+                  Simulated data
+                  <i class="h-3 w-3 i-hugeicons-arrow-right-01"></i>
+                </a>
+              @endif
+            </div>
+            <div class="grid gap-y-6 grid-cols-2 gap-x-8 pt-5">
+              <div>
+                <div class="font-black text-3xl num">{{ summary.eventCount.toLocaleString() }}</div>
+                <div class="mt-1 font-semibold text-xs tracking-wide uppercase muted">Games priced</div>
+              </div>
+              <div>
+                <div class="font-black text-3xl num">{{ summary.bookmakerCount.toLocaleString() }}</div>
+                <div class="mt-1 font-semibold text-xs tracking-wide uppercase muted">Books compared</div>
+              </div>
+              <div>
+                <div class="font-black text-3xl num pos">{{ summary.avgEdgePct.toFixed(1) }}%</div>
+                <div class="mt-1 font-semibold text-xs tracking-wide uppercase muted">Avg best edge</div>
+              </div>
+              <div>
+                <div class="font-black text-3xl accent num">{{ arbCount.toLocaleString() }}</div>
+                <div class="mt-1 font-semibold text-xs tracking-wide uppercase muted">Arbs on the board</div>
+              </div>
+            </div>
+          </div>
+        @else
+          {{-- Nothing ingested at all. Say that, rather than print zeros. --}}
+          <div class="p-7 rounded-2xl card">
+            <h2 class="font-bold text-lg">The board is warming up</h2>
+            <p class="mt-2 leading-relaxed muted">
+              No odds have been ingested yet, so there is nothing to compare. Prices appear here as soon as the first pull lands.
+            </p>
+            <a href="/features/odds" data-no-router class="inline-flex items-center px-4 mt-5 h-10 font-bold text-sm rounded-lg btn">How the board works</a>
+          </div>
+        @endif
+      </section>
+
+      <!-- venues + books, under the hero rather than inside it -->
+      <section class="flex flex-wrap gap-2 items-center pb-10">
+        <span class="mr-1 font-bold text-xs tracking-wide uppercase faint">Reading</span>
+        @foreach (brandedBooks as b)
+          <span class="logo logo-md" style="background:{{ b.brand.bg }};color:{{ b.brand.fg }}" title="{{ b.name }}">{{ b.brand.mark }}</span>
+        @endforeach
+      </section>
+
+      <!-- evidence: one real candidate, with the numbers behind it -->
+      <section id="evidence" class="py-14 border-t scroll-mt-20 bd">
+        <h2 class="display max-w-2xl font-black text-2xl tracking-tight sm:text-3xl">The reasoning is a row in the database, not a paragraph</h2>
+        <p class="mt-3 max-w-2xl leading-relaxed muted">
+          Fair value starts at the venue's own price. Each signal below moved it by a measured amount, and every one records the sample it stood on. The model reviewing this can decline it or lower its confidence. It cannot raise it.
+        </p>
+
+        {{--
+          The size of the tape those signals are drawn from. Gated on the
+          tape existing: on a cold database this whole row is zeros, which
+          says nothing, so it is absent instead.
+        --}}
+        @if (intel.marketCount)
+          <div class="flex flex-wrap gap-x-10 gap-y-4 mt-7">
+            <div>
+              <div class="font-black text-xl num">{{ intel.marketCount.toLocaleString() }}</div>
+              <div class="mt-0.5 font-semibold text-xs tracking-wide uppercase muted">Markets tracked</div>
+            </div>
+            <div>
+              <div class="font-black text-xl num">{{ intel.recentFills.toLocaleString() }}</div>
+              <div class="mt-0.5 font-semibold text-xs tracking-wide uppercase muted">Fills read today</div>
+            </div>
+            <div>
+              <div class="font-black text-xl num">{{ intel.traderCount.toLocaleString() }}</div>
+              <div class="mt-0.5 font-semibold text-xs tracking-wide uppercase muted">Accounts scored</div>
+            </div>
+            <div>
+              <div class="font-black text-xl accent num">{{ intel.whaleCount.toLocaleString() }}</div>
+              <div class="mt-0.5 font-semibold text-xs tracking-wide uppercase muted">Size traders flagged</div>
+            </div>
+          </div>
+        @endif
+
+        @if (candidate)
+          <div class="overflow-hidden mt-7 rounded-2xl card">
+            <div class="flex flex-col gap-4 items-start justify-between md:flex-row md:items-center px-5 py-5 border-b bd sm:px-6">
+              <div class="min-w-0">
+                <div class="font-bold text-xs tracking-wide uppercase faint">{{ candidate.venue }}</div>
+                <div class="mt-1 font-bold text-lg leading-snug">{{ candidate.question }}</div>
+              </div>
+              <div class="flex gap-7 shrink-0">
+                <div>
+                  <div class="font-semibold text-xs tracking-wide uppercase muted">Quoted</div>
+                  <div class="font-black text-xl num">{{ candidate.marketPricePct }}</div>
+                </div>
+                <div>
+                  <div class="font-semibold text-xs tracking-wide uppercase muted">Fair value</div>
+                  <div class="font-black text-xl accent num">{{ candidate.fairValuePct }}</div>
+                </div>
+                <div>
+                  <div class="font-semibold text-xs tracking-wide uppercase muted">Edge</div>
+                  <div class="font-black text-xl num pos">{{ candidate.edgePts }} pts</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="divide-y bd">
+              @foreach (candidate.evidence as item)
+                <div class="flex flex-col gap-1 items-start justify-between sm:flex-row sm:items-center sm:gap-6 px-5 py-4 sm:px-6">
+                  <div class="min-w-0">
+                    <span class="font-bold text-sm">{{ item.label }}</span>
+                    <span class="ml-2 text-sm muted">{{ item.summary }}</span>
+                  </div>
+                  <div class="flex gap-5 items-center shrink-0">
+                    <span class="text-xs faint num">n = {{ item.sampleSize.toLocaleString() }}</span>
+                    <span class="font-bold text-sm num {{ item.points === 'context' ? 'muted' : (item.positive ? 'pos' : 'neg') }}">{{ item.points }}</span>
+                  </div>
+                </div>
+              @endforeach
+            </div>
+
+            <div class="flex flex-wrap gap-2 items-center justify-between px-5 py-4 text-sm border-t bd sm:px-6" style="background:var(--surface-2)">
+              <span class="muted">Buying <span class="font-bold" style="color:var(--text)">{{ candidate.side }}</span> at or below fair value</span>
+              <span class="muted">Confidence <span class="font-bold num" style="color:var(--text)">{{ candidate.confidencePct }}</span></span>
+            </div>
+          </div>
+        @else
+          <div class="px-6 py-12 mt-7 text-center rounded-2xl card">
+            <p class="font-bold">No candidate right now.</p>
+            <p class="mt-2 text-sm muted">Nothing in the last 24 hours of tape carries enough flow to price against. That is the honest answer, and it is the one the engine gives itself.</p>
+          </div>
+        @endif
+      </section>
+
+
+      <!-- controls -->
+      <section id="board" class="scroll-mt-20">
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between pt-6 border-t bd">
+          <div class="flex flex-wrap gap-2">
+            <button class="px-3.5 py-1.5 font-semibold text-sm rounded-full chip" :class="cat === 'all' ? 'chip-on' : ''" @click="cat = 'all'">All sports</button>
+            @foreach (categories as c)
+              <button class="inline-flex gap-1.5 items-center px-3.5 py-1.5 font-semibold text-sm rounded-full chip" :class="cat === '{{ c.name }}' ? 'chip-on' : ''" @click="cat = '{{ c.name }}'"><i class="h-4 w-4 {{ c.icon }}"></i>{{ c.name }}</button>
+            @endforeach
+          </div>
+          <div class="inline-flex p-1 font-bold text-xs rounded-full seg">
+            <button class="px-3 py-1.5 rounded-full seg-btn" :class="format === 'american' ? 'seg-on' : ''" @click="format = 'american'">American</button>
+            <button class="px-3 py-1.5 rounded-full seg-btn" :class="format === 'percent' ? 'seg-on' : ''" @click="format = 'percent'">Percent</button>
+            <button class="px-3 py-1.5 rounded-full seg-btn" :class="format === 'price' ? 'seg-on' : ''" @click="format = 'price'">Price</button>
+          </div>
+        </div>
+        <p class="mt-3 text-sm muted">Tap a <span class="font-semibold accent">ringed best price</span> to add that pick to your sheet. The best available line on each outcome carries the accent ring.</p>
+
+        <!-- game cards -->
+        <div class="mt-6 space-y-5">
+          @foreach (board as ev)
+            <section x-show="cat === 'all' || cat === '{{ ev.category }}'" class="overflow-hidden rounded-2xl card">
+              <!-- card header: matchup -->
+              <div class="flex flex-wrap gap-3 items-center justify-between px-4 py-4 sm:px-5 border-b bd">
+                <div class="flex gap-3 items-center">
+                  <span class="grid place-items-center h-11 w-11 rounded-xl soft" aria-hidden="true"><i class="h-6 w-6 {{ ev.sport }}"></i></span>
+                  <div>
+                    <div class="flex gap-2 items-center font-bold text-xs tracking-wider uppercase faint">
+                      <span>{{ ev.league }}</span><span>·</span><span>{{ ev.market }}</span>
+                    </div>
+                    <div class="flex gap-2 items-center mt-1">
+                      <span class="badge" style="{{ ev.home.style }}">{{ ev.home.text }}</span>
+                      <span class="font-bold">{{ ev.title }}</span>
+                      <span class="badge" style="{{ ev.away.style }}">{{ ev.away.text }}</span>
+                    </div>
+                    <p class="mt-0.5 text-xs faint">{{ ev.startsAt }} · updated {{ ev.updatedMinutesAgo }}m ago</p>
+                  </div>
+                </div>
+                <div>
+                  @if (ev.isArb)
+                    <span class="inline-flex gap-1.5 items-center px-3 py-1 font-black text-sm rounded-full badge-arb">⚡ Arb {{ ev.arbLabel }}</span>
+                  @elseif (ev.holdLabel)
+                    <span class="inline-flex items-center px-3 py-1 font-bold text-xs rounded-full badge-hold">{{ ev.holdLabel }}</span>
+                  @endif
+                </div>
+              </div>
+
+              <!-- odds table -->
+              <div class="overflow-x-auto board-scroll">
+                <table class="min-w-[760px] w-full text-sm border-collapse">
+                  <thead>
+                    <tr class="text-xs tracking-wider uppercase faint">
+                      <th class="px-4 py-2.5 sm:px-5 font-bold text-left">Outcome</th>
+                      <th class="px-3 py-2.5 font-bold text-center accent">Best · add</th>
+                      @foreach (ev.headers as book)
+                        <th class="px-2 py-2.5 font-bold text-center">
+                          <span class="mx-auto logo logo-sm" style="background:{{ book.brand.bg }};color:{{ book.brand.fg }}" title="{{ book.name }}{{ book.kind === 'prediction' ? ' (prediction market)' : '' }}">{{ book.brand.mark }}</span>
+                        </th>
+                      @endforeach
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @foreach (ev.selections as s)
+                      <tr class="row-divide">
+                        <td class="px-4 py-4 sm:px-5 text-left" style="min-width:220px">
+                          <div class="flex gap-2.5 items-center">
+                            <span class="badge" style="{{ s.team.style }}">{{ s.team.text }}</span>
+                            <div class="flex-1 min-w-0">
+                              <div class="flex gap-3 items-baseline justify-between">
+                                <span class="font-bold">{{ s.label }}</span>
+                                <span class="font-bold text-xs muted num">{{ s.impliedLabel }} chance</span>
+                              </div>
+                              <div class="mt-1.5 prob"><div class="prob-fill" style="width:{{ s.bestImpliedPct.toFixed(0) }}%"></div></div>
+                              <div class="flex gap-2 items-center mt-1 text-[11px] muted">
+                                <svg width="58" height="16" viewBox="0 0 60 16" preserveAspectRatio="none"><polyline points="{{ s.spark }}" fill="none" stroke="{{ s.sparkColor }}" stroke-width="1.5"></polyline></svg>
+                                <span class="num" style="color:{{ s.sparkColor }}">{{ s.trendArrow }}</span>
+                                <span class="num">{{ s.openLabel }}→<span class="font-bold" style="color:var(--text)">{{ s.bestDecimalLabel }}</span></span>
+                                <span class="font-semibold pos">{{ s.edgeLabel }}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td class="px-3 py-3 text-center">
+                          <button
+                            class="inline-flex flex-col items-center px-3 py-1.5 min-w-[92px] font-black rounded-xl num pick"
+                            :class="inSheet({{ s.id }}) ? 'pick-on' : ''"
+                            @click="toggleLeg({ id: {{ s.id }}, league: '{{ ev.league }}', game: '{{ ev.title }}', pick: '{{ s.label }}', price: {{ s.bestPrice }}, book: '{{ s.bestBook.short }}', ta: '{{ s.team.abbr }}', tb: '{{ s.team.bg }}', tf: '{{ s.team.fg }}', bb: '{{ s.bestBrand.bg }}', bf: '{{ s.bestBrand.fg }}', bm: '{{ s.bestBrand.mark }}', bu: '{{ s.bestBrand.url }}' })"
+                          >
+                            <span class="leading-none text-base" x-text="px({{ s.id }}, {{ s.bestBookmakerId }}, {{ s.bestPrice }})">{{ s.bestDecimalLabel }}</span>
+                            <span class="flex gap-1 items-center mt-1 font-bold text-[10px] tracking-wide uppercase">
+                              <span class="logo" style="background:{{ s.bestBrand.bg }};color:{{ s.bestBrand.fg }};height:14px;min-width:14px;padding:0 3px;font-size:8px;border-radius:4px">{{ s.bestBrand.mark }}</span>
+                              <span x-show="!inSheet({{ s.id }})">add</span>
+                              <span x-show="inSheet({{ s.id }})" style="display:none">✓</span>
+                            </span>
+                          </button>
+                        </td>
+                        @foreach (s.cells as cell)
+                          <td class="px-2 py-3 text-center">
+                            <div class="num mx-auto w-16 rounded-lg px-2 py-1.5 font-bold {{ cell.isBest ? 'best-cell' : 'cell' }}" :class="flashClass({{ s.id }}, {{ cell.bookmakerId }})" {{ cell.price === null ? 'style=opacity:0.4' : '' }} x-text="px({{ s.id }}, {{ cell.bookmakerId }}, {{ cell.price === null ? 'null' : cell.price }})">{{ cell.decimalLabel }}</div>
+                          </td>
+                        @endforeach
+                      </tr>
+                    @endforeach
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          @endforeach
+        </div>
+      </section>
+
+      <!-- arbitrage radar + calculator -->
+      <section id="arbitrage" class="py-12 border-t scroll-mt-20 bd">
+        <div class="flex flex-wrap gap-3 items-end justify-between">
+          <div>
+            <h2 class="display font-black text-2xl tracking-tight sm:text-3xl">Arbitrage radar</h2>
+            <p class="mt-1 max-w-2xl muted">When the best prices across books imply under 100% total, back every outcome at a different book and lock in profit. Set a total stake to see the split.</p>
+          </div>
+          <label class="flex gap-2 items-center font-semibold text-sm muted">Total stake $
+            <input type="number" min="1" class="px-2 py-1.5 w-24 font-bold text-right rounded-lg input num" x-model="arbStake">
+          </label>
+        </div>
+
+        @if (arbEvents.length === 0)
+          <p class="mt-6 px-5 py-10 text-center rounded-2xl card muted">No arbitrage on the board right now. The market is efficient. Check back as lines move.</p>
+        @else
+          <div class="grid gap-5 md:grid-cols-2 mt-6">
+            @foreach (arbEvents as ev)
+              <div class="p-5 rounded-2xl card" style="border-color:var(--accent)">
+                <div class="flex items-center justify-between">
+                  <span class="font-bold text-xs tracking-wider uppercase faint">{{ ev.league }} · {{ ev.market }}</span>
+                  <span class="inline-flex items-center px-3 py-1 font-black text-sm rounded-full badge-arb">⚡ Guaranteed {{ ev.arbLabel }}</span>
+                </div>
+                <h3 class="mt-2 font-bold">{{ ev.title }}</h3>
+                <div class="mt-4 space-y-2">
+                  @foreach (ev.selections as s)
+                    <div class="flex gap-3 items-center justify-between px-3.5 py-2.5 rounded-xl soft">
+                      <div class="flex gap-2.5 items-center min-w-0">
+                        <span class="badge" style="{{ s.team.style }}">{{ s.team.text }}</span>
+                        <div class="min-w-0">
+                          <div class="font-bold">{{ s.label }}</div>
+                          <div class="flex gap-1 items-center text-xs muted">
+                            <span class="logo" style="background:{{ s.bestBrand.bg }};color:{{ s.bestBrand.fg }};height:14px;min-width:14px;padding:0 3px;font-size:8px;border-radius:4px">{{ s.bestBrand.mark }}</span>
+                            {{ s.bestBook.name }} · <span class="num">{{ s.bestDecimalLabel }}</span>
+                            <a href="{{ s.bestBrand.url }}" target="_blank" rel="sponsored noopener" class="ml-0.5 accent hover:opacity-70" title="Place at {{ s.bestBook.name }}">↗</a>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="text-right">
+                        <div class="font-bold text-[10px] tracking-wide uppercase faint">Stake</div>
+                        <div class="font-black accent num" x-text="'$' + (Number(arbStake) * (1 / {{ s.bestPrice }}) / {{ ev.impliedSum }}).toFixed(2)"></div>
+                      </div>
+                    </div>
+                  @endforeach
+                </div>
+                <div class="flex items-center justify-between mt-3 pt-3 border-t bd">
+                  <span class="font-semibold text-sm muted">Guaranteed profit</span>
+                  <span class="font-black text-lg num pos" x-text="'$' + (Number(arbStake) / {{ ev.impliedSum }} - Number(arbStake)).toFixed(2)"></span>
+                </div>
+              </div>
+            @endforeach
+          </div>
+        @endif
+      </section>
+
+      <!-- how it works: staged rows, so each step gets room for the
+           thing that makes it different rather than an equal third -->
+      <section id="how" class="py-14 border-t scroll-mt-20 bd">
+        <h2 class="display max-w-2xl font-black text-2xl tracking-tight sm:text-3xl">Four stages, and the last one is the only one that spends money</h2>
+
+        <div class="mt-8 divide-y bd">
+          <div class="grid gap-2 md:grid-cols-[14rem_1fr] md:gap-10 py-6">
+            <h3 class="font-bold">Read the tape</h3>
+            <p class="max-w-2xl leading-relaxed muted">
+              We continuously pull the public trade feed and market metadata from both venues, with a one-minute safety floor and immediate in-app broadcast after each completed pass. Polymarket fills carry a wallet, so per-account accuracy is real there. Kalshi's feed is anonymous, so its signal is flow rather than identity, and it is scored as such.
+            </p>
+          </div>
+
+          <div class="grid gap-2 md:grid-cols-[14rem_1fr] md:gap-10 py-6">
+            <h3 class="font-bold">Price it</h3>
+            <p class="max-w-2xl leading-relaxed muted">
+              Six signals move fair value off the venue's quote, each one clamped so none can run away with the estimate, and each recording its sample size. A market without enough recent flow to price gets no opinion at all.
+            </p>
+          </div>
+
+          <div class="grid gap-2 md:grid-cols-[14rem_1fr] md:gap-10 py-6">
+            <h3 class="font-bold">Review it</h3>
+            <p class="max-w-2xl leading-relaxed muted">
+              A model reads the question and the evidence, and catches what the arithmetic misses: flow that is one account rather than a consensus, or a question that resolves on something a trade tape cannot see. It can decline. It cannot invent a market, a side, or more confidence than the data carries.
+            </p>
+          </div>
+
+          <div class="grid gap-2 md:grid-cols-[14rem_1fr] md:gap-10 py-6">
+            <h3 class="font-bold">Size and place it</h3>
+            <p class="max-w-2xl leading-relaxed muted">
+              Quarter-Kelly on your bankroll, scaled by confidence, capped by your per-trade limit. Bankroll, position count, and a daily loss limit are re-checked before the order leaves. Every refusal is recorded with its reason, so a quiet strategy is never a mystery.
+            </p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- responsible gambling -->
+    <section class="border-t bd" style="background:var(--surface-2)">
+      <div class="flex flex-col gap-2 items-center justify-between sm:flex-row mx-auto px-4 py-4 sm:px-6 max-w-7xl text-xs muted">
+        <span><span class="font-bold" style="color:var(--text)">21+</span> · Please gamble responsibly. If you or someone you know has a gambling problem, call <span class="font-bold" style="color:var(--text)">1-800-GAMBLER</span>.</span>
+        <a href="https://www.ncpgambling.org/help-treatment/" target="_blank" rel="noopener" class="font-semibold accent hover:opacity-70">Get help ↗</a>
+      </div>
+    </section>
+
+    <!-- floating sheet button (mobile) -->
+    <button class="flex md:hidden bottom-5 fixed right-5 z-30 gap-2 items-center px-5 py-3 font-bold rounded-full shadow-lg btn btn-primary" x-show="sheet.length > 0" x-cloak @click="sheetOpen = true">
+      <span>Sheet</span>
+      <span class="num" x-text="sheet.length"></span>
+    </button>
+
+    <!-- betting sheet drawer -->
+    <div class="fixed inset-0 z-40 scrim" x-show="sheetOpen" x-cloak x-transition.opacity @click="sheetOpen = false"></div>
+    <aside
+      class="flex fixed right-0 top-0 z-50 flex-col h-full max-w-md w-full drawer"
+      x-show="sheetOpen"
+      x-cloak
+      x-transition:enter="transition ease-out duration-200"
+      x-transition:enter-start="translate-x-full"
+      x-transition:enter-end="translate-x-0"
+      x-transition:leave="transition ease-in duration-150"
+      x-transition:leave-start="translate-x-0"
+      x-transition:leave-end="translate-x-full"
+    >
+      <div class="flex items-center justify-between px-5 py-4 border-b bd">
+        <div>
+          <h2 class="display font-black text-lg">Betting sheet</h2>
+          <p class="text-xs muted"><span x-text="sheet.length"></span> pick(s) · parlay builder</p>
+        </div>
+        <button class="grid place-items-center h-9 w-9 rounded-lg icon-btn" @click="sheetOpen = false" aria-label="Close">✕</button>
+      </div>
+
+      <div class="overflow-y-auto flex-1 px-5 py-4">
+        <div x-show="sheet.length === 0" class="px-4 py-12 text-center text-sm rounded-xl muted soft">
+          Your sheet is empty.<br>Tap a ringed best price on any game to start a parlay.
+        </div>
+
+        <div x-show="sheet.length > 0" class="space-y-2.5">
+          <template x-for="leg in sheet" :key="leg.id">
+            <div class="flex gap-3 items-center justify-between px-3 py-2.5 rounded-xl soft">
+              <div class="flex gap-2.5 items-center min-w-0">
+                <span class="badge" :style="`background-color:${leg.tb};color:${leg.tf};border:1px solid var(--border)`" x-text="leg.ta"></span>
+                <div class="min-w-0">
+                  <div class="text-xs truncate muted" x-text="leg.league + ' · ' + leg.game"></div>
+                  <div class="font-bold" x-text="leg.pick"></div>
+                  <div class="flex gap-1 items-center mt-0.5 text-xs muted">
+                    <span class="logo" :style="`background:${leg.bb};color:${leg.bf};height:14px;min-width:14px;padding:0 3px;font-size:8px;border-radius:4px`" x-text="leg.bm"></span>
+                    <span x-text="leg.book"></span>
+                    <a :href="leg.bu" target="_blank" rel="sponsored noopener" class="accent hover:opacity-70" title="Place at book">↗</a>
+                  </div>
+                </div>
+              </div>
+              <div class="flex gap-2 items-center">
+                <span class="font-black accent num" x-text="fmt(leg.price)"></span>
+                <button class="grid place-items-center h-7 w-7 rounded-md icon-btn" @click="removeLeg(leg.id)" aria-label="Remove">✕</button>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <div x-show="sheet.length > 0" class="px-5 py-4 border-t bd">
+        <div class="grid gap-2 grid-cols-3 text-center">
+          <div class="py-2.5 rounded-xl soft">
+            <div class="font-black text-lg accent num" data-test="parlay-decimal" x-text="parlay().toFixed(2)"></div>
+            <div class="font-bold text-[10px] tracking-wide uppercase muted">Decimal</div>
+          </div>
+          <div class="py-2.5 rounded-xl soft">
+            <div class="font-black text-lg num" x-text="american(parlay())"></div>
+            <div class="font-bold text-[10px] tracking-wide uppercase muted">American</div>
+          </div>
+          <div class="py-2.5 rounded-xl soft">
+            <div class="font-black text-lg num" x-text="(100 / parlay()).toFixed(1) + '%'"></div>
+            <div class="font-bold text-[10px] tracking-wide uppercase muted">Implied</div>
+          </div>
+        </div>
+
+        <div class="flex gap-3 items-center justify-between mt-3 px-3.5 py-2.5 rounded-xl soft">
+          <label class="font-semibold text-sm muted">Stake $
+            <input type="number" min="0" class="ml-1 px-2 py-1 w-20 font-bold text-right rounded-lg input num" x-model="stake">
+          </label>
+          <div class="text-right">
+            <div class="font-bold text-[10px] tracking-wide uppercase muted">To win</div>
+            <div class="font-black text-lg num pos" x-text="'$' + (parlay() * (Number(stake) || 0)).toFixed(2)"></div>
+          </div>
+        </div>
+
+        <div class="flex gap-2 mt-3">
+          <input type="text" class="flex-1 px-3 py-2 text-sm rounded-lg input" placeholder="Name this sheet" x-model="sheetName">
+          <button class="px-3 py-2 font-bold text-sm rounded-lg btn" @click="saveSheet()">Save</button>
+          <button class="px-3 py-2 font-bold text-sm rounded-lg btn" @click="clearSheet()">Clear</button>
+        </div>
+      </div>
+
+      <div x-show="saved.length > 0" class="px-5 py-4 border-t bd">
+        <div class="mb-2 font-bold text-xs tracking-wide uppercase muted">Saved sheets</div>
+        <div class="space-y-2">
+          <template x-for="(s, i) in saved" :key="i">
+            <div class="flex gap-3 items-center justify-between px-3.5 py-2 rounded-xl soft">
+              <div class="min-w-0">
+                <div class="font-semibold truncate" x-text="s.name"></div>
+                <div class="text-xs muted"><span x-text="s.legs.length"></span> legs · <span class="accent num" x-text="s.parlay.toFixed(2)"></span></div>
+              </div>
+              <div class="flex gap-2 items-center">
+                <button class="px-2.5 py-1 font-bold text-xs rounded-md btn" @click="loadSheet(i)">Load</button>
+                <button class="grid place-items-center h-7 w-7 rounded-md icon-btn" @click="deleteSaved(i)" aria-label="Delete">✕</button>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </aside>
+    @include('footer')
+  </div>
+  </body>
+</html>

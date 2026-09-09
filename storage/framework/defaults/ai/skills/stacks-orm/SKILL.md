@@ -1,6 +1,6 @@
 ---
 name: stacks-orm
-description: Use when working with the Stacks ORM — defining models with defineModel(), model relationships (hasOne, hasMany, belongsTo, belongsToMany, morphOne, hasManyThrough), attributes, traits, factories, computed properties, query building, transactions, or the 50+ built-in models. Covers @stacksjs/orm, storage/framework/orm/, and storage/framework/defaults/app/Models/.
+description: Use when working with the Stacks ORM - defining models with defineModel(), model relationships (hasOne, hasMany, belongsTo, belongsToMany, morphOne, hasManyThrough), attributes, traits, factories, computed properties, query building, transactions, or the 50+ built-in models. Covers @stacksjs/orm, storage/framework/orm/, and storage/framework/defaults/app/Models/.
 license: MIT
 compatibility: Bun >= 1.3.0, TypeScript, SQLite >= 3.47.2
 allowed-tools: Read Edit Write Bash Grep Glob
@@ -11,7 +11,7 @@ allowed-tools: Read Edit Write Bash Grep Glob
 ## Key Paths
 - Core ORM package: `storage/framework/core/orm/src/`
 - ORM implementation: `storage/framework/orm/`
-- Model definitions: `storage/framework/defaults/app/Models/` (50+ models)
+- Model definitions: `storage/framework/defaults/app/Models/` (100 models)
 - Application models: `app/Models/`
 - Default model templates: `storage/framework/defaults/app/Models/`
 - ORM type globals: `storage/framework/types/orm-globals.d.ts`
@@ -104,8 +104,8 @@ export default defineModel({
       required: true,
       unique: false,
       validation: {
-        rule: schema.string().maxLength(100),
-        message: { maxLength: 'Name is too long' }
+        rule: schema.string().max(100),
+        message: { max: 'Name is too long' }
       },
       factory: (faker) => faker.lorem.word()
     },
@@ -195,6 +195,12 @@ await createUser('Alice', 'alice@example.com') // auto-wrapped
 ```
 
 Both `transaction()` and `savepoint()` delegate to `db.transaction()` and `db.savepoint()` from `@stacksjs/database`.
+
+### Transaction executor boundary
+
+Every query that must commit or roll back together must use the callback handle (`tx` or `sp`), including validation reads, pivot writes, and the final readback. Do not mix `Model.find()`, `Model.create()`, instance `update()` / `delete()`, or instance relation calls into a raw query-builder transaction. The model executor is a separate execution surface and is not rebound to the callback handle. On SQLite it may use a separate connection, so it cannot observe an uncommitted row written through `tx`.
+
+`runInTransactionScope()` buffers supported side effects until commit, but it does not rebind model queries. For a transaction-backed custom action, use the model definition as the schema and relationship source of truth, then execute the complete persistence workflow through `tx`. Read the created or updated row through `tx` before returning so a readback failure also rolls back the mutation.
 
 ## Trait Methods (traits/)
 

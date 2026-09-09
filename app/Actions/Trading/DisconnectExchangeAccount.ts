@@ -13,8 +13,8 @@ export default {
       return response.error('Sign in to disconnect a trading account.', 401)
 
     const venue = requestString(request, 'venue').toLowerCase()
-    if (!['kalshi', 'polymarket'].includes(venue))
-      return response.error('Expected kalshi or polymarket.', 422)
+    if (!['kalshi', 'polymarket', 'polymarket-us'].includes(venue))
+      return response.error('Choose a connected exchange.', 422)
 
     const db = new Database()
     try {

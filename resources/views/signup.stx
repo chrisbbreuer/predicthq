@@ -9,19 +9,21 @@
  * are the same click, and a visitor who has never been here should not
  * have to work that out from a page titled "Welcome back".
  */
+import { signupQuery } from '../../app/Support/signup-context'
 import { configuredSocialProviders, signInError } from '../../app/Support/auth'
 
 const navActive = 'signup'
 const pageTitle = 'PredictHQ: create an account'
 const pageDescription = 'Create a PredictHQ account to save your sheets, connect your venues, and follow the markets you trade.'
 
+const authContextQuery = signupQuery(query.ref, query.invite)
 const providers = configuredSocialProviders()
 const authError = signInError(query.error)
 const authHeading = 'Create your account'
 const authBlurb = 'One step. Pick a provider and PredictHQ builds the account from the email it shares.'
 const authVerb = 'Continue with'
 const authAltPrompt = 'Already have an account?'
-const authAltHref = '/login'
+const authAltHref = '/login' + authContextQuery
 const authAltLabel = 'Sign in'
 </script>
 

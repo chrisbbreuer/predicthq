@@ -1,4 +1,5 @@
 import { decrypt, encrypt } from '@stacksjs/security'
+import { Buffer } from 'node:buffer'
 
 /**
  * Venue credentials, sealed.
@@ -44,7 +45,13 @@ export interface PolymarketCredentials {
   signatureType?: 0 | 1 | 2 | 3
 }
 
-export type VenueCredentials = KalshiCredentials | PolymarketCredentials
+export interface PolymarketUsCredentials {
+  venue: 'polymarket-us'
+  keyId: string
+  secretKey: string
+}
+
+export type VenueCredentials = KalshiCredentials | PolymarketCredentials | PolymarketUsCredentials
 
 export class CredentialError extends Error {}
 
@@ -88,7 +95,7 @@ export async function openCredentials(sealed: string, passphrase?: string): Prom
 export function maskIdentifier(credentials: VenueCredentials): string {
   const identifier = credentials.venue === 'kalshi'
     ? credentials.apiKeyId
-    : credentials.funderAddress
+    : credentials.venue === 'polymarket-us' ? credentials.keyId : credentials.funderAddress
 
   return identifier.length <= 4 ? '…' : `…${identifier.slice(-4)}`
 }
@@ -109,6 +116,12 @@ export function assertUsable(credentials: VenueCredentials): void {
       missing.push('privateKeyPem (expected a PEM block)')
     if (credentials.subaccount !== undefined && (!Number.isInteger(credentials.subaccount) || credentials.subaccount < 0 || credentials.subaccount > 32))
       missing.push('subaccount (expected an integer from 0 to 32)')
+  }
+  else if (credentials.venue === 'polymarket-us') {
+    if (!credentials.keyId.trim()) missing.push('keyId')
+    const size = Buffer.from(credentials.secretKey, 'base64').length
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(credentials.secretKey) || ![32, 64].includes(size))
+      missing.push('secretKey (expected a base64 Ed25519 key)')
   }
   else {
     if (!credentials.apiKey.trim())

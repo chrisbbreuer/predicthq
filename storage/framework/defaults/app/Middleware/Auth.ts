@@ -1,5 +1,6 @@
-import { Auth, sessionUser } from '@stacksjs/auth'
-import { config } from '@stacksjs/config'
+import { Auth } from '@stacksjs/auth/authentication'
+import { authCookieName } from '@stacksjs/auth/cookie'
+import { sessionUser } from '@stacksjs/auth/session-auth'
 import { HttpError } from '@stacksjs/error-handling'
 import { Middleware } from '@stacksjs/router'
 
@@ -40,7 +41,9 @@ export default new Middleware({
       return
     }
 
-    const tokenCookieName = config.auth?.defaultTokenName || 'auth-token'
+    // One resolver, so the name a cookie is written under is the name it is
+    // read under (stacksjs/stacks#2236).
+    const tokenCookieName = authCookieName()
     const cookieToken = request.cookie?.(tokenCookieName)
     if (cookieToken) {
       await stampTokenUser(request, cookieToken)

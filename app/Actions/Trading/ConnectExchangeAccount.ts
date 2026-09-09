@@ -1,3 +1,4 @@
+import { qualifyReferral } from '@stacksjs/auth'
 import type { VenueCredentials } from '../../Services/trading/credentials'
 import { Database } from '../../Support/db'
 import { authenticatedUserId } from '../../Support/request-auth'
@@ -30,8 +31,8 @@ export default {
       return response.error('Sign in to connect a trading account.', 401)
 
     const venue = requestString(request, 'venue').toLowerCase()
-    if (venue !== 'kalshi' && venue !== 'polymarket')
-      return response.error(`Unknown venue: ${venue || '(missing)'}. Expected kalshi or polymarket.`, 422)
+    if (!['kalshi', 'polymarket', 'polymarket-us'].includes(venue))
+      return response.error('Choose Kalshi, Polymarket US, or Polymarket International.', 422)
 
     if (!requestBoolean(request, 'termsAccepted') || !requestBoolean(request, 'riskAccepted') || !requestBoolean(request, 'ageConfirmed')) {
       return response.error(
@@ -55,7 +56,11 @@ export default {
           privateKeyPem: requestString(request, 'privateKeyPem'),
           subaccount: optionalInteger(requestString(request, 'subaccount')),
         }
-      : {
+      : venue === 'polymarket-us' ? {
+          venue: 'polymarket-us',
+          keyId: requestString(request, 'keyId').trim(),
+          secretKey: requestString(request, 'secretKey').trim(),
+        } : {
           venue: 'polymarket',
           apiKey: requestString(request, 'apiKey'),
           apiSecret: requestString(request, 'apiSecret'),
@@ -84,9 +89,9 @@ export default {
       const client = await clientFor(sealed)
       balance = (await client.fetchBalance()).available
     }
-    catch (error) {
+    catch {
       return response.error(
-        `${venue} rejected these credentials: ${error instanceof Error ? error.message : String(error)}`,
+        'The exchange could not verify these credentials. Check the key, account region, and API access, then retry.',
         422,
       )
     }
@@ -94,7 +99,8 @@ export default {
     const db = new Database()
 
     try {
-      await db.updateOrInsert('exchange_accounts', { user_id: userId, venue }, {
+      await db.transaction(async (transaction) => {
+        await transaction.updateOrInsert('exchange_accounts', { user_id: userId, venue }, {
         label,
         credentials: sealed,
         masked_identifier: masked,
@@ -107,6 +113,9 @@ export default {
         age_confirmed_at: now,
         jurisdiction,
         updated_at: now,
+      })
+
+        await qualifyReferral(userId, transaction)
       })
 
       /*

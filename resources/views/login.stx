@@ -10,6 +10,7 @@
  * Only social sign-in is wired in this app, so this page offers only that.
  * A password field here would be a form with nowhere to post.
  */
+import { signupQuery } from '../../app/Support/signup-context'
 import { configuredSocialProviders, signInError } from '../../app/Support/auth'
 
 const navActive = 'login'
@@ -18,13 +19,14 @@ const pageDescription = 'Sign in to PredictHQ to keep your sheets, your venue ac
 
 // Read by the `auth-panel` partial out of this scope, the same way the
 // nav reads `navActive`.
+const authContextQuery = signupQuery(query.ref, query.invite)
 const providers = configuredSocialProviders()
 const authError = signInError(query.error)
 const authHeading = 'Welcome back'
 const authBlurb = 'Sign in with the provider you used the first time. PredictHQ matches you on the email it shares.'
 const authVerb = 'Sign in with'
 const authAltPrompt = 'New here?'
-const authAltHref = '/signup'
+const authAltHref = '/signup' + authContextQuery
 const authAltLabel = 'Create an account'
 </script>
 
