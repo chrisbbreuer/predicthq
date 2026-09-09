@@ -153,6 +153,10 @@ jobs:
     needs: [lint, typecheck, test, release-check]
     runs-on: ubuntu-latest
     environment: production
+    # Finish an active production deployment before starting another one.
+    concurrency:
+      group: predicthq-production
+      cancel-in-progress: false
 
     steps:
       - name: Checkout Code
@@ -213,8 +217,21 @@ jobs:
           chmod 600 "$HOME/.ssh/id_ed25519"
           ssh-keygen -y -f "$HOME/.ssh/id_ed25519" > "$HOME/.ssh/id_ed25519.pub"
 
-      - name: Deploy
+      - name: Check production revision
+        id: production-revision
         if: steps.deploy-credentials.outputs.available == 'true'
+        run: |
+          current_main=$(git ls-remote origin refs/heads/main | cut -f1)
+          test -n "$current_main"
+          if [ "$current_main" = "$GITHUB_SHA" ]; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "current=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping superseded production revision $GITHUB_SHA."
+          fi
+
+      - name: Deploy
+        if: steps.deploy-credentials.outputs.available == 'true' && steps.production-revision.outputs.current == 'true'
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}

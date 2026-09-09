@@ -87,3 +87,12 @@ Add your own with `app/Skills/<name>/SKILL.md`, then re-run `buddy setup:ai`.
 - Lint: `./buddy lint` (fix with `./buddy lint:fix`)
 - Type check: `./buddy typecheck`
 - Test: `./buddy test`
+
+
+## Production deployment
+
+Pushing to `main` automatically deploys production through the `CI` workflow.
+Inspect and wait for its `deploy-prod` job, then verify the live site. Do not also
+run `buddy deploy` for the same commit: replacing the live release directory can
+interrupt the serving process. Manual deployment is a recovery path only after
+confirming there is no pending or running production deployment in GitHub.
