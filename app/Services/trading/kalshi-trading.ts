@@ -1,3 +1,4 @@
+import { kalshiHistory } from './history-kalshi'
 import type { KalshiCredentials } from './credentials'
 import type {
   PlaceOrderRequest,
@@ -103,6 +104,10 @@ export class KalshiTradingClient implements TradingClient {
     }
 
     return await response.json() as T
+  }
+
+  async fetchHistory() {
+    return await kalshiHistory(path => this.request('GET', path), this.credentials.subaccount ?? 0)
   }
 
   async fetchBalance(): Promise<VenueBalance> {

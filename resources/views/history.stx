@@ -1,0 +1,172 @@
+<script server>
+const navActive = 'history'
+const pageTitle = 'Your history | PredictHQ'
+const pageDescription = 'Your prediction history, trades, and results across every connected exchange.'
+</script>
+
+<script client>
+import { withCsrfHeader } from '@stacksjs/browser/composables/csrf'
+import { useAuth } from '@stacksjs/browser/composables/useAuth'
+
+const historyAuth = useAuth()
+const signedIn = state(false)
+const loading = state(true)
+const syncing = state(false)
+const error = state('')
+const notice = state('')
+const mode = state('live')
+const venue = state('')
+const status = state('')
+const search = state('')
+const tab = state('bets')
+const page = state(1)
+const pageCount = state(1)
+const total = state(0)
+const activitiesTotal = state(0)
+const bets = state<any[]>([])
+const activity = state<any[]>([])
+const cards = state<any[]>([])
+const accounts = state<any[]>([])
+const notes = state<string[]>([])
+const extras = state<any>({ fees: '—', best: '—', worst: '—', open: 0, markets: 0, unknown: 0 })
+let requestVersion = 0
+
+function money(value: unknown): string {
+  if (value === null || value === undefined) return '—'
+  return Number(value).toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+}
+function pnl(value: unknown): string { return value === null || value === undefined ? '—' : (Number(value) > 0 ? '+' : '') + money(value) }
+function tone(value: unknown): string { return Number(value) > 0 ? 'pos' : Number(value) < 0 ? 'neg' : 'muted' }
+function date(value: string): string {
+  if (!value) return '—'
+  const parsed = new Date(value.includes('T') ? value : value.replace(' ', 'T') + 'Z')
+  return Number.isFinite(parsed.getTime()) ? parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'
+}
+function venueName(value: string): string { return value === 'kalshi' ? 'Kalshi' : value === 'polymarket-us' ? 'Polymarket US' : 'Polymarket' }
+
+async function api(path: string, method = 'GET'): Promise<any> {
+  const token = historyAuth.getToken()
+  const result = await fetch(path, { method, headers: withCsrfHeader({ Accept: 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }) })
+  const data = await result.json().catch(() => ({}))
+  if (!result.ok) {
+    if (result.status === 401) { signedIn.set(false); bets.set([]); activity.set([]); cards.set([]); accounts.set([]); throw new Error('') }
+    throw new Error(data.message || data.error || 'Could not load your history.')
+  }
+  return data
+}
+
+async function load(): Promise<void> {
+  const version = ++requestVersion
+  loading.set(true)
+  error.set('')
+  try {
+    const query = new URLSearchParams({ mode: mode(), venue: venue(), status: status(), q: search(), page: String(page()) })
+    const data = await api(`/api/trading/history?${query}`)
+    if (version !== requestVersion) return
+    signedIn.set(true)
+    const stats = data.stats
+    cards.set([
+      { label: 'Amount traded', value: money(stats.traded), detail: 'Executed trades, excluding fees', tone: '', icon: 'i-hugeicons-chart-increase' },
+      { label: 'Realized P&L', value: pnl(stats.realized), detail: stats.unknownFees ? 'Known results · some fees unavailable' : 'After trading fees · excludes open marks', tone: tone(stats.realized), icon: 'i-hugeicons-wallet-01' },
+      { label: 'Profit earned', value: money(stats.won), detail: 'Sum of positive market results', tone: 'pos', icon: 'i-hugeicons-arrow-up-right-01' },
+      { label: 'Losses incurred', value: money(stats.lost), detail: 'Sum of negative market results', tone: 'neg', icon: 'i-hugeicons-arrow-down-right-01' },
+      { label: 'Win rate', value: stats.winRate === null ? '—' : (stats.winRate * 100).toFixed(1) + '%', detail: stats.wins + ' won · ' + stats.losses + ' lost · ' + stats.breakeven + ' even', tone: '', icon: 'i-hugeicons-target-01' },
+    ])
+    extras.set({ fees: money(stats.fees), best: pnl(stats.best), worst: pnl(stats.worst), open: stats.open, markets: stats.bets, unknown: stats.unknownResults })
+    bets.set(data.bets.map((row: any) => {
+      const value = row.realized === null ? null : Number(row.realized) - Number(row.fees || 0)
+      return { ...row, venueLabel: venueName(row.venue), tradedLabel: money(row.traded), pnlLabel: pnl(value), tone: tone(value), date: date(row.at),
+        result: row.status === 'open' ? 'Open' : value === null ? 'Closed' : value > 0.000001 ? 'Won' : value < -0.000001 ? 'Lost' : 'Break-even',
+        resultTone: row.status === 'open' ? 'accent' : tone(value), feeLabel: row.fees === null ? 'Fees unavailable' : money(row.fees) + ' fees',
+      }
+    }))
+    activity.set(data.activity.map((row: any) => ({ ...row, venueLabel: venueName(row.venue), date: date(row.at), amountLabel: money(row.amount), feeLabel: money(row.fee),
+      sizeLabel: Number(row.size).toLocaleString('en-US', { maximumFractionDigits: 4 }), kindLabel: row.voided ? 'Voided trade' : row.kind === 'settlement' ? 'Settlement payout' : row.kind === 'buy' ? 'Buy' : row.kind === 'sell' ? 'Sell' : 'Trade',
+    })))
+    accounts.set(data.accounts.map((row: any) => ({ ...row, label: venueName(row.venue), detail: row.error || (!row.imported ? 'Waiting for first import' : 'Synced ' + date(row.syncedAt)) })))
+    notes.set(data.notes)
+    total.set(data.total)
+    activitiesTotal.set(data.activityTotal)
+    pageCount.set(Math.max(1, Math.ceil((tab() === 'bets' ? data.total : data.activityTotal) / data.perPage)))
+  }
+  catch (err) { if (version === requestVersion) error.set(err instanceof Error ? err.message : 'Could not load your history.') }
+  finally { if (version === requestVersion) loading.set(false) }
+}
+async function filter(): Promise<void> { page.set(1); await load() }
+async function setMode(value: string): Promise<void> { mode.set(value); await filter() }
+async function setTab(value: string): Promise<void> { tab.set(value); status.set(''); await filter() }
+async function turnPage(offset: number): Promise<void> { page.set(Math.max(1, Math.min(pageCount(), page() + offset))); await load() }
+async function sync(): Promise<void> {
+  if (syncing()) return
+  syncing.set(true)
+  notice.set('')
+  error.set('')
+  try {
+    const result = await api('/api/trading/history/sync', 'POST')
+    notice.set(result.failed ? 'Some exchanges could not refresh. Your previous history is still available.' : result.synced ? 'Exchange history updated.' : 'History is up to date or an import is already running. Imports refresh every five minutes.')
+    await load()
+  }
+  catch (err) { error.set(err instanceof Error ? err.message : 'History sync failed.') }
+  finally { syncing.set(false) }
+}
+async function initialize(): Promise<void> {
+  await historyAuth.completeSocialLogin().catch(() => undefined)
+  await load()
+  if (signedIn() && accounts().some(account => !account.imported && account.status === 'active')) await sync()
+}
+void initialize()
+</script>
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>@include('head')</head>
+  <body>
+    <div class="app min-h-[100dvh]">
+      @include('nav')
+      <main class="mx-auto max-w-7xl px-4 py-9 sm:px-6">
+        <div class="flex flex-wrap items-end justify-between gap-5">
+          <div><p class="text-sm font-semibold accent mb-2">Your history</p><h1 class="text-3xl sm:text-4xl font-bold tracking-tight">Every call. The whole picture.</h1><p class="mt-3 muted max-w-2xl">Your predictions, trades, and results across connected exchanges and PredictHQ.</p></div>
+          <div class="flex gap-3"><a href="/positions" data-no-router class="btn rounded-lg px-4 py-2.5 text-sm font-semibold">My book <i class="ml-1 h-4 w-4 i-hugeicons-arrow-up-right-01"></i></a><button :if="signedIn()" @click="sync()" :disabled="syncing()" class="btn btn-primary rounded-lg px-4 py-2.5 text-sm font-semibold" :text="syncing() ? 'Importing history…' : 'Sync exchanges'"></button></div>
+        </div>
+        <p :if="error()" role="alert" class="mt-5 neg" :text="error()"></p>
+        <p :if="notice()" role="status" class="mt-5 text-sm muted" :text="notice()"></p>
+        <p :if="loading() && !signedIn()" class="mt-8 muted" role="status">Loading your history…</p>
+        <section :if="!loading() && !signedIn()" class="card rounded-2xl mt-8 p-8 max-w-xl"><i class="h-8 w-8 accent i-hugeicons-lock-key"></i><h2 class="mt-4 font-bold text-xl">Your track record is private.</h2><p class="mt-2 muted">Sign in to see your trades and results together.</p><a href="/login" data-no-router class="inline-flex btn btn-primary rounded-lg px-5 py-3 mt-5">Sign in</a></section>
+        <div :if="signedIn()">
+          <div class="flex flex-wrap items-center justify-between gap-4 mt-8 mb-5">
+            <div class="flex gap-1 p-1 rounded-xl card"><button @click="setMode('live')" :class="mode() === 'live' ? 'btn-primary' : ''" class="px-5 py-2 text-sm font-semibold rounded-lg">Live accounts</button><button @click="setMode('paper')" :class="mode() === 'paper' ? 'btn-primary' : ''" class="px-5 py-2 text-sm font-semibold rounded-lg">Paper trading</button></div>
+            <div class="flex items-center gap-3"><span class="text-xs font-semibold uppercase tracking-wide faint">All time</span><select :model="venue" @change="filter()" aria-label="Exchange" class="input rounded-lg px-3 py-2 text-sm"><option value="">All exchanges</option value="kalshi">Kalshi</option><option value="polymarket-us">Polymarket US</option><option value="polymarket">Polymarket International</option></select></div>
+          </div>
+          <div :if="mode() === 'paper'" class="card rounded-xl p-4 mb-4 text-sm muted">Paper trades are simulations. Their results are kept separate from your real money.</div>
+          <section class="grid gap-3 sm:grid-cols-2 lg:grid-cols-5" aria-label="Lifetime statistics">
+            <template x-for="card in cards()" :key="card.label"><div class="card rounded-xl p-5"><div class="flex items-center justify-between gap-2"><p class="text-xs font-semibold muted" x-text="card.label"></p><i class="h-4 w-4 faint" :class="card.icon"></i></div><p class="text-3xl font-bold tracking-tight num mt-5" :class="card.tone" x-text="card.value"></p><p class="text-xs leading-relaxed faint mt-2" x-text="card.detail"></p></div></template>
+          </section>
+          <div class="flex flex-wrap gap-x-7 gap-y-3 mt-5 text-sm muted"><span><strong class="num" x-text="extras().markets"></strong> markets</span><span><strong class="num" x-text="extras().open"></strong> open</span><span>Best result <strong class="pos num" x-text="extras().best"></strong></span><span>Worst result <strong class="neg num" x-text="extras().worst"></strong></span><span>Reported fees <strong class="num" x-text="extras().fees"></strong></span></div>
+          <p :if="extras().unknown > 0" class="mt-3 text-sm muted"><span x-text="extras().unknown"></span> markets have no realized result available yet. They are excluded from profit and loss.</p>
+          <section class="mt-8 card rounded-2xl overflow-hidden">
+            <div class="flex flex-wrap items-center justify-between gap-4 p-5 border-b bd">
+              <div class="flex gap-5"><button @click="setTab('bets')" class="font-semibold text-sm" :class="tab() === 'bets' ? 'accent' : 'muted'">Predictions <span class="ml-1 text-xs faint" x-text="total()"></span></button><button @click="setTab('activity')" class="font-semibold text-sm" :class="tab() === 'activity' ? 'accent' : 'muted'">Trade activity <span class="ml-1 text-xs faint" x-text="activitiesTotal()"></span></button></div>
+              <div class="flex flex-wrap gap-2"><select :if="tab() === 'bets'" :model="status" @change="filter()" aria-label="Prediction status" class="input rounded-lg px-3 py-2 text-sm"><option value="">All results</option><option value="open">Open</option><option value="closed">Closed</option></select><form @submit.prevent="filter()" class="flex gap-2"><input :model="search" type="search" maxlength="120" aria-label="Search your history" placeholder="Search your history" class="input rounded-lg px-3 py-2 text-sm w-44"><button class="btn px-3 py-2 rounded-lg text-sm">Search</button></form></div>
+            </div>
+            <div :if="tab() === 'bets'" class="overflow-x-auto">
+              <table class="w-full text-sm text-left"><thead class="text-xs uppercase tracking-wide muted"><tr class="border-b bd"><th class="px-5 py-4 font-medium">Prediction</th><th class="px-4 py-4 font-medium">Result</th><th class="px-4 py-4 font-medium text-right">Traded</th><th class="px-4 py-4 font-medium text-right">Realized P&L</th><th class="px-5 py-4 font-medium text-right whitespace-nowrap">Last activity</th></tr></thead>
+                <tbody><template x-for="bet in bets()" :key="bet.key"><tr class="border-b bd"><td class="p-5 min-w-64 max-w-lg"><p class="font-semibold leading-snug line-clamp-2" x-text="bet.title"></p><p class="mt-2 text-xs faint"><span x-text="bet.venueLabel"></span> · <span x-text="bet.side"></span><span :if="mode() === 'paper'"> · <span x-text="bet.source"></span></span></p></td><td class="px-4 py-5 font-semibold whitespace-nowrap" :class="bet.resultTone" x-text="bet.result"></td><td class="px-4 py-5 text-right num whitespace-nowrap" x-text="bet.tradedLabel"></td><td class="px-4 py-5 text-right whitespace-nowrap"><p class="font-semibold num" :class="bet.tone" x-text="bet.pnlLabel"></p><p class="text-xs faint mt-1" x-text="bet.feeLabel"></p></td><td class="px-5 py-5 text-right text-xs muted whitespace-nowrap" x-text="bet.date"></td></tr></template></tbody>
+              </table>
+            </div>
+            <div :if="tab() === 'activity'" class="overflow-x-auto">
+              <table class="w-full text-sm text-left"><thead class="text-xs uppercase tracking-wide muted"><tr class="border-b bd"><th class="px-5 py-4 font-medium">Activity</th><th class="px-4 py-4 font-medium">Type</th><th class="px-4 py-4 font-medium text-right">Contracts</th><th class="px-4 py-4 font-medium text-right">Amount</th><th class="px-4 py-4 font-medium text-right">Fee</th><th class="px-5 py-4 font-medium text-right">Date</th></tr></thead>
+                <tbody><template x-for="event in activity()" :key="event.key"><tr class="border-b bd" :class="event.voided ? 'opacity-50' : ''"><td class="p-5 min-w-64 max-w-lg"><p class="font-semibold line-clamp-2" x-text="event.title"></p><p class="mt-2 text-xs faint"><span x-text="event.venueLabel"></span> · <span x-text="event.side"></span></p></td><td class="px-4 py-5 text-xs whitespace-nowrap" x-text="event.kindLabel"></td><td class="px-4 py-5 text-right num" x-text="event.sizeLabel"></td><td class="px-4 py-5 text-right num whitespace-nowrap" x-text="event.amountLabel"></td><td class="px-4 py-5 text-right num muted" x-text="event.feeLabel"></td><td class="px-5 py-5 text-right text-xs muted whitespace-nowrap" x-text="event.date"></td></tr></template></tbody>
+              </table>
+            </div>
+            <div :if="!loading() && (tab() === 'bets' ? bets().length === 0 : activity().length === 0)" class="text-center p-12"><i class="h-9 w-9 muted i-hugeicons-chart-increase"></i><h2 class="font-bold text-lg mt-4">No history to show yet.</h2><p class="muted text-sm mt-2">Try another filter, sync your exchanges, or connect an account.</p><a href="/account" data-no-router class="inline-flex mt-4 font-semibold text-sm accent">Manage exchanges →</a></div>
+            <div class="flex justify-between items-center p-5 gap-4 text-xs muted"><span>Page <span x-text="page()"></span> of <span x-text="pageCount()"></span></span><div class="flex gap-2"><button @click="turnPage(-1)" :disabled="page() <= 1 || loading()" class="btn px-3 py-2 rounded-lg">Previous</button><button @click="turnPage(1)" :disabled="page() >= pageCount() || loading()" class="btn px-3 py-2 rounded-lg">Next</button></div></div>
+          </section>
+          <div :if="mode() === 'live'" class="flex flex-wrap gap-3 mt-5"><template x-for="account in accounts()" :key="account.venue"><div class="text-xs p-3 rounded-lg card"><strong x-text="account.label"></strong><span class="ml-2" :class="account.error ? 'neg' : 'muted'" x-text="account.detail"></span></div></template></div>
+          <template x-for="note in notes()" :key="note"><p class="text-xs muted mt-3" x-text="note"></p></template>
+          <p class="mt-5 text-xs leading-relaxed faint max-w-4xl">Stat cards show lifetime results for the selected exchange and mode. Predictions group the fills in each market; activity lists individual trades and settlement payouts. Win rate uses profitable versus losing closed markets, excluding break-even results. Open market price changes, deposits, and withdrawals are excluded from profit and loss. History refreshes every five minutes.</p>
+        </div>
+      </main>
+      @include('footer')
+    </div>
+  </body>
+</html>

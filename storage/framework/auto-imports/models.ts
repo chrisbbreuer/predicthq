@@ -23,6 +23,7 @@ export { default as DecisionEvidence } from '../../../app/Models/DecisionEvidenc
 export { default as EventResult } from '../../../app/Models/EventResult'
 export { default as EventSource } from '../../../app/Models/EventSource'
 export { default as ExchangeAccount } from '../../../app/Models/ExchangeAccount'
+export { default as ExchangeHistory } from '../../../app/Models/ExchangeHistory'
 export { default as ExchangeOrder } from '../../../app/Models/ExchangeOrder'
 export { default as ExchangePosition } from '../../../app/Models/ExchangePosition'
 export { default as ExpertConsensusSnapshot } from '../../../app/Models/ExpertConsensusSnapshot'

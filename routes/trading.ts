@@ -48,6 +48,7 @@ route.group({ middleware: ['auth', 'throttle:60,1'] }, () => {
   // it re-reads at most once every ten seconds however often it is
   // called, so the polling budget is the one a page needs.
   route.get('/trading/positions', 'Actions/Trading/GetPositions')
+  route.get('/trading/history', 'Actions/Trading/GetHistory')
 
   // What the strategies actually returned. Every other endpoint here
   // describes intent; this one describes outcome.
@@ -65,6 +66,7 @@ route.group({ middleware: ['auth', 'throttle:60,1'] }, () => {
 // how an account gets rate limited or blocked. Nobody connects an account
 // five times a minute legitimately.
 route.group({ middleware: ['auth', 'throttle:5,1'] }, () => {
+  route.post('/trading/history/sync', 'Actions/Trading/SyncHistory')
   route.post('/trading/accounts', 'Actions/Trading/ConnectExchangeAccount')
   route.delete('/trading/accounts/{venue}', 'Actions/Trading/DisconnectExchangeAccount')
 })

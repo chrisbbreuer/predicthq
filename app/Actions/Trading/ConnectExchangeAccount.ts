@@ -115,6 +115,10 @@ export default {
         updated_at: now,
       })
 
+        // A replacement key can point at a different venue account or subaccount.
+        // Do not present the previous account's snapshot as the new connection.
+        const connected = await transaction.query<{ id: number }>('SELECT id FROM exchange_accounts WHERE user_id = ? AND venue = ?').get(userId, venue)
+        if (connected) await transaction.prepare('DELETE FROM exchange_histories WHERE exchange_account_id = ?').run(connected.id)
         await qualifyReferral(userId, transaction)
       })
 

@@ -246,7 +246,7 @@ jobs:
       - name: Verify live production pages
         if: steps.deploy-credentials.outputs.available == 'true' && steps.production-revision.outputs.current == 'true'
         run: |
-          for route in / /account /positions /groups /api/health; do
+          for route in / /account /positions /history /groups /api/health; do
             curl --fail --silent --show-error --output /dev/null \
               --connect-timeout 10 --max-time 30 \
               --retry 12 --retry-delay 5 --retry-all-errors \

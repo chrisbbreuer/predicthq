@@ -50,6 +50,7 @@
           <a href="/markets" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-user-multiple-02"></i><span><strong>Smart-money desk</strong><small>Leaderboard, whale tape, and signal graph.</small></span></a>
           <a href="/positions" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-briefcase-01"></i><span><strong>My book</strong><small>Private positions, orders, and live scores.</small></span></a>
           <a href="/community" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-bubble-chat"></i><span><strong>Community</strong><small>Talk through a market before it settles.</small></span></a>
+          <a href="/history" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-clock-01"></i><span><strong>History &amp; results</strong><small>Your trades, wins, losses, and track record.</small></span></a>
           <a href="/groups" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-user-group"></i><span><strong>Groups &amp; referrals</strong><small>Bring your friends and build your circle.</small></span></a>
           <a href="/compare" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-balance-scale"></i><span><strong>Compare</strong><small>See where PredictHQ fits—and where it does not.</small></span></a>
           <a href="/pipeline" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-activity-03"></i><span><strong>Data health</strong><small>Freshness, coverage, and ingestion status.</small></span></a>
@@ -95,6 +96,7 @@
         <div class="grid grid-cols-2 gap-x-4">
           <a href="/features" data-no-router class="mobile-link" @click="menu = false">Features</a>
           <a href="/community" data-no-router class="mobile-link" @click="menu = false">Community</a>
+          <a href="/history" data-no-router class="mobile-link" @click="menu = false">History &amp; results</a>
           <a href="/groups" data-no-router class="mobile-link" @click="menu = false">Groups &amp; referrals</a>
           <a href="/compare" data-no-router class="mobile-link" @click="menu = false">Compare</a>
           <a href="/pipeline" data-no-router class="mobile-link" @click="menu = false">Data health</a>

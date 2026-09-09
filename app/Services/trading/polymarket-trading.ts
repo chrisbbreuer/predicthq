@@ -1,3 +1,4 @@
+import { polymarketHistory } from './history-polymarket'
 import type { PolymarketCredentials } from './credentials'
 import type {
   PlaceOrderRequest,
@@ -109,6 +110,10 @@ export class PolymarketTradingClient implements TradingClient {
     catch (error) {
       throw venueFailure('balance lookup', error)
     }
+  }
+
+  async fetchHistory() {
+    return await polymarketHistory(this.credentials.funderAddress, DATA_API)
   }
 
   async fetchPositions(): Promise<VenuePosition[]> {

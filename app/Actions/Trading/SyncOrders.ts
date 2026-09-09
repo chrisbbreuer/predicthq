@@ -1,3 +1,4 @@
+import { syncHistory } from '../../Services/trading/history-sync'
 import { Database } from '../../Support/db'
 import { log } from '@stacksjs/logging'
 import { syncAccounts } from '../../Services/trading/account-sync'
@@ -49,7 +50,8 @@ export default {
         log.info(`[trading] mirrored ${accounts.synced} accounts · ${accounts.positions} positions · ${accounts.orders} resting orders · ${accounts.unreachable} unreachable`)
       }
 
-      return { ...summary, accounts }
+      const history = await syncHistory(db).catch(() => ({ synced: 0, failed: 1 }))
+      return { ...summary, accounts, history }
     }
     finally {
       db.close()

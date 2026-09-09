@@ -1,3 +1,4 @@
+import { polymarketUsHistory } from './history-polymarket-us'
 import type { PolymarketUsCredentials } from './credentials'
 import type { PlaceOrderResult, TradingClient, VenueBalance, VenueOrder, VenuePosition } from './venue'
 import { Buffer } from 'node:buffer'
@@ -47,6 +48,10 @@ export class PolymarketUsClient implements TradingClient {
     if (!result.ok)
       throw new VenueError(`Polymarket US request failed (${result.status}).`, this.venue, result.status, isRetryableStatus(result.status))
     return await result.json() as T
+  }
+
+  async fetchHistory() {
+    return await polymarketUsHistory(path => this.read(path))
   }
 
   async fetchBalance(): Promise<VenueBalance> {

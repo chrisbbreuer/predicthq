@@ -16004,10 +16004,91 @@
             "type": "unique"
           }
         ]
+      },
+      {
+        "table": "exchange_histories",
+        "columns": [
+          {
+            "name": "id",
+            "type": "bigint",
+            "isPrimaryKey": true,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": false
+          },
+          {
+            "name": "exchange_account_id",
+            "type": "integer",
+            "isPrimaryKey": false,
+            "isUnique": true,
+            "isNullable": false,
+            "hasDefault": false
+          },
+          {
+            "name": "payload",
+            "type": "json",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": true,
+            "hasDefault": false
+          },
+          {
+            "name": "synced_at",
+            "type": "datetime",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": true,
+            "hasDefault": false
+          },
+          {
+            "name": "attempted_at",
+            "type": "datetime",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": true,
+            "hasDefault": false
+          },
+          {
+            "name": "last_error",
+            "type": "string",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": true,
+            "hasDefault": true,
+            "defaultValue": "",
+            "maxLength": 500
+          },
+          {
+            "name": "created_at",
+            "type": "datetime",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": true,
+            "defaultValue": "UTC_TIMESTAMP"
+          },
+          {
+            "name": "updated_at",
+            "type": "datetime",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": true,
+            "hasDefault": false
+          }
+        ],
+        "indexes": [
+          {
+            "name": "exchange_histories_exchange_account_id_unique",
+            "columns": [
+              "exchange_account_id"
+            ],
+            "type": "unique"
+          }
+        ]
       }
     ]
   },
-  "hash": "57076a9ed47092c764e4e36b67cc902a4cf74329aebe70b69238a051e7dc22b3",
+  "hash": "a006192ab193f48e0e77b90802ec7eac819ad1cdee5d6042b52743ff5666e408",
   "dialect": "sqlite",
-  "updatedAt": "2026-09-09T05:38:30.186Z"
+  "updatedAt": "2026-09-09T15:15:43.811Z"
 }

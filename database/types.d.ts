@@ -991,6 +991,17 @@ declare module '@stacksjs/database' {
       age_confirmed_at: string
       jurisdiction: string
     }
+    exchange_histories: {
+      // columns
+      id: number
+      created_at: string
+      updated_at: string | null
+      exchange_account_id: number
+      payload: unknown | null
+      synced_at: string | null
+      attempted_at: string | null
+      last_error: string
+    }
     exchange_orders: {
       // columns
       id: number

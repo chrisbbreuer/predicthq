@@ -1,3 +1,5 @@
+import type { VenueHistory } from './history-types'
+
 /**
  * The contract every tradable venue implements.
  *
@@ -71,6 +73,7 @@ export interface TradingClient {
   /** Reads the balance. Doubles as the credential health check. */
   fetchBalance: () => Promise<VenueBalance>
   fetchPositions: () => Promise<VenuePosition[]>
+  fetchHistory?: () => Promise<VenueHistory>
   /**
    * Everything resting on the account. Optional: a venue whose API
    * cannot list orders it was not asked about simply omits it, and the

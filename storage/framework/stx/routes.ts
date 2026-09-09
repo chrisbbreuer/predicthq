@@ -33,6 +33,7 @@ export const routes = [
   { pattern: '/features', filePath: 'resources/views/features.stx', isDynamic: false, params: [] },
   { pattern: '/forgot-password', filePath: 'storage/framework/defaults/resources/views/forgot-password.stx', isDynamic: false, params: [] },
   { pattern: '/groups', filePath: 'resources/views/groups.stx', isDynamic: false, params: [] },
+  { pattern: '/history', filePath: 'resources/views/history.stx', isDynamic: false, params: [] },
   { pattern: '/live', filePath: 'resources/views/live.stx', isDynamic: false, params: [] },
   { pattern: '/login', filePath: 'resources/views/login.stx', isDynamic: false, params: [] },
   { pattern: '/market', filePath: 'resources/views/market.stx', isDynamic: false, params: [] },

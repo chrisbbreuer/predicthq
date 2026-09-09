@@ -82,6 +82,7 @@ declare global {
   const EventResult: typeof import('../../../app/Models/EventResult')['default']
   const EventSource: typeof import('../../../app/Models/EventSource')['default']
   const ExchangeAccount: typeof import('../../../app/Models/ExchangeAccount')['default']
+  const ExchangeHistory: typeof import('../../../app/Models/ExchangeHistory')['default']
   const ExchangeOrder: typeof import('../../../app/Models/ExchangeOrder')['default']
   const ExchangePosition: typeof import('../../../app/Models/ExchangePosition')['default']
   const ExpertConsensusSnapshot: typeof import('../../../app/Models/ExpertConsensusSnapshot')['default']

@@ -66,6 +66,7 @@
     "ExampleJob": true,
     "ExampleTwoJob": true,
     "ExchangeAccount": true,
+    "ExchangeHistory": true,
     "ExchangeOrder": true,
     "ExchangePosition": true,
     "ExpertConsensusSnapshot": true,

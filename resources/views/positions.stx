@@ -555,6 +555,7 @@ onMount(start)
           {{-- Money, five ways: what is uncommitted, what is committed, what
                that is worth now, the difference, and what today has already
                banked. --}}
+          <a href="/history" data-no-router class="inline-flex mt-5 gap-2 items-center text-sm font-semibold accent"><i class="h-4 w-4 i-hugeicons-clock-01"></i>View all history &amp; results →</a>
           <section class="grid gap-3 grid-cols-2 mt-6 lg:grid-cols-5 sm:grid-cols-3">
             <div class="p-4 rounded-2xl card">
               <div class="font-black text-2xl num" x-text="totals().cash"></div>

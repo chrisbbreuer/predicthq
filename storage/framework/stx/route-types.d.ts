@@ -32,6 +32,7 @@ declare module '@stacksjs/stx' {
     '/features': {  }
     '/forgot-password': {  }
     '/groups': {  }
+    '/history': {  }
     '/live': {  }
     '/login': {  }
     '/market': {  }
