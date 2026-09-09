@@ -16,7 +16,7 @@ const updated = market?.updated_at ? String(market.updated_at) : 'Unavailable'
       <main class="mx-auto max-w-5xl px-4 py-10 sm:px-6">
         <a href="/" data-no-router class="text-sm muted">← All markets</a>
         @if (market)
-          <div class="flex items-center gap-3 mt-8"><img src="{{ market.image }}" alt="" width="48" height="48" class="object-contain"><span class="text-sm muted">{{ market.categoryLabel }} · {{ market.venueLabel }}</span></div>
+          <div class="flex items-center gap-3 mt-8">@if (market.image)<img src="{{ market.image }}" alt="" width="48" height="48" class="object-contain">@else<i class="h-12 w-12 accent i-hugeicons-chart-increase"></i>@endif<span class="text-sm muted">{{ market.categoryLabel }} · {{ market.venueLabel }}</span></div>
           <h1 class="mt-5 text-3xl sm:text-4xl font-bold tracking-tight leading-tight">{{ market.question }}</h1>
           @if (market.outcome_label)<p class="mt-3 text-lg muted">{{ market.outcome_label }}</p>@endif
           <div class="grid gap-5 mt-8 sm:grid-cols-2">

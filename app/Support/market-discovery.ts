@@ -25,8 +25,8 @@ export const marketLeagues = [
 
 const categoryTerms: Record<string, string[]> = {
   sports: ['sport', 'football', 'soccer', 'basketball', 'baseball', 'hockey', 'tennis', 'nfl', 'nba', 'mlb', 'nhl', 'mls', 'epl', 'uefa', 'champions league', 'world series', 'premier league', 'bundesliga', 'la liga', 'ucla', 'points scored', 'wins by over'],
-  politics: ['politic', 'election', 'presiden', 'democrat', 'republican', 'senate', 'congress', 'signed into law'], crypto: ['crypto', 'bitcoin', 'btc', 'ethereum', 'solana'], weather: ['weather', 'climate'],
-  econ: ['econ', 'financ', 'business', 'market cap', 'interest rate', 'inflation'], tech: ['tech', 'science'], culture: ['culture', 'entertainment', 'music', 'pop'],
+  politics: ['politic', 'election', 'presiden', 'democrat', 'republican', 'senate', 'congress', 'signed into law', 'prime minister', 'invade', 'ceasefire', 'parliament', 'governor', 'mayor', 'supreme court', 'nuclear'], crypto: ['crypto', 'bitcoin', 'btc', 'ethereum', 'solana'], weather: ['weather', 'climate'],
+  econ: ['econ', 'financ', 'business', 'market cap', 'interest rate', 'inflation'], tech: ['tech', 'science'], culture: ['culture', 'entertainment', 'music', 'pop', 'jesus', 'christ', 'oscar', 'grammy', 'emmy', 'movie', 'album'],
 }
 const leagueTerms: Record<string, string[]> = {
   'premier-league': ['premier league', 'epl'], 'bundesliga': ['bundesliga', 'kxbun'],
@@ -57,11 +57,11 @@ export function discoveryCard(row: DiscoveryRow) {
   ))
   return {
     ...row,
-    image: `/assets/images/markets/${league?.image || category.image || 'sports'}.png`,
+    image: league?.image || category.image ? `/assets/images/markets/${league?.image || category.image}.png` : '',
     categoryLabel: league?.label || (category.slug === 'all' ? 'Markets' : category.label),
     venueLabel: row.venue === 'kalshi' ? 'Kalshi' : row.venue === 'polymarket-us' ? 'Polymarket US' : 'Polymarket',
-    yes: valid ? `${Math.round(probability! * 100)}%` : 'No quote',
-    no: valid ? `${Math.round((1 - probability!) * 100)}%` : 'No quote',
+    yes: valid ? probability! > 0 && probability! < 0.01 ? '<1%' : probability! < 1 && probability! > 0.99 ? '>99%' : `${Math.round(probability! * 100)}%` : 'No quote',
+    no: valid ? probability! > 0 && probability! < 0.01 ? '>99%' : probability! < 1 && probability! > 0.99 ? '<1%' : `${100 - Math.round(probability! * 100)}%` : 'No quote',
     volumeLabel: new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 }).format(Number(row.volume) || 0),
     href: `/market?id=${row.id}`,
   }
