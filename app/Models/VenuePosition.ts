@@ -46,14 +46,15 @@ export default defineModel({
       validation: { rule: schema.number().min(1) },
       factory: faker => faker.number.int({ min: 1, max: 100 }),
     },
-    // Resolved from the venue ticker when we hold metadata for it, and 0
+    // Resolved from the venue ticker when we hold metadata for it, and NULL
     // when we do not. A position stays visible either way — the question
     // text is a nicety, and holding a page hostage to it would hide the
     // very markets we know least about.
     predictionMarketId: {
       type: 'number',
+      nullable: true,
       fillable: true,
-      validation: { rule: schema.number().min(0) },
+      validation: { rule: schema.number().min(1) },
       factory: faker => faker.number.int({ min: 1, max: 100 }),
     },
     venue: {

@@ -43,8 +43,9 @@ export default defineModel({
     },
     predictionMarketId: {
       type: 'number',
+      nullable: true,
       fillable: true,
-      validation: { rule: schema.number().min(0) },
+      validation: { rule: schema.number().min(1) },
       factory: faker => faker.number.int({ min: 1, max: 100 }),
     },
     venue: {

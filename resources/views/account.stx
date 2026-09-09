@@ -119,11 +119,11 @@ async function connectAccount(): Promise<void> {
           funderAddress: funderAddress(),
           signatureType: signatureType(),
         }
-    await api('/api/trading/accounts', {
+    const connection = await api('/api/trading/accounts', {
       method: 'POST',
       body: JSON.stringify({ ...common, ...credentials }),
     })
-    message.set('Account verified and connected. Your balance and positions are ready in My book.')
+    message.set(connection.mirrored ? 'Account verified and connected. Your balance and positions are ready in My book.' : 'Account verified and connected. Portfolio sync is still pending; check My book for details.')
     usKeyId.set('')
     usSecretKey.set('')
     apiKeyId.set('')

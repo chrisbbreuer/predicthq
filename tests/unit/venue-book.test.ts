@@ -211,14 +211,15 @@ describe('mirroring an account', () => {
     expect(Number(mirrored()[0].prediction_market_id)).toBe(Number(market.id))
   })
 
-  it('shows a position it cannot name rather than hiding it', async () => {
+  it('preserves unnamed holdings with real foreign-key enforcement', async () => {
+    db.exec('PRAGMA foreign_keys = ON')
     await sync(new StubVenue({
       positions: [{ marketExternalId: 'TICKER-UNKNOWN', side: 'yes', size: 4, avgPrice: 0.5 }],
     }))
 
     const row = mirrored()[0]
     expect(row.market_external_id).toBe('TICKER-UNKNOWN')
-    expect(Number(row.prediction_market_id)).toBe(0)
+    expect(row.prediction_market_id).toBeNull()
   })
 
   it('still records holdings when the resting-order endpoint fails', async () => {
@@ -242,13 +243,22 @@ describe('mirroring an account', () => {
     expect(account().status).toBe('revoked')
   })
 
+  it('rolls back a failed snapshot without advancing its sync time or counts', async () => {
+    const duplicate = { marketExternalId: 'TICKER-A', side: 'yes', size: 4, avgPrice: 0.5 }
+    const summary = await sync(new StubVenue({ balance: 25, positions: [duplicate, duplicate] }))
+    expect(summary).toMatchObject({ synced: 0, positions: 0, orders: 0, unreachable: 1 })
+    expect(mirrored()).toEqual([])
+    expect(account().last_synced_at).toBe('')
+    expect(Number(account().balance)).toBe(0)
+  })
+
   it('keeps an account that merely timed out, and says why it is stale', async () => {
     const summary = await sync(new StubVenue({ fail: new Error('connection reset') }))
 
     expect(summary.unreachable).toBe(1)
     // A timeout is not a bad key: the next pass has to try again.
     expect(account().status).toBe('active')
-    expect(account().last_error).toContain('connection reset')
+    expect(account().last_error).toContain('last successful snapshot is preserved')
   })
 })
 

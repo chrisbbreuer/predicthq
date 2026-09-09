@@ -3,6 +3,7 @@ import type { VenueMarket } from '../prediction-markets/provider'
 import type { TradingClient, VenueOrder, VenuePosition } from './venue'
 import { log } from '@stacksjs/logging'
 import { KalshiProvider } from '../prediction-markets/kalshi'
+import { polymarketUsMarkets } from '../prediction-markets/polymarket-us'
 import { PolymarketProvider } from '../prediction-markets/polymarket'
 import { clientFor, revokeAccount } from './execute'
 import { isAuthFailure, VenueError } from './venue'
@@ -31,7 +32,8 @@ import { isAuthFailure, VenueError } from './venue'
  */
 
 /** How the market metadata behind a venue ticker is fetched. */
-type MarketLookup = (venue: string, externalIds: string[]) => Promise<VenueMarket[]>
+type SyncedMarket = Omit<VenueMarket, 'venue' | 'lastPrice'> & { venue: string, lastPrice: number | null }
+type MarketLookup = (venue: string, externalIds: string[]) => Promise<SyncedMarket[]>
 
 export interface AccountSyncOptions {
   /** Limit the pass to one user's accounts. Omitted, every account syncs. */
@@ -73,7 +75,8 @@ const PROVIDERS = {
   polymarket: () => new PolymarketProvider(),
 } as const
 
-async function fetchMarkets(venue: string, externalIds: string[]): Promise<VenueMarket[]> {
+async function fetchMarkets(venue: string, externalIds: string[]): Promise<SyncedMarket[]> {
+  if (venue === 'polymarket-us') return polymarketUsMarkets(externalIds)
   const provider = PROVIDERS[venue as keyof typeof PROVIDERS]
   if (!provider || externalIds.length === 0)
     return []
@@ -121,7 +124,7 @@ export async function syncAccounts(db: Database, options: AccountSyncOptions = {
         continue
       }
 
-      await noteFailure(db, account.id, message(error), stamp)
+      await noteFailure(db, account.id, error instanceof VenueError ? message(error) : 'Portfolio sync could not complete. Your last successful snapshot is preserved. Please retry.', stamp)
       log.warn(`[trading] could not sync account ${account.id}: ${message(error)}`)
     }
   }
@@ -178,11 +181,7 @@ async function syncOne(
     stamp,
   )
 
-  await db.prepare(`
-    UPDATE exchange_accounts
-    SET balance = ?, last_error = '', last_synced_at = ?, updated_at = ?
-    WHERE id = ?
-  `).run(balance.available, stamp, stamp, account.id)
+
 
   /*
    * Replace the account's rows outright rather than upserting and then
@@ -196,19 +195,24 @@ async function syncOne(
    * would be told the account holds nothing at all.
    */
   await db.transaction(async (transaction) => {
+  await transaction.prepare(`
+    UPDATE exchange_accounts
+    SET balance = ?, last_error = '', last_synced_at = ?, updated_at = ?
+    WHERE id = ?
+  `).run(balance.available, stamp, stamp, account.id)
     await transaction.prepare('DELETE FROM venue_positions WHERE exchange_account_id = ?').run(account.id)
     await transaction.prepare('DELETE FROM venue_orders WHERE exchange_account_id = ?').run(account.id)
 
     for (const position of positions) {
-      await writePosition(transaction, account, position, marketIds.get(position.marketExternalId) ?? 0, stamp)
-      summary.positions++
+      await writePosition(transaction, account, position, marketIds.get(position.marketExternalId) ?? null, stamp)
     }
 
     for (const order of orders) {
-      await writeOrder(transaction, account, order, marketIds.get(order.marketExternalId) ?? 0, stamp)
-      summary.orders++
+      await writeOrder(transaction, account, order, marketIds.get(order.marketExternalId) ?? null, stamp)
     }
   })
+  summary.positions += positions.length
+  summary.orders += orders.length
 }
 
 /**
@@ -271,7 +275,7 @@ async function writePosition(
   db: Database,
   account: AccountRow,
   position: VenuePosition,
-  marketId: number,
+  marketId: number | null,
   stamp: string,
 ): Promise<void> {
   await db.prepare(`
@@ -297,7 +301,7 @@ async function writeOrder(
   db: Database,
   account: AccountRow,
   order: VenueOrder,
-  marketId: number,
+  marketId: number | null,
   stamp: string,
 ): Promise<void> {
   await db.prepare(`
