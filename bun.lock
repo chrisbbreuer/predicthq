@@ -9,7 +9,7 @@
         "@stacksjs/stx": "0.2.277",
         "bun-plugin-stx": "0.2.277",
         "stacks": "0.74.66",
-        "stripe": "^22.5.0",
+        "stripe": "^23.0.0",
         "ts-charts": "github:stacksjs/ts-charts",
         "ts-web-scraper": "^0.1.10",
         "viem": "^2.55.11",
@@ -601,7 +601,7 @@
 
     "streamx": ["streamx@2.28.0", "", { "dependencies": { "events-universal": "^1.0.0", "fast-fifo": "^1.3.2", "text-decoder": "^1.1.0" } }, "sha512-1Yowhzjf0ivGMrTIkY9hav5TxobO9qIVqUE41fiCGMGgc3CLlf4MY+9AHmZqBWgDTue0fY9zWjYFVyf6Diuobw=="],
 
-    "stripe": ["stripe@22.5.0", "", { "peerDependencies": { "@types/node": ">=18" }, "optionalPeers": ["@types/node"] }, "sha512-QVwMwriC0bbySx6R4dpsvJ0W//GojC1kwWVS6rPSoVqDUIZX4Hy3TaUrd2AZeXEAaKbfWIjQjvo3vKAReHZ0vQ=="],
+    "stripe": ["stripe@23.0.0", "", { "peerDependencies": { "@types/node": ">=20" }, "optionalPeers": ["@types/node"] }, "sha512-MDE2A5ZVVluYURORaZEVghSmnLJc3w6aHAlZSxDQMsOjOb3V0O6ro/CiaeFlJS4N7uIVmsg98ocRsPmUK6YfyA=="],
 
     "stx-router": ["stx-router@0.2.277", "", {}, "sha512-VHKrqy8WZbZWYcYgGqKKECynpSsprDdRttXbbW/xCBrsMH+qILLKGeyp+xx2Qd6Gxxrr7OQ4+HKgLaoCja+1RA=="],
 
