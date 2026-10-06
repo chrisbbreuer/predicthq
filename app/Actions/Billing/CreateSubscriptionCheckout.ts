@@ -1,3 +1,4 @@
+import type { CheckoutRequest, CheckoutSession } from '@stacksjs/payments'
 import { config } from '@stacksjs/config'
 import { response } from '@stacksjs/router'
 import { plans } from '../../../config/saas'
@@ -11,11 +12,12 @@ import { tierFrom } from '../../Services/billing/entitlements'
  * price could name a $0 one, and the tier a user ends up on is decided
  * here from our own config rather than from anything they sent.
  *
- * `subscription_data.metadata.user_id` is what the webhook attributes
- * the subscription by. Without it the webhook falls back to a customer
- * lookup, which works but breaks for anyone whose Stripe customer was
- * created outside this flow — so it is set at the one moment we
- * certainly know who is subscribing.
+ * `metadata.user_id` is what the webhook attributes the subscription by:
+ * the payment driver copies a checkout's metadata onto the subscription it
+ * creates. Without it the webhook falls back to a customer lookup, which
+ * works but breaks for anyone whose Stripe customer was created outside
+ * this flow — so it is set at the one moment we certainly know who is
+ * subscribing.
  */
 export default {
   name: 'CreateSubscriptionCheckout',
@@ -53,18 +55,14 @@ export default {
     const appUrl = normalizeUrl(config.app.url)
 
     try {
-      const checkout = await user.checkout(
-        [{ priceId, quantity: 1 }],
-        {
-          mode: 'subscription',
-          allowPromotions: true,
-          success_url: `${appUrl}/billing/welcome?session={CHECKOUT_SESSION_ID}`,
-          cancel_url: `${appUrl}/pricing`,
-          subscription_data: {
-            metadata: { user_id: String(user.id) },
-          },
-        },
-      )
+      const checkout = await user.checkout({
+        mode: 'subscription',
+        lines: [{ price: priceId, quantity: 1 }],
+        allowPromotionCodes: true,
+        successUrl: `${appUrl}/billing/welcome?session={CHECKOUT_SESSION_ID}`,
+        cancelUrl: `${appUrl}/pricing`,
+        metadata: { user_id: String(user.id) },
+      })
 
       return { url: checkout.url, plan: planKey, tier: tierFrom(planKey) }
     }
@@ -79,10 +77,7 @@ export default {
 
 interface UserLike {
   id: number
-  checkout: (
-    items: Array<{ priceId: string, quantity: number }>,
-    options: Record<string, unknown>,
-  ) => Promise<{ url: string | null }>
+  checkout: (request: CheckoutRequest) => Promise<CheckoutSession>
 }
 
 /** Is this a plan key we actually publish? */

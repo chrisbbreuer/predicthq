@@ -10,6 +10,20 @@ allowed-tools: Read Edit Write Bash Grep Glob
 
 Full Stripe integration via the Payment facade. Uses Stripe API version `2026-01-28.clover`. The Stripe SDK is initialized from `services.stripe.secretKey` (sourced from `config/payment.ts`).
 
+## Payment Drivers (provider-neutral)
+
+`paymentDriver()` (also `Payment.driver()`) returns the driver `config.payment.driver` selects: `stripe` (default) or `adyen`, or one added with `registerPaymentDriver(name, factory)`. Source: `storage/framework/core/payments/src/driver/`.
+
+- Money is `{ amount, currency }` in minor units; `assertMoney` refuses floats before a request leaves.
+- Methods: `customer`, `charge(payer, money, paymentMethodId)`, `createPayment` (browser completes: `clientConfirmation` is a Stripe client secret or an Adyen session), `refund`, `checkout(payer, { mode, lines, successUrl, ... })`, `paymentMethods`, `removePaymentMethod`, `subscribe`, `cancelSubscription`, `subscriptions`, `verifyWebhook({ payload, headers })` -> `PaymentEvent[]`, `acknowledgeWebhook()`.
+- `checkout` copies `reference` and `metadata` onto the payment / subscription / setup intent it creates (Stripe: `payment_intent_data`, `subscription_data`, `setup_intent_data`), so their webhooks can be attributed. `allowPromotionCodes` and `automaticTax` are Stripe only; Adyen refuses them.
+- Unsupported operations throw `PaymentUnsupportedError` (driver + operation). Adyen has no catalog, subscriptions, invoices, coupons or portal.
+- Adyen: Checkout API v72, `X-API-Key`; shopper reference `user-<id>` (no PII); full refunds go to `/reversals`; webhooks verified per item with HMAC-SHA256 over 8 colon-joined fields under the hex key, acknowledged with 202.
+- `PaymentEvent` carries `provider` and `id` (together, the retry key), `reference` (the payment; for a refund, the payment refunded), `amount` (for a refund, that one refund - Stripe's cumulative `amount_refunded` is turned into a delta from `previous_attributes`) and `reason`. Adyen's id is `eventCode:pspReference:success`, since Adyen may resend a pair with the outcome changed.
+- The Stripe driver delegates to the existing billable modules, so idempotency keys and `stripe_id` handling are unchanged.
+- Commerce: `orders.handleCommercePaymentEvent(event)` from `@stacksjs/commerce` applies `payment.succeeded` / `payment.failed` (reason into `payments.failure_reason`) / `refund.succeeded` (added to `refund_amount`; `refunded` + order REFUNDED only when it covers the payment, else `partiallyRefunded`) to the order, deduplicated in `payment_webhook_events` (the `PaymentWebhookEvent` model) in the same transaction.
+- Everything below this section is Stripe's own API and returns Stripe objects.
+
 ## Key Paths
 - Core package: `storage/framework/core/payments/src/`
 - Payment facade: `storage/framework/core/payments/src/payment.ts`
@@ -292,6 +306,9 @@ if (!result.isErr)
   console.log(formatSetupReport(result.value).join('\n'))
 ```
 
+It also creates the coupons in `saas.coupons` with their promotion codes, and
+the customer portal configuration in `saas.portal` (see Customer Portal).
+
 This iterates `saas.plans` and reconciles each one against the live account: a
 product is matched by name and reused, and each pricing option is matched by its
 `lookup_key` (from the `key` field). Prices are immutable in Stripe, so a changed
@@ -302,6 +319,36 @@ subscriptions keep billing.
 Re-running is safe and converges. It does not use `products.search` on purpose:
 that index is eventually consistent, so a second run inside the lag window would
 find nothing and create a duplicate.
+
+### Customer Portal
+
+The Stripe-hosted page where a customer cancels or changes a subscription,
+updates their card and downloads invoices.
+
+```typescript
+// Customer id, or a user with a stripe_id. Single-use and short-lived:
+// create it when the customer clicks, then redirect to session.url.
+const session = await Payment.billingPortal('cus_xxx', { returnUrl: 'https://app.example/account' })
+```
+
+Declare what the portal allows in `config/saas.ts`, and `buddy stripe:setup`
+keeps one configuration in the account to match it:
+
+```typescript
+portal: {
+  headline: 'Manage your plan',
+  returnUrl: 'https://app.example/account', // used when a session names none
+  cancel: 'at_period_end',                  // or 'immediately', or false
+  paymentMethodUpdate: true,                // default true
+  invoiceHistory: true,                     // default true
+  emailUpdate: true,                        // default true
+}
+```
+
+The configuration is tagged `metadata: { managed_by: 'stacks', stacks_app: <APP_NAME> }`
+and found by that tag, so several apps can share one Stripe account without
+editing each other's portal. `billingPortal()` uses it, or the account default
+when the app declares no portal.
 
 ### Utility Functions
 
@@ -413,25 +460,46 @@ Plans use `productName`, `description`, `metadata`, and a `pricing` array where 
   ],
   webhook: { endpoint: 'your-webhook-endpoint', secret: 'your-webhook-secret' },
   currencies: ['usd'],
-  coupons: [],
+  coupons: [
+    {
+      id: 'six_months_free',         // the Stripe coupon id; how a re-run finds it
+      name: '6 months free',
+      percentOff: 100,               // or amountOff (minor units) + currency
+      duration: 'repeating',         // 'once' | 'repeating' | 'forever'
+      durationInMonths: 6,
+      appliesTo: ['Stacks Hobby'],   // plan productNames; omit for every product
+      codes: ['SIXFREE'],            // what customers type: Stripe promotion codes
+    },
+  ],
   products: [
     { name: 'Stacks Hobby', description: '...', images: ['image-url'] },
   ],
 } satisfies SaasConfig
 ```
 
+Coupons are immutable in Stripe. One that exists with a different discount is
+reported as a conflict and left alone (deleting it would void codes already
+handed out), and `stripe:setup` exits non-zero so CI notices. Change a
+discount by giving it a new `id`. Stripe restricts a coupon by product, not
+price, so a plan that must not get a discount needs a product of its own - or
+apply the promotion code yourself at checkout (`discounts: [{ promotion_code }]`)
+for the plans it is meant for.
+
 ## Database Tables Used
 - `subscriptions` -- columns: `user_id`, `type`, `unit_price`, `provider_id`, `provider_status`, `provider_price_id`, `quantity`, `trial_ends_at`, `ends_at`, `provider_type`, `last_used_at`
 - `payment_methods` -- columns: `id`, `type`, `last_four`, `brand`, `exp_year`, `exp_month`, `user_id`, `provider_id`, `is_default`
 - `payment_products` -- columns: `id`, `name`, `unit_price`
 - `payment_transactions` -- columns: `id`, `name`, `description`, `amount`, `brand`, `type`, `provider_id`, `user_id`
+- `payment_webhook_events` -- columns: `provider`, `event_id` (unique together), `processed_at`; commerce's webhook dedup
 
 ## User Model Requirements
 The `UserModel` must have:
 - `id`, `name`, `email`, `stripe_id` fields
-- `hasStripeId()` method -- returns boolean
 - `update(data)` method -- for persisting `stripe_id`
-- `activeSubscription()` method -- for subscription updates
+- `activeSubscription()` method -- for subscription updates (bound by the `billable` trait)
+
+There is no `user.hasStripeId()` instance method. Use
+`manageCustomer.hasStripeId(user)`, which reads `stripe_id`.
 
 The framework default `storage/framework/defaults/app/Models/User.ts` sets
 `billable: false` intentionally because not every application uses payments.
@@ -439,7 +507,42 @@ Run `buddy publish:model User`, keep the override at `app/Models/User.ts`, and
 enable its `billable` trait before calling instance helpers such as
 `activeSubscription()`, `paymentMethods()`, or `createSetupIntent()`. A payment
 Action must report the missing trait clearly instead of calling an undefined
-method.
+method. `isBillable(user)` from `@stacksjs/orm` is that check, and narrows the
+user to `BillableMethods` (the instance surface, derived from
+`createBillableMethods`) so no cast is needed:
+
+```ts
+import { isBillable } from '@stacksjs/orm'
+import { BILLING_NOT_ENABLED } from '@stacksjs/payments'
+
+const user = await request.user()
+if (!user)
+  return response.unauthorized('Authentication required')
+if (!isBillable(user))
+  return response.error(BILLING_NOT_ENABLED, 503)
+
+const customer = await user.retrieveStripeUser()
+```
+
+The instance methods are exactly the keys of `createBillableMethods` in
+`core/orm/src/traits/billable.ts`. Anything else is not a function at runtime.
+
+- Provider-neutral, through the configured driver: `paymentCustomer()`,
+  `charge(money, paymentMethodId, options)`, `createPayment(money, options)`,
+  `checkout({ mode, lines, successUrl, cancelUrl })`, `paymentMethods()`,
+  `removePaymentMethod(providerId)`, `newSubscription(type, price)`,
+  `cancelSubscription(providerId, { atPeriodEnd })` (refuses a subscription the
+  record does not own), `activeSubscription()`. Money is `{ amount, currency }`
+  in minor units; results are the driver's shapes, with `raw` holding the
+  provider's object (strip it before sending to a browser).
+- Stripe only, throwing `PaymentUnsupportedError` under another driver:
+  `createStripeUser`, `updateStripeUser`, `deleteStripeUser`,
+  `createOrGetStripeUser`, `retrieveStripeUser`, `syncStripeCustomerDetails`,
+  `setDefaultPaymentMethod(id)` (a number is the local row, a string Stripe's
+  `pm_...` id), `addPaymentMethod`, `updateSubscription`, `createSetupIntent`,
+  `subscriptionHistory`, and the Connect methods.
+- Local only: `defaultPaymentMethod()`, `storeTransaction(productId, options)`,
+  `transactionHistory()`.
 
 ## Gotchas
 - Stripe API keys MUST be in `.env` as `STRIPE_SECRET_KEY` and `STRIPE_PUBLISHABLE_KEY` -- never hardcode them in config files
@@ -447,7 +550,7 @@ method.
 - All amounts are in cents -- use `toCents()` and `toDollars()` for conversion
 - `charge()` creates AND confirms the PaymentIntent in one step
 - `subscribe()` resolves the price via `lookup_key`, not a direct Stripe price ID
-- `removePaymentMethod()` takes a database record ID (number), not a Stripe PM ID (string)
+- The facade's `Payment.removePaymentMethod()` takes a database record ID (number); the billable instance method `removePaymentMethod()` takes the provider's id (string)
 - `setDefaultPaymentMethod` has two variants: one takes a Stripe PM ID string (`setUserDefaultPayment`), the other takes a database ID number
 - `getOrCreateCustomer()` handles deleted Stripe customers by recreating them
 - Subscription status checks query the local database, not Stripe directly

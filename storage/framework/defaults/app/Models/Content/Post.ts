@@ -1,5 +1,5 @@
 import { defineModel, siteOwnership } from '@stacksjs/orm'
-import { schema } from '@stacksjs/validation'
+import { schema } from '@stacksjs/validation/runtime'
 
 export default defineModel({
   name: 'Post',
@@ -44,7 +44,7 @@ export default defineModel({
   belongsTo: ['Author', 'Site'],
   belongsToMany: {
     categories: {
-      model: 'Category',
+      model: 'Categorizable',
       table: 'categorizable_models',
       foreignKey: 'categorizable_id',
       relatedKey: 'category_id',

@@ -8,7 +8,7 @@ allowed-tools: Read Edit Write Bash Grep Glob
 
 # Stacks Commerce
 
-Comprehensive e-commerce module with 15 sub-modules and 36 models.
+Comprehensive e-commerce module with 15 sub-modules and 37 models.
 
 ## Key Paths
 - Core package: `storage/framework/core/commerce/src/`
@@ -79,7 +79,7 @@ Each sub-module typically provides:
 | Model | Key Fields | Relationships |
 |-------|-----------|---------------|
 | Product | name, price, inventoryCount, allergens(JSON) | belongsTo: Category, Manufacturer; hasMany: Review, ProductUnit, ProductVariant |
-| ProductVariant | SKU, options, pricing | belongsTo: Product |
+| ProductVariant | variant, type, options, status, sku (unique per product), price / compareAtPrice (minor units; null price inherits the product's), inventoryCount (null = untracked) | belongsTo: Product |
 | ProductUnit | unit pricing | belongsTo: Product |
 | Category | name, slug, isActive, displayOrder | hasMany: Product |
 | Cart | status, total, currency(USD), expiresAt | hasMany: CartItem; belongsTo: Customer |
@@ -122,9 +122,9 @@ if (!result.ok) {
 // result.coupon reflects the post-redemption state.
 ```
 
-`redeem` bumps `usage_count` and enforces `max_uses`, `is_active` and the
+`redeem` bumps `usage_count` and enforces `usage_limit`, `is_active` and the
 start/end dates in the WHERE clause, so the database decides the race. A
-`max_uses` of `NULL` means unlimited. Do not fetch, check and then call
+`usage_limit` of `NULL` means unlimited. Do not fetch, check and then call
 `update()` to increment: that is the exact pattern this replaced.
 
 ### Spending or reloading a gift card

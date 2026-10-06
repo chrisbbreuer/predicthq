@@ -1,5 +1,5 @@
 import { defineModel, selfOwnership } from '@stacksjs/orm'
-import { schema } from '@stacksjs/validation'
+import { schema } from '@stacksjs/validation/runtime'
 
 /**
  * A named API token belonging to a user - the Sanctum shape.
@@ -27,6 +27,7 @@ export default defineModel({
   autoIncrement: true,
 
   traits: {
+    gdpr: { subject: { column: 'tokenable_id', where: { tokenable_type: 'users' } }, erasure: 'anonymize', basis: 'contract', purpose: 'API tokens, revoked on erasure' },
     useTimestamps: true,
     // Deliberately no `useApi`.
     //
@@ -136,6 +137,7 @@ export default defineModel({
      * nothing authorises on either.
      */
     userAgent: {
+      personal: true,
       order: 8,
       fillable: true,
       validation: {
@@ -144,6 +146,7 @@ export default defineModel({
     },
 
     ipAddress: {
+      personal: true,
       order: 9,
       fillable: true,
       validation: {

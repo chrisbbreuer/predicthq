@@ -164,9 +164,11 @@ await deleteEmail('chris', messageId)
 - Configurable domain and endpoint
 
 ### Mailtrap Driver
-- Inbox-aware sending
-- Sandbox and production modes
-- Host default: `sandbox.api.mailtrap.io`
+- `MAILTRAP_INBOX_ID` picks the API: set, mail is captured in that sandbox
+  inbox (`sandbox.api.mailtrap.io/api/send/<inbox>`); unset, it is delivered
+  through the Sending API (`send.api.mailtrap.io/api/send`)
+- `MAILTRAP_HOST` overrides the host for either; blank means Mailtrap's own
+- A 4xx other than 429 is not retried
 
 ### SMTP Driver
 - Raw TCP/TLS socket connection
@@ -237,6 +239,14 @@ abstract class BaseEmailDriver {
   notifications: { newEmail: true, bounces: true, complaints: true }
 }
 ```
+
+### Mail DNS a deploy publishes
+
+With `server.enabled`, `buddy deploy` reconciles the mail domain's DNS through whichever configured provider holds the zone: MX, SPF, DKIM at the selector the server signs under, DMARC (`server.dmarc`), `mail.<domain>`, and the Gmail Postmaster Tools verification TXT when `server.postmaster.google` is set. Writes are surgical: only records the deploy owns are replaced, so other apex TXT (Search Console, other verifications) survive.
+
+Postmaster Tools is the only view of why Gmail files mail as spam when SPF, DKIM and DMARC all pass. Its value is issued per Google account and cannot be generated: add the domain at https://postmaster.google.com, copy the TXT value, set `server.postmaster.google`, deploy, then press Verify in Postmaster Tools. Until it is set the deploy prints where to get it; `postmaster: false` silences that.
+
+When no configured provider can write the zone (no credentials for the provider its nameservers name, e.g. a Cloudflare zone with no `CLOUDFLARE_API_TOKEN`), nothing is published, on this deploy or any later one. The deploy warns with the exact fix (`buddy env:set CLOUDFLARE_API_TOKEN <value> -f .env.production`) and the records to add by hand. `buddy doctor` reports the same without deploying: "Mail DNS provider" (which provider the nameservers name, and whether its keys are in `.env.production`, by name only), "Mail DNS records" (MX, SPF, DKIM at `mail._domainkey`, DMARC in public DNS, each exactly once, the DMARC policy against config, SPF against the MX host's address) and "Postmaster Tools". Code: `core/buddy/src/mail-dns-health.ts`, `core/buddy/src/dns-credentials.ts`.
 
 ## Application Mail Example
 
