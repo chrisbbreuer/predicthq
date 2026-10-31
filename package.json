@@ -69,17 +69,17 @@
     "sqlite": "^3.47.2"
   },
   "dependencies": {
-    "@polymarket/clob-client-v2": "^1.1.0",
-    "@stacksjs/stx": "0.2.378",
-    "bun-plugin-stx": "0.2.378",
-    "stacks": "0.75.79",
+    "@polymarket/clob-client-v2": "^1.2.0",
+    "@stacksjs/stx": "0.2.775",
+    "bun-plugin-stx": "0.2.775",
+    "stacks": "0.75.400",
     "stripe": "^22.5.0",
     "ts-charts": "github:stacksjs/ts-charts",
     "ts-web-scraper": "^0.1.10",
-    "viem": "^2.55.11"
+    "viem": "^2.57.13"
   },
   "devDependencies": {
-    "better-dx": "^0.2.15"
+    "better-dx": "^0.2.38"
   },
   "overrides": {
     "ws": "8.21.3"
