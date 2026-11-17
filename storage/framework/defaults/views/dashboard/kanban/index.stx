@@ -1,7 +1,0 @@
-@extends('layouts/default')
-
-@section('content')
-@title('Dashboard - Kanban')
-
-<KanbanBoardsDashboard />
-@endsection

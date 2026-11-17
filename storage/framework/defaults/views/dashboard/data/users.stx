@@ -1,6 +1,0 @@
-@extends('layouts/default')
-
-@section('content')
-@title('Dashboard - Users')
-<DataModelRecords mode="users" />
-@endsection

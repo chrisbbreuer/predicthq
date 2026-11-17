@@ -95,3 +95,8 @@ storage/framework/stx/cache/
 storage/framework/stx/bundle-cache/
 storage/framework/stx/ssg-cache/
 storage/framework/runtime/model-sources/
+/storage/framework/stx/image-delivery/_stx
+
+# The framework defaults: a link to node_modules/@stacksjs/defaults, made on
+# boot. `buddy publish:defaults` replaces it with a copy you commit instead.
+/storage/framework/defaults

@@ -1,8 +1,0 @@
-@extends('layouts/default')
-
-@section('content')
-@title('Dashboard - Invite User')
-<PageLayout>
-  <UserInvite />
-</PageLayout>
-@endsection

@@ -1,7 +1,0 @@
-@extends('layouts/default')
-
-@section('content')
-@title('Dashboard - Appearance')
-
-<AppearanceSettingsDashboard />
-@endsection

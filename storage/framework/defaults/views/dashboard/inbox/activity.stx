@@ -1,8 +1,0 @@
-@extends('layouts/default')
-
-@section('content')
-@title('Mail - Activity')
-
-<EmailActivityDashboard />
-
-@endsection

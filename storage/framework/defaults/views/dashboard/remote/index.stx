@@ -1,8 +1,0 @@
-@extends('layouts/default')
-
-@section('content')
-@title('Dashboard - Remote')
-<PageLayout>
-  <RemoteConsole />
-</PageLayout>
-@endsection

@@ -1,8 +1,0 @@
-@extends('layouts/default')
-
-@section('content')
-@title('Dashboard - Edit Record')
-<PageLayout>
-  <ModelRecordEdit />
-</PageLayout>
-@endsection

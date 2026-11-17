@@ -1,8 +1,0 @@
-@extends('layouts/default')
-
-@section('content')
-@title('Dashboard - Actions')
-<PageLayout>
-  <SourceInventory mode="actions" />
-</PageLayout>
-@endsection

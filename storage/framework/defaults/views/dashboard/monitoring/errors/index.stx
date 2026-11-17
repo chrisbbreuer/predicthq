@@ -1,8 +1,0 @@
-@extends('layouts/default')
-
-@section('content')
-@title('Dashboard - Error Tracking')
-<PageLayout>
-  <ErrorDashboard />
-</PageLayout>
-@endsection

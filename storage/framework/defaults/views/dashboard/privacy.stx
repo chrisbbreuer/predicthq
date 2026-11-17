@@ -1,6 +1,0 @@
-@extends('layouts/guest')
-
-@section('content')
-@title('Privacy Policy - Stacks Dashboard')
-<PrivacyDashboard />
-@endsection

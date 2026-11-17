@@ -1,7 +1,0 @@
-@extends('layouts/default')
-
-@section('content')
-@title('Dashboard - SEO')
-
-<SeoDashboard />
-@endsection

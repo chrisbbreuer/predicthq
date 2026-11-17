@@ -1,6 +1,0 @@
-@extends('layouts/guest')
-
-@section('content')
-@title('Terms of Service - Stacks Dashboard')
-<TermsDashboard />
-@endsection
