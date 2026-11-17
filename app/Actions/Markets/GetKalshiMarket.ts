@@ -4,6 +4,7 @@ import { response } from '@stacksjs/router'
 import { kalshiChart, parseRange } from '../../Services/prediction-markets/kalshi-chart'
 import { currentPrice, kalshiMarket, KalshiPublicError } from '../../Services/prediction-markets/kalshi-public'
 import { trackParlay } from '../../Services/trading/book-tracking'
+import { legProgress } from '../../Services/trading/leg-progress'
 import { liveGameFor } from '../../Services/trading/live-games'
 
 /**
@@ -44,6 +45,7 @@ export default {
       const parlay: ParlayTracker | null = market.legs.length > 0 ? await trackParlay(market).catch(() => null) : null
       const game: LiveGame | null = parlay ? null : await liveGameFor(ticker, side, undefined, market.yesSubTitle).catch(() => null)
       const chart = await kalshiChart(ticker, range, { liveSince: game?.startsAt ?? null })
+      const progress = game ? await legProgress(ticker, market.yesSubTitle || market.title, side, game).catch(() => null) : null
 
       return {
         asOf: new Date().toISOString(),
@@ -65,6 +67,7 @@ export default {
           url: `https://kalshi.com/markets/${encodeURIComponent(market.eventTicker.split('-')[0]?.toLowerCase() ?? '')}`,
         },
         game,
+        progress,
         parlay,
         chart,
       }

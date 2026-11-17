@@ -72,7 +72,7 @@ export interface LiveGame {
  * League by series prefix. Order matters only where one prefix contains
  * another, and none of these do: `KXWNBA` does not start with `KXNBA`.
  */
-const LEAGUE_PREFIXES: Array<[string, string]> = [
+export const LEAGUE_PREFIXES: Array<[string, string]> = [
   ['KXNCAAMB', 'ncaab'],
   ['KXNCAAWB', 'ncaaw'],
   ['KXUEFANL', 'uefa-nations'],

@@ -42,6 +42,8 @@ route.get('/markets/graph', 'Actions/PredictionMarkets/GetSignalGraph')
 // data only, cached upstream, and throttled because the bet page polls it.
 route.group({ middleware: ['throttle:120,1'] }, () => {
   route.get('/markets/kalshi/{ticker}', 'Actions/Markets/GetKalshiMarket')
+  // One game for the game page: box score, stats, and Kalshi's chart.
+  route.get('/scores/{league}/game/{id}', 'Actions/Scores/GetGame')
 })
 
 // ---- Bet sheets (signed-in user or an anon token) --------------------------

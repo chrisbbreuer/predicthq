@@ -234,11 +234,34 @@ export interface GameOdds {
   favorite: string | null
 }
 
+/** One side's player box score, in ESPN's column order. */
+export interface BoxTeam {
+  /** Column headings, e.g. MIN, PTS, FG, 3PT, REB, AST. */
+  labels: string[]
+  players: BoxPlayer[]
+}
+
+export interface BoxPlayer {
+  name: string
+  shortName: string
+  jersey: string
+  position: string
+  starter: boolean
+  /** True when ESPN lists the player but they have not played. */
+  dnp: boolean
+  /** One value per label. */
+  stats: string[]
+}
+
 export interface GameDetail {
   id: string
   league: string
   state: string
   status: string
+  startsAt?: string
+  period?: number
+  lastPlay?: string
+  broadcast?: string | null
   clock: string
   venue: string | null
   attendance: number | null
@@ -249,6 +272,29 @@ export interface GameDetail {
   stats: StatPair[]
   odds: GameOdds | null
   note: string | null
+  /** Player box scores, empty before tip-off or for sports ESPN lacks them for. */
+  box: { away: BoxTeam | null, home: BoxTeam | null }
+}
+
+/** ESPN's `boxscore.players` entry for one team, as rows we can draw. */
+function toBoxTeam(entry: any): BoxTeam | null {
+  const group = entry?.statistics?.[0]
+  const labels: string[] = Array.isArray(group?.labels) ? group.labels.map((label: unknown) => String(label)) : []
+  const athletes: any[] = Array.isArray(group?.athletes) ? group.athletes : []
+  if (labels.length === 0 || athletes.length === 0)
+    return null
+  return {
+    labels,
+    players: athletes.map(row => ({
+      name: String(row?.athlete?.displayName ?? ''),
+      shortName: String(row?.athlete?.shortName ?? row?.athlete?.displayName ?? ''),
+      jersey: String(row?.athlete?.jersey ?? ''),
+      position: String(row?.athlete?.position?.abbreviation ?? ''),
+      starter: row?.starter === true,
+      dnp: row?.didNotPlay === true || !Array.isArray(row?.stats) || row.stats.length === 0,
+      stats: Array.isArray(row?.stats) ? row.stats.map((value: unknown) => String(value)) : [],
+    })).filter(player => player.name),
+  }
 }
 
 /**
@@ -387,11 +433,21 @@ export async function fetchGame(leagueKey: string, eventId: string): Promise<Gam
     total: String(raw?.score ?? ''),
   })
 
+  // Box teams again by id, since ESPN orders them independently too.
+  const boxPlayers: any[] = d?.boxscore?.players ?? []
+  const playersFor = (c: any) => toBoxTeam(boxPlayers.find(b => String(b?.team?.id ?? '') === String(c?.team?.id ?? '')))
+  const plays: any[] = Array.isArray(d?.plays) ? d.plays : []
+
   return {
     id: String(eventId),
     league: league.key,
     state: String(type?.state ?? 'pre'),
     status: String(type?.shortDetail ?? type?.description ?? ''),
+    startsAt: String(competition?.date ?? ''),
+    period: num(competition?.status?.period) ?? undefined,
+    lastPlay: type?.state === 'in' ? String(plays[plays.length - 1]?.text ?? d?.situation?.lastPlay?.text ?? '') : '',
+    broadcast: competition?.broadcasts?.[0]?.media?.shortName ?? null,
+    box: { away: playersFor(awayRaw), home: playersFor(homeRaw) },
     clock: type?.state === 'in' ? String(competition?.status?.displayClock ?? '') : '',
     venue: d?.gameInfo?.venue?.fullName ?? null,
     attendance: num(d?.gameInfo?.attendance),

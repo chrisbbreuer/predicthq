@@ -36,6 +36,7 @@ export const actions = {
   'Actions/PredictionMarkets/GetSmartMoney': '../../../app/Actions/PredictionMarkets/GetSmartMoney.ts',
   'Actions/PredictionMarkets/GetWhaleTrades': '../../../app/Actions/PredictionMarkets/GetWhaleTrades.ts',
   'Actions/PredictionMarkets/IngestPredictionMarkets': '../../../app/Actions/PredictionMarkets/IngestPredictionMarkets.ts',
+  'Actions/Scores/GetGame': '../../../app/Actions/Scores/GetGame.ts',
   'Actions/SendWelcomeEmail': '../../../app/Actions/SendWelcomeEmail.ts',
   'Actions/Sheets/DeleteSheet': '../../../app/Actions/Sheets/DeleteSheet.ts',
   'Actions/Sheets/ListSheets': '../../../app/Actions/Sheets/ListSheets.ts',

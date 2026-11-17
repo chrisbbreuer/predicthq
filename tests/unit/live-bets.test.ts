@@ -5,6 +5,8 @@ import { candlesToPoints, parseRange, thin, windowFor } from '../../app/Services
 import { clearKalshiCache, currentPrice, isMultivariate, kalshiMarkets, toMarketInfo } from '../../app/Services/prediction-markets/kalshi-public'
 import { trackParlay } from '../../app/Services/trading/book-tracking'
 import { KalshiTradingClient } from '../../app/Services/trading/kalshi-trading'
+import { propKind, propProgress, spreadProgress, totalProgress } from '../../app/Services/trading/leg-progress'
+import { candidateEvents, kalshiDate } from '../../app/Services/scores/kalshi-event'
 import { liveGameCard, matchGame, parseGameTicker, sideForOutcome } from '../../app/Services/trading/live-games'
 
 function team(abbreviation: string, location: string, score: number | null): Team {
@@ -273,5 +275,37 @@ describe('kalshi rate limits', () => {
     const client = new KalshiTradingClient({ venue: 'kalshi', apiKeyId: 'key', privateKeyPem: pem })
     await expect(client.placeOrder({ marketExternalId: 'T', side: 'yes', size: 1, limitPrice: 0.5, clientOrderId: 'c1' } as any)).rejects.toThrow('429')
     expect(calls).toBe(1)
+  })
+})
+
+describe('leg progress', () => {
+  const liveGame = liveGameCard(game(team('PHX', 'Phoenix', 56), team('DEN', 'Denver', 53)), parseGameTicker('KXNBATOTAL-26NOV16PHXDEN-206'), 'yes')
+  const box = {
+    away: { labels: ['MIN', 'PTS', '3PT', 'REB', 'AST'], players: [{ name: 'Devin Booker', shortName: 'D. Booker', jersey: '1', position: 'G', starter: true, dnp: false, stats: ['18', '5', '1-4', '2', '3'] }] },
+    home: { labels: ['MIN', 'PTS', '3PT', 'REB', 'AST'], players: [{ name: 'Nikola Jokić', shortName: 'N. Jokić', jersey: '15', position: 'C', starter: true, dnp: false, stats: ['20', '19', '0-1', '11', '6'] }] },
+  }
+
+  it('counts a player prop from the box score, accents and combos included', () => {
+    expect(propKind('KXNBAPTS-26NOV16PHXDEN-DENNJOKIC15-20')).toBe('PTS')
+    expect(propKind('KXNBAGAME-26NOV16PHXDEN-DEN')).toBeNull()
+    expect(propProgress('PTS', 'Nikola Jokic: 20+', 'yes', box)).toMatchObject({ text: '19 PTS', target: 20, onTrack: false })
+    expect(propProgress('PRA', 'Nikola Jokić: 30+', 'yes', box)).toMatchObject({ text: '36 PRA', onTrack: true })
+    expect(propProgress('3PT', 'Devin Booker: 2+', 'no', box)).toMatchObject({ text: '1 3PM', onTrack: true })
+    expect(propProgress('PTS', 'Someone Else: 10+', 'yes', box)).toBeNull()
+  })
+
+  it('reads totals and spreads from the score', () => {
+    expect(totalProgress('Over 206.5 points', 'yes', liveGame)).toMatchObject({ text: '109 pts', target: 206.5, onTrack: false })
+    expect(totalProgress('Over 206.5 points', 'no', liveGame)).toMatchObject({ onTrack: true })
+    expect(spreadProgress('Phoenix wins by over 2.5 points', 'yes', liveGame)).toMatchObject({ text: 'PHX +3', onTrack: true })
+    expect(spreadProgress('Denver wins by over 2.5 points', 'yes', liveGame)).toMatchObject({ text: 'DEN -3', onTrack: false })
+  })
+})
+
+describe('kalshi game events', () => {
+  it('spells the event the way Kalshi does, in Eastern time', () => {
+    expect(kalshiDate('2026-11-17T00:00Z')).toBe('26NOV16')
+    expect(candidateEvents('nba', { startsAt: '2026-11-17T01:00Z', away: team('GS', 'Golden State', null) as any, home: team('NO', 'New Orleans', null) as any }))
+      .toEqual(['KXNBAGAME-26NOV16GSNO', 'KXNBAGAME-26NOV16GSNOP', 'KXNBAGAME-26NOV16GSWNO', 'KXNBAGAME-26NOV16GSWNOP'])
   })
 })

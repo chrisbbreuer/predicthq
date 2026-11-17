@@ -51,6 +51,7 @@ const legs = state<any[]>([])
 const position = state<any>(null)
 const signedIn = state(false)
 const hover = state<any>(null)
+const hoverValues = state<any[]>([])
 let points: any[] = []
 let chartWindow = { start: 0, end: 0 }
 
@@ -137,6 +138,12 @@ function applyMarket(data: any): void {
 
   legs.set(((data.parlay && data.parlay.legs) || []).map((leg: any, index: number) => ({
     key: index + leg.ticker,
+    href: leg.game ? leg.game.gameUrl : '/bet?ticker=' + encodeURIComponent(TICKER) + '&side=' + SIDE,
+    progressText: leg.progress ? leg.progress.text : '',
+    progressTarget: leg.progress && leg.progress.target !== null ? 'of ' + leg.progress.target : '',
+    progressWidth: leg.progress ? Math.round((Number(leg.progress.ratio) || 0) * 100) + '%' : '0%',
+    progressBar: Boolean(leg.progress && leg.progress.ratio !== null),
+    progressTone: leg.progress ? (leg.progress.onTrack ? 'pos' : (leg.status === 'won' || leg.status === 'lost' || (leg.game && leg.game.state === 'post') ? 'neg' : 'muted')) : '',
     label: leg.label,
     choice: String(leg.choice || 'yes').toUpperCase(),
     statusLabel: leg.status === 'won' ? 'Hit' : (leg.status === 'lost' ? 'Missed' : (leg.status === 'live' ? 'Live' : 'Open')),
@@ -168,6 +175,10 @@ function applyMarket(data: any): void {
     isParlay: Boolean(data.parlay),
     parlaySummary: data.parlay ? [data.parlay.won + ' hit', data.parlay.live + ' live', data.parlay.open + ' to play', data.parlay.lost + ' missed'].join(' · ') : '',
     url: market.url,
+    gameHref: game ? game.gameUrl : '',
+    progressText: data.progress ? data.progress.text : '',
+    progressTarget: data.progress && data.progress.target !== null ? 'of ' + data.progress.target : '',
+    progressTone: data.progress ? (data.progress.onTrack ? 'pos' : (game && game.state === 'post' ? 'neg' : 'muted')) : '',
     empty: lines.every((line: any) => line.points.length < 2),
   })
 }
@@ -268,6 +279,7 @@ function hoverAt(event: any): void {
     return { key: line.ticker, label: abbrFor(line.label, null), value: pct(value), color: line.color }
   })
   const when = new Date(at * 1000)
+  hoverValues.set(values)
   hover.set({
     left: (ratio * 100).toFixed(2) + '%',
     time: when.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }),
@@ -317,6 +329,9 @@ onMount(async () => {
       .range.on { color: var(--text); background: var(--surface-2); }
       .odds-row { display: grid; grid-template-columns: minmax(0, 1fr) 90px 90px; gap: 12px; align-items: center; padding: 14px 18px; border-top: 1px solid var(--border); }
       .odds-cell { display: grid; place-items: center; height: 52px; border-radius: 14px; border: 1px solid var(--border); }
+      .progress { height: 3px; border-radius: 9999px; background: var(--track); overflow: hidden; }
+      .progress > span { display: block; height: 100%; background: var(--pos); border-radius: inherit; }
+      a.leg:hover { background: var(--surface-2); }
       .leg { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto 52px; gap: 12px; align-items: center; padding: 12px 18px; border-top: 1px solid var(--border); }
       .kv { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); font-size: 14px; }
       .kv:first-of-type { border-top: 0; }
@@ -339,7 +354,10 @@ onMount(async () => {
       <main class="mx-auto px-4 pt-6 pb-4 sm:px-6 max-w-6xl">
         <div class="flex items-center justify-between">
           <a href="/positions" data-no-router class="back" aria-label="Back to my bets"><i class="h-5 w-5 i-hugeicons-arrow-left-01"></i></a>
-          <a x-show="view() && view().url" :href="view() ? view().url : '#'" target="_blank" rel="noopener" class="inline-flex gap-2 items-center px-4 h-11 font-semibold text-sm rounded-full btn">View on Kalshi <i class="h-4 w-4 i-hugeicons-arrow-up-right-01"></i></a>
+          <div class="flex gap-2">
+            <a x-show="view() && view().gameHref" :href="view() ? view().gameHref : '#'" data-no-router class="inline-flex gap-2 items-center px-4 h-11 font-semibold text-sm rounded-full btn btn-primary">Box score &amp; stats <i class="h-4 w-4 i-hugeicons-arrow-right-01"></i></a>
+            <a x-show="view() && view().url" :href="view() ? view().url : '#'" target="_blank" rel="noopener" class="inline-flex gap-2 items-center px-4 h-11 font-semibold text-sm rounded-full btn">Kalshi <i class="h-4 w-4 i-hugeicons-arrow-up-right-01"></i></a>
+          </div>
         </div>
 
         <p x-show="loading()" class="mt-16 text-center muted">Loading market…</p>
@@ -389,6 +407,10 @@ onMount(async () => {
               </div>
 
               <p x-show="view() && view().lastPlay" class="mt-6 text-center muted" x-text="view() ? view().lastPlay : ''"></p>
+              <p x-show="view() && view().progressText" class="mt-3 text-center">
+                <span class="figure-xl text-3xl" :class="view() ? view().progressTone : ''" x-text="view() ? view().progressText : ''"></span>
+                <span class="ml-1 faint num" x-text="view() ? view().progressTarget : ''"></span>
+              </p>
               <div x-show="view() && view().isParlay" class="mt-6 text-center">
                 <div class="figure-xl text-6xl" x-text="view() ? view().chance : ''"></div>
                 <div class="mt-1 text-sm muted" x-text="view() ? view().parlaySummary : ''"></div>
@@ -405,7 +427,7 @@ onMount(async () => {
                     <div class="hover-line" :style="'left:' + hover().left"></div>
                     <div class="hover-card" :class="hover().flip ? 'flip' : ''" :style="'left:' + hover().left">
                       <div class="faint" x-text="hover().time"></div>
-                      <template :for="value in hover().values">
+                      <template :for="value in hoverValues">
                         <div class="flex gap-3 justify-between mt-1 font-semibold"><span :style="'color:' + value.color" x-text="value.label"></span><span class="num" x-text="value.value"></span></div>
                       </template>
                     </div>
@@ -438,18 +460,25 @@ onMount(async () => {
               <section x-show="legs().length > 0" class="overflow-hidden mt-8 card">
                 <div class="px-[18px] py-3 font-bold">Legs</div>
                 <template :for="leg in legs">
-                  <div class="leg">
+                  <a :href="leg.href" data-no-router class="leg">
                     <span class="pill" :class="leg.statusClass"><span x-show="leg.isLive" class="live-pulse"></span><span x-text="leg.statusLabel"></span></span>
-                    <div class="flex gap-1.5 items-center min-w-0">
-                      <span x-show="leg.choice === 'NO'" class="pill no">NO</span>
-                      <span class="font-semibold text-sm truncate" x-text="leg.label"></span>
+                    <div class="min-w-0">
+                      <div class="flex gap-1.5 items-center min-w-0">
+                        <span x-show="leg.choice === 'NO'" class="pill no">NO</span>
+                        <span class="font-semibold text-sm truncate" x-text="leg.label"></span>
+                      </div>
+                      <div x-show="leg.progressText" class="flex gap-2 items-center mt-1">
+                        <span class="text-xs font-bold num" :class="leg.progressTone" x-text="leg.progressText"></span>
+                        <span class="text-[11px] faint num" x-text="leg.progressTarget"></span>
+                        <div x-show="leg.progressBar" class="w-16 progress"><span :style="'width:' + leg.progressWidth"></span></div>
+                      </div>
                     </div>
                     <div class="text-right leg-game">
                       <div class="text-xs font-semibold num" x-text="leg.gameLine"></div>
                       <div class="text-[11px]" :class="leg.isLive ? 'live' : 'faint'" x-text="leg.gameClock"></div>
                     </div>
                     <span class="font-bold text-sm text-right num" x-text="leg.chance"></span>
-                  </div>
+                  </a>
                 </template>
               </section>
 

@@ -154,7 +154,26 @@ function gameView(game: any): any {
   }
 }
 
-function parlayView(parlay: any): any {
+/**
+ * A leg's live count (points, total, margin) as display fields. Green once
+ * it is going the holder's way, red only when the game is over and it did
+ * not, and neutral while it is still being played for.
+ */
+function progressView(progress: any, game: any, status: string): any {
+  if (!progress)
+    return { has: false, text: '', target: '', width: '0%', tone: '', showBar: false }
+  const done = status === 'won' || status === 'lost' || (game && game.state === 'post')
+  return {
+    has: true,
+    text: progress.text,
+    target: progress.target === null || progress.target === undefined ? '' : 'of ' + progress.target,
+    width: Math.round((Number(progress.ratio) || 0) * 100) + '%',
+    showBar: progress.ratio !== null && progress.ratio !== undefined,
+    tone: progress.onTrack ? 'pos' : (done ? 'neg' : 'muted'),
+  }
+}
+
+function parlayView(parlay: any, fallbackHref = ''): any {
   if (!parlay)
     return null
   const summary: string[] = []
@@ -190,7 +209,10 @@ function parlayView(parlay: any): any {
           : '',
         gameClock: game ? gameClock(game) : '',
         isLive: leg.status === 'live',
-        href: game ? game.gameUrl : '',
+        // Every leg opens something: its game when it has one, otherwise
+        // the parlay itself.
+        href: game && game.gameUrl ? game.gameUrl : fallbackHref,
+        progress: progressView(leg.progress, game, leg.status),
       }
     }),
   }
@@ -236,7 +258,8 @@ function holding(row: any, isPaper: boolean): any {
   const side = sideOf(row.side)
   const track = row.track || null
   const game = track && track.game ? track.game : null
-  const parlay = track && track.parlay ? parlayView(track.parlay) : scorecardParlay(row.scorecard)
+  const betHref = row.venue === 'kalshi' ? '/bet?ticker=' + encodeURIComponent(row.marketExternalId) + '&side=' + String(row.side || 'yes').toLowerCase() : ''
+  const parlay = track && track.parlay ? parlayView(track.parlay, betHref) : scorecardParlay(row.scorecard)
   const spark = track && Array.isArray(track.spark) ? track.spark : []
   const chance = track && track.chance !== null && track.chance !== undefined ? Number(track.chance) : (marked ? Number(row.mark) : null)
   const rootingTeam = game && game.rooting ? game[game.rooting] : null
@@ -279,6 +302,8 @@ function holding(row: any, isPaper: boolean): any {
     chartColor: lineColor,
     game: gameView(game),
     hasGame: Boolean(game),
+    gameHref: game ? game.gameUrl : '',
+    progress: progressView(track ? track.progress : null, game, ''),
     starts: game && game.state === 'pre' ? startLabel(game.startsAt) : '',
     parlay,
     legs: parlay ? parlay.legs : [],
@@ -588,7 +613,7 @@ onMount(start)
       /* Game card: scoreboard, chart, and the position, top to bottom. */
       .game-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); }
       .game-card { display: block; padding: 18px; transition: border-color 0.15s ease; }
-      a.game-card:hover { border-color: var(--border-strong); }
+      .game-card:hover { border-color: var(--border-strong); }
       .team-row { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 6px 0; }
       .team-logo { width: 32px; height: 32px; object-fit: contain; }
       .team-logo-fallback { width: 32px; height: 32px; border-radius: 9999px; background: var(--surface-2); display: grid; place-items: center; font-size: 10px; font-weight: 800; color: var(--muted); }
@@ -617,6 +642,11 @@ onMount(start)
       /* Parlay: one line per leg, each with its own chance. */
       .leg { display: grid; grid-template-columns: 58px minmax(0, 1fr) auto 52px; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--border); }
       .leg-status { justify-self: start; }
+      a.leg { border-radius: 10px; margin: 0 -8px; padding-left: 8px; padding-right: 8px; transition: background 0.12s ease; }
+      a.leg:hover { background: var(--surface-2); }
+      .leg-bar { height: 3px; }
+      .game-link { border-radius: 12px; margin: -6px; padding: 6px; transition: background 0.12s ease; }
+      .game-link:hover { background: var(--surface-2); }
       .progress { height: 4px; border-radius: 9999px; background: var(--track); overflow: hidden; }
       .progress > span { display: block; height: 100%; background: var(--pos); border-radius: inherit; }
 
@@ -739,7 +769,8 @@ onMount(start)
             </div>
             <div class="game-grid">
               <template :for="position in liveGames">
-                <a :href="position.href" data-no-router class="game-card card">
+                <div class="game-card card">
+                  <a :href="position.gameHref" data-no-router class="block game-link" aria-label="Open the game: score, box score, and stats">
                   <div class="flex gap-2 items-center justify-between">
                     <div class="flex gap-2 items-center min-w-0">
                       <span class="text-xs font-bold tracking-wide uppercase faint" x-text="position.game.league"></span>
@@ -776,12 +807,20 @@ onMount(start)
                   </div>
 
                   <p x-show="position.game.lastPlay" class="mt-2 last-play" x-text="position.game.lastPlay"></p>
+                  <span class="inline-flex gap-1 items-center mt-2 text-xs font-semibold muted">Box score &amp; stats <i class="h-3.5 w-3.5 i-hugeicons-arrow-right-01"></i></span>
+                  </a>
 
+                  <a :href="position.href" data-no-router class="block">
                   <div class="flex gap-3 items-end justify-between mt-4">
                     <div class="min-w-0">
                       <div class="flex gap-2 items-center">
                         <span class="pill" :class="position.sideClass" x-text="position.side"></span>
                         <span class="font-semibold text-sm truncate" x-text="position.question"></span>
+                      </div>
+                      <div x-show="position.progress.has" class="mt-2 text-sm">
+                        <span class="font-bold num" :class="position.progress.tone" x-text="position.progress.text"></span>
+                        <span class="faint num" x-text="position.progress.target"></span>
+                        <div x-show="position.progress.showBar" class="mt-1.5 w-40 progress"><span :style="'width:' + position.progress.width"></span></div>
                       </div>
                     </div>
                     <div class="text-right shrink-0">
@@ -797,7 +836,8 @@ onMount(start)
                     <div><span class="stat-label">P&amp;L</span><span class="stat-value num" :class="position.pnlTone" x-text="position.pnl"></span></div>
                     <div><span class="stat-label">To win</span><span class="stat-value num" x-text="position.toWin"></span></div>
                   </div>
-                </a>
+                  </a>
+                </div>
               </template>
             </div>
           </section>
@@ -809,7 +849,8 @@ onMount(start)
             </div>
             <div class="game-grid">
               <template :for="position in upcoming">
-                <a :href="position.href" data-no-router class="game-card card">
+                <div class="game-card card">
+                  <a :href="position.gameHref" data-no-router class="block game-link" aria-label="Open the game preview">
                   <div class="flex gap-2 items-center justify-between">
                     <span class="text-xs font-bold tracking-wide uppercase faint" x-text="position.game.league"></span>
                     <span class="pill" x-text="position.starts"></span>
@@ -827,6 +868,8 @@ onMount(start)
                       <img x-show="position.game.home.hasLogo" :src="position.game.home.logo" alt="" class="team-logo" loading="lazy">
                     </div>
                   </div>
+                  </a>
+                  <a :href="position.href" data-no-router class="block">
                   <div class="flex gap-3 items-end justify-between mt-4">
                     <div class="flex gap-2 items-center min-w-0">
                       <span class="pill" :class="position.sideClass" x-text="position.side"></span>
@@ -844,7 +887,8 @@ onMount(start)
                     <div><span class="stat-label">P&amp;L</span><span class="stat-value num" :class="position.pnlTone" x-text="position.pnl"></span></div>
                     <div><span class="stat-label">To win</span><span class="stat-value num" x-text="position.toWin"></span></div>
                   </div>
-                </a>
+                  </a>
+                </div>
               </template>
             </div>
           </section>
@@ -873,12 +917,17 @@ onMount(start)
 
                   <div x-show="position.legs.length > 0" class="mt-3">
                     <template :for="leg in position.legs">
-                      <div class="leg">
+                      <a :href="leg.href" data-no-router class="leg">
                         <span class="pill leg-status" :class="leg.statusClass"><span x-show="leg.isLive" class="live-pulse"></span><span x-text="leg.statusLabel"></span></span>
                         <div class="min-w-0">
                           <div class="flex gap-1.5 items-center min-w-0">
                             <span x-show="leg.choice === 'NO'" class="pill no">NO</span>
                             <span class="font-semibold text-sm truncate" x-text="leg.label"></span>
+                          </div>
+                          <div x-show="leg.progress.has" class="flex gap-2 items-center mt-1">
+                            <span class="text-xs font-bold num" :class="leg.progress.tone" x-text="leg.progress.text"></span>
+                            <span class="text-[11px] faint num" x-text="leg.progress.target"></span>
+                            <div x-show="leg.progress.showBar" class="w-16 progress leg-bar"><span :style="'width:' + leg.progress.width"></span></div>
                           </div>
                         </div>
                         <div class="text-right leg-game">
@@ -886,7 +935,7 @@ onMount(start)
                           <div x-show="leg.hasGame" class="text-[11px]" :class="leg.isLive ? 'live' : 'faint'" x-text="leg.gameClock"></div>
                         </div>
                         <span class="font-bold text-sm text-right num" :class="leg.chanceTone" x-text="leg.chance"></span>
-                      </div>
+                      </a>
                     </template>
                   </div>
 

@@ -1,8 +1,10 @@
 import type { KalshiMarketInfo } from '../prediction-markets/kalshi-public'
+import type { LegProgress } from './leg-progress'
 import type { LiveGame } from './live-games'
 import type { fetchScoreboard } from '../scores/espn'
 import { kalshiChart } from '../prediction-markets/kalshi-chart'
 import { currentPrice, kalshiMarkets } from '../prediction-markets/kalshi-public'
+import { legProgress } from './leg-progress'
 import { liveGameFor } from './live-games'
 
 /**
@@ -27,6 +29,8 @@ export interface ParlayLeg {
   /** 'won' | 'lost' | 'live' | 'open' */
   status: string
   game: LiveGame | null
+  /** The player's count, the running total, or the margin, while it matters. */
+  progress: LegProgress | null
 }
 
 export interface ParlayTracker {
@@ -49,6 +53,8 @@ export interface HoldingTrack {
   chance: number | null
   /** When the event happens, for a game its scheduled start. */
   occursAt: string
+  /** For a prop, total, or spread: where it stands in its own terms. */
+  progress: LegProgress | null
 }
 
 export interface TrackableHolding {
@@ -113,6 +119,8 @@ export async function trackParlay(
         status = 'lost'
     }
 
+    const progress = await legProgress(leg.marketTicker, label, leg.side, game).catch(() => null)
+
     return {
       ticker: leg.marketTicker,
       label,
@@ -120,6 +128,7 @@ export async function trackParlay(
       chance,
       status,
       game,
+      progress,
     }
   }))
 
@@ -184,9 +193,14 @@ export async function trackHoldings(holdings: TrackableHolding[], options: Track
       spark = (chart?.outcomes[0]?.points ?? []).map(([ts, p]) => [ts, sideChance(p, holding.side) ?? p] as [number, number])
     }
 
+    const progress = game
+      ? await within(legProgress(holding.marketExternalId, market?.yesSubTitle || market?.title || holding.outcomeLabel || '', holding.side, game), budget, null)
+      : null
+
     out.set(trackKey(holding), {
       game,
       parlay,
+      progress,
       spark,
       chance: parlay ? parlay.chance : sideChance(market ? currentPrice(market) : null, holding.side),
       occursAt: market?.occursAt ?? '',
