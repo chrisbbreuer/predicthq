@@ -97,15 +97,27 @@ export async function trackParlay(
     const label = (labels.length === market.legs.length ? labels[index] : '') || info?.title || leg.marketTicker
     const game = await liveGameFor(leg.marketTicker, leg.side, loadScoreboard, info?.yesSubTitle || label).catch(() => null)
     const settled = info?.result === 'yes' || info?.result === 'no'
-    const status = settled
+    const chance = settled ? (info!.result === leg.side ? 1 : 0) : sideChance(info ? currentPrice(info) : null, leg.side)
+    let status = settled
       ? (info!.result === leg.side ? 'won' : 'lost')
       : (game?.state === 'in' ? 'live' : 'open')
+
+    // The game is over but Kalshi has not settled the leg yet, which can
+    // take a while. The market has already decided it, though: a finished
+    // leg trading at 2% is not "open". Read it as the price says, and only
+    // when the price is unambiguous.
+    if (!settled && game?.state === 'post' && chance !== null) {
+      if (chance >= 0.97)
+        status = 'won'
+      else if (chance <= 0.03)
+        status = 'lost'
+    }
 
     return {
       ticker: leg.marketTicker,
       label,
       choice: leg.side,
-      chance: settled ? (status === 'won' ? 1 : 0) : sideChance(info ? currentPrice(info) : null, leg.side),
+      chance,
       status,
       game,
     }

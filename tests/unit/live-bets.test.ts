@@ -210,6 +210,41 @@ describe('parlay markets', () => {
   })
 })
 
+describe('finished but unsettled legs', () => {
+  it('reads a finished game\'s leg from its price until Kalshi settles it', async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('espn')) {
+        return Response.json({ events: [{
+          id: '1',
+          date: '2026-11-17T00:00Z',
+          status: { type: { state: 'post', shortDetail: 'Final' } },
+          competitions: [{ competitors: [
+            { homeAway: 'away', score: '115', team: { abbreviation: 'ORL', location: 'Orlando', displayName: 'Orlando Magic' } },
+            { homeAway: 'home', score: '105', team: { abbreviation: 'BOS', location: 'Boston', displayName: 'Boston Celtics' } },
+          ] }],
+        }] })
+      }
+      return Response.json({ markets: [
+        { ticker: 'KXNBASPREAD-26NOV16ORLBOS-ORL5', last_price_dollars: '0.99', result: '' },
+        { ticker: 'KXNBAGAME-26NOV16ORLBOS-ORL', last_price_dollars: '0.99', result: '' },
+      ] })
+    }) as unknown as typeof fetch
+
+    const parlay = await trackParlay(toMarketInfo({
+      ticker: 'KXMVECROSSCATEGORY-S2-XYZ',
+      yes_sub_title: 'no Orlando wins by over 5.5 points,yes Orlando',
+      mve_selected_legs: [
+        { event_ticker: 'KXNBASPREAD-26NOV16ORLBOS', market_ticker: 'KXNBASPREAD-26NOV16ORLBOS-ORL5', side: 'no' },
+        { event_ticker: 'KXNBAGAME-26NOV16ORLBOS', market_ticker: 'KXNBAGAME-26NOV16ORLBOS-ORL', side: 'yes' },
+      ],
+    }))
+
+    expect(parlay?.legs.map(leg => leg.status)).toEqual(['lost', 'won'])
+    expect(parlay?.chance).toBe(0)
+  })
+})
+
 describe('kalshi rate limits', () => {
   const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 })
   const pem = privateKey.export({ type: 'pkcs8', format: 'pem' }).toString()
