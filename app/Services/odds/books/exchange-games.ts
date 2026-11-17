@@ -81,6 +81,22 @@ export function quotable(bid: number | null, ask: number | null): number | null 
 }
 
 /**
+ * Whether a game dated `yyyymmdd` (the venue's local date) is from
+ * yesterday to two days out. Checked before any ESPN lookup: the venues list
+ * weeks of games, and resolving each date against a scoreboard is one
+ * request apiece for games nobody streams.
+ */
+export function nearDate(yyyymmdd: string, now = Date.now()): boolean {
+  if (!/^\d{8}$/.test(yyyymmdd))
+    return false
+  const day = Date.UTC(Number(yyyymmdd.slice(0, 4)), Number(yyyymmdd.slice(4, 6)) - 1, Number(yyyymmdd.slice(6, 8)))
+  const today = new Date(now)
+  const todayUtc = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
+  const days = Math.round((day - todayUtc) / 86_400_000)
+  return days >= -1 && days <= 2
+}
+
+/**
  * Games worth holding a socket for: starting within a day and a half, or
  * started within the last six hours. Further out, prices barely move and
  * polling at the slow cadence covers them.

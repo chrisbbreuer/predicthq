@@ -4,7 +4,7 @@ import type { FeedEvent, FeedMarket, FeedOutcome } from '../provider'
 import type { BookAdapter, BookContext, Subscription } from './adapter'
 import process from 'node:process'
 import { log } from '@stacksjs/logging'
-import { findGame, gamesForDates, quotable, share, streamable } from './exchange-games'
+import { findGame, gamesForDates, nearDate, quotable, share, streamable } from './exchange-games'
 
 /**
  * Polymarket, as a book.
@@ -331,9 +331,11 @@ async function fetchLeague(sportSlug: string, get: (url: string) => Promise<Resp
 }
 
 async function loadLeague(sportSlug: string, get: (url: string) => Promise<Response | null>, games = gamesForDates): Promise<GameState[] | null> {
-  const events = await fetchLeague(sportSlug, get)
-  if (!events)
+  const listed = await fetchLeague(sportSlug, get)
+  if (!listed)
     return null
+  // Only games near enough to price; see `nearDate`.
+  const events = listed.filter(event => nearDate(String(event.eventDate ?? '').replace(/-/g, '')))
   const dates = events.map(event => String(event.eventDate ?? '').replace(/-/g, '')).filter(date => /^\d{8}$/.test(date))
   return toGameStates(events, sportSlug, await games(sportSlug, dates))
 }
@@ -418,8 +420,9 @@ class PolymarketStream {
   }
 
   async start(): Promise<void> {
-    await this.discover()
+    // Connect first; discovery subscribes to games as it finds them.
     this.connect()
+    await this.discover()
     this.discovery = setInterval(() => { void this.discover() }, DISCOVERY_MS)
   }
 
@@ -462,11 +465,17 @@ class PolymarketStream {
         }
         this.games.set(state.externalId, state)
       }
+      // Subscribe league by league rather than after all twelve.
+      this.reindex()
     }
     for (const id of [...this.games.keys()]) {
       if (!seen.has(id))
         this.games.delete(id)
     }
+    this.reindex()
+  }
+
+  private reindex(): void {
     this.index = new Map([...this.games.values()].flatMap(game => game.markets.flatMap(market => market.tokens.map(token => [token.token, { game, token }] as const))))
     this.syncSubscription()
   }

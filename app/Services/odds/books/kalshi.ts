@@ -9,7 +9,7 @@ import { log } from '@stacksjs/logging'
 import { Database } from '../../../Support/db'
 import { openCredentials } from '../../trading/credentials'
 import { parseGameTicker, sideForOutcome } from '../../trading/live-games'
-import { findGame, gamesForDates, quotable, share, streamable } from './exchange-games'
+import { findGame, gamesForDates, nearDate, quotable, share, streamable } from './exchange-games'
 
 /**
  * Kalshi, as a book.
@@ -220,9 +220,14 @@ async function loadLeague(sportSlug: string, get: (url: string) => Promise<Respo
   const series = SERIES[sportSlug]
   if (!series)
     return []
-  const markets = await fetchSeries(series, get)
-  if (!markets)
+  const listed = await fetchSeries(series, get)
+  if (!listed)
     return null
+  // Only games near enough to price; see `nearDate`.
+  const markets = listed.filter((market) => {
+    const ref = parseGameTicker(market.ticker)
+    return ref ? nearDate(ref.date) : false
+  })
   const dates = markets.flatMap((market) => {
     const ref = parseGameTicker(market.ticker)
     return ref ? [ref.date] : []
@@ -330,8 +335,10 @@ class KalshiStream {
   }
 
   async start(): Promise<void> {
-    await this.discover()
+    // Connect first: discovery reads every league, and subscribing as it
+    // finds games beats holding the socket back until it is done.
     this.connect()
+    await this.discover()
     this.discovery = setInterval(() => { void this.discover() }, DISCOVERY_MS)
   }
 

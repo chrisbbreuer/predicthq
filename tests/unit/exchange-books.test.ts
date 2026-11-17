@@ -5,6 +5,7 @@ import kalshiFixture from '../fixtures/kalshi-games.json'
 import polymarketFixture from '../fixtures/polymarket-games.json'
 import { applyTicker, translate as translateKalshi } from '../../app/Services/odds/books/kalshi'
 import { applyMessage, quotesFrom, translate as translatePolymarket } from '../../app/Services/odds/books/polymarket'
+import { nearDate, streamable } from '../../app/Services/odds/books/exchange-games'
 import { PushBuffer } from '../../app/Services/odds/push-buffer'
 
 /**
@@ -144,5 +145,25 @@ describe('push buffer', () => {
     expect(await buffer.flush()).toBe(2)
     expect(await buffer.flush()).toBe(0)
     expect(written).toEqual([2])
+  })
+})
+
+describe('which games are worth the work', () => {
+  const now = Date.parse('2026-11-17T22:00:00Z')
+
+  it('looks up games dated yesterday to two days out', () => {
+    expect(nearDate('20261116', now)).toBe(true)
+    expect(nearDate('20261117', now)).toBe(true)
+    expect(nearDate('20261119', now)).toBe(true)
+    expect(nearDate('20261120', now)).toBe(false)
+    expect(nearDate('20261115', now)).toBe(false)
+    expect(nearDate('not-a-date', now)).toBe(false)
+  })
+
+  it('streams games starting within a day and a half, or live', () => {
+    expect(streamable('2026-11-18T00:30:00Z', now)).toBe(true)
+    expect(streamable('2026-11-17T18:00:00Z', now)).toBe(true)
+    expect(streamable('2026-11-20T00:30:00Z', now)).toBe(false)
+    expect(streamable('2026-11-17T12:00:00Z', now)).toBe(false)
   })
 })
