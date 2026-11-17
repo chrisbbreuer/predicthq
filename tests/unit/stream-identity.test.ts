@@ -69,4 +69,58 @@ describe('streamed books on one game', () => {
     const links = db.query('SELECT provider FROM event_sources ORDER BY provider').all() as Array<{ provider: string }>
     expect(links.map(link => link.provider)).toEqual(['kalshi', 'polymarket'])
   })
+
+  it('match a game stored in ESPN\'s short time format', async () => {
+    const db = freshDb() as any
+    // ESPN's schedule stores `2026-11-18T00:30Z`; the database layer turns
+    // a full ISO time into `2026-11-18 00:30:00`. A string comparison
+    // between the two never matched on the same date.
+    await ingestOdds(db, { name: 'stream', fetchEvents: async () => [{ ...game('kalshi', 'KXNBAGAME-26NOV17NYKTOR', 2.6), commenceAt: '2026-11-18T00:30Z' }] })
+    await ingestOdds(db, { name: 'stream', fetchEvents: async () => [game('polymarket', '1284999', 2.55)] })
+
+    const events = db.query('SELECT COUNT(*) AS n FROM market_events').get() as { n: number }
+    expect(events.n).toBe(1)
+  })
+})
+
+describe('resolveEvent through the database layer', () => {
+  it('matches an ESPN-format start time against a full ISO one', async () => {
+    const { Database } = await import('../../app/Support/db')
+    const { resolveEvent } = await import('../../app/Services/ingest/resolve')
+    const raw = freshDb()
+    raw.exec(`INSERT INTO market_events (id, sport_id, title, commence_at, status, home_sports_team_id, away_sports_team_id) VALUES (7, 1, 'New York Knicks at Toronto Raptors', '2026-11-18T00:30Z', 'scheduled', 1, 2)`)
+    // The real layer rewrites ISO parameters to `YYYY-MM-DD HH:MM:SS`, which
+    // is what production binds and what a string BETWEEN got wrong.
+    const db = new Database({
+      unsafe: (query: string, params: unknown[] = []) => ({
+        execute: async () => /^\s*(insert|update|delete)/i.test(query)
+          ? raw.query(query).run(...(params as Array<string | number | null>))
+          : raw.query(query).all(...(params as Array<string | number | null>)),
+      }),
+      updateOrInsert: async (table: string, match: Record<string, unknown>, values: Record<string, unknown>) => {
+        const where = Object.keys(match).map(key => `${key} = ?`).join(' AND ')
+        const found = raw.query(`SELECT 1 FROM ${table} WHERE ${where}`).get(...(Object.values(match) as Array<string | number | null>))
+        const row = { ...match, ...values }
+        if (found) {
+          raw.query(`UPDATE ${table} SET ${Object.keys(values).map(key => `${key} = ?`).join(', ')} WHERE ${where}`)
+            .run(...([...Object.values(values), ...Object.values(match)] as Array<string | number | null>))
+        }
+        else {
+          raw.query(`INSERT INTO ${table} (${Object.keys(row).join(', ')}) VALUES (${Object.keys(row).map(() => '?').join(', ')})`)
+            .run(...(Object.values(row) as Array<string | number | null>))
+        }
+      },
+    })
+    const { eventId, created } = await resolveEvent(db, {
+      sportId: 1,
+      provider: 'kalshi',
+      externalId: 'KXNBAGAME-26NOV17NYKTOR',
+      title: 'New York Knicks at Toronto Raptors',
+      commenceAt: '2026-11-18T00:30:00.000Z',
+      homeTeamId: 1,
+      awayTeamId: 2,
+    })
+    expect(created).toBe(false)
+    expect(eventId).toBe(7)
+  })
 })

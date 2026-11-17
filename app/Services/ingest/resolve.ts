@@ -66,6 +66,18 @@ function remember(key: string, id: number): void {
   memo.set(key, { id, at: Date.now() })
 }
 
+/**
+ * Epoch ms for a stored start time in either spelling the table holds:
+ * ISO (`2026-11-18T00:30Z`) or the database layer's zone-less UTC
+ * (`2026-11-18 00:30:00`), which `Date.parse` would read as local time.
+ */
+export function parseUtc(value: string): number {
+  const text = String(value ?? '').trim()
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(text))
+    return Date.parse(`${text.replace(' ', 'T')}Z`)
+  return Date.parse(text)
+}
+
 export interface SportRow {
   id: number
   slug: string
@@ -344,45 +356,35 @@ export async function resolveEvent(db: Database, identity: EventIdentity): Promi
   let confidence = 1
 
   if (identity.homeTeamId && identity.awayTeamId && identity.commenceAt) {
-    // Six hours, not a day. Teams play the same opponent on consecutive
-    // days all the time — a baseball series is three or four straight
-    // meetings of the identical pair — so a ±24h window merges distinct
-    // games into one. Providers disagree about start times by minutes,
-    // occasionally by an hour when a broadcast slot moves, so six hours
-    // absorbs every real discrepancy while staying far inside the ~18h
-    // gap between two games of a series.
     const windowMs = 6 * 60 * 60 * 1000
-    const target = new Date(identity.commenceAt).getTime()
+    const target = parseUtc(identity.commenceAt)
     if (Number.isFinite(target)) {
-      const lower = new Date(target - windowMs).toISOString()
-      const upper = new Date(target + windowMs).toISOString()
-
-      // Never merge into an event this same provider has already claimed.
-      // If ESPN already linked an event and hands us a *different* id, it
-      // is by definition a different game — the provider's own ids are
-      // authoritative within that provider. Without this guard the time
-      // window is the only thing standing between a series and a merge,
-      // and it is not enough on its own.
-      const matches = await db.query<{ id: number, commence_at: string }>(`
+      // Candidates by team pair alone, timed in code. `commence_at` is
+      // text in two spellings (`2026-11-18T00:30Z` from ESPN, `2026-11-18
+      // 00:30:00` from everything bound through the database layer), and a
+      // string BETWEEN puts the `T` after every same-day bound, so ESPN's
+      // games never matched and each book's first sighting created a
+      // duplicate. A team pair has a handful of rows; parsing them is exact.
+      const candidates = await db.query<{ id: number, commence_at: string }>(`
         SELECT e.id, e.commence_at FROM market_events e
         WHERE e.sport_id = ? AND e.home_sports_team_id = ? AND e.away_sports_team_id = ?
-          AND e.commence_at BETWEEN ? AND ?
+          AND e.status <> 'cancelled'
           AND NOT EXISTS (
             SELECT 1 FROM event_sources es
             WHERE es.market_event_id = e.id AND es.provider = ?
           )
-        ORDER BY e.commence_at ASC
+        ORDER BY e.id DESC
+        LIMIT 50
       `).all(
         identity.sportId,
         identity.homeTeamId,
         identity.awayTeamId,
-        lower,
-        upper,
         identity.provider,
       )
-      const match = matches.sort((left, right) =>
-        Math.abs(new Date(left.commence_at).getTime() - target) - Math.abs(new Date(right.commence_at).getTime() - target),
-      )[0]
+      const match = candidates
+        .map(row => ({ id: Number(row.id), gap: Math.abs(parseUtc(row.commence_at) - target) }))
+        .filter(row => Number.isFinite(row.gap) && row.gap <= windowMs)
+        .sort((left, right) => left.gap - right.gap || left.id - right.id)[0]
 
       if (match) {
         eventId = match.id
