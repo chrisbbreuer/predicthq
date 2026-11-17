@@ -135,6 +135,22 @@ function boxView(team: any, abbr: string): any {
   }
 }
 
+/** Whether two `#rrggbb` colours are too close to tell apart as lines. */
+function similarColors(a: string, b: string): boolean {
+  const rgb = (value: string) => {
+    const match = /^#([0-9a-f]{6})$/i.exec(String(value || '').trim())
+    if (!match)
+      return null
+    const n = Number.parseInt(match[1]!, 16)
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+  }
+  const x = rgb(a)
+  const y = rgb(b)
+  if (!x || !y)
+    return false
+  return Math.hypot(x[0]! - y[0]!, x[1]! - y[1]!, x[2]! - y[2]!) < 90
+}
+
 function apply(data: any): void {
   const game = data.game
   const kalshi = data.kalshi
@@ -213,6 +229,12 @@ function apply(data: any): void {
       if ((Number(line.last) || 0) > (Number(lines[leader].last) || 0))
         leader = index
     })
+    // Two teams in near-identical colours (Florida's and Notre Dame's
+    // navies) read as one line. The trailing side steps back to grey.
+    if (lines.length === 2 && similarColors(lines[0].color, lines[1].color)) {
+      const trailing = leader === 0 ? 1 : 0
+      lines[trailing].color = 'var(--faint)'
+    }
     if (lines[leader])
       lines[leader].fill = true
     chart.set(chartSvg(lines, c.start, c.end))
