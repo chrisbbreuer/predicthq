@@ -106,9 +106,45 @@ function seriesMarkets(series: string): Promise<KalshiMarketInfo[] & { raw?: unk
   })
 }
 
-/** The model's view, game-aware, shared by every scanner request. */
-function modelView(): Promise<Map<string, Candidate>> {
-  return cached('scanner:model', 60_000, async () => {
+interface Snapshot<T> {
+  value: T | null
+  at: number
+  refreshing: Promise<void> | null
+}
+
+/**
+ * Serve the last answer at once and refresh it behind the request when it
+ * is older than `ttlMs`. Only the very first caller waits. The model pass
+ * reads hundreds of markets and can take most of a minute in production;
+ * a scanner that blocked on it would be a scanner nobody waits for.
+ */
+function stale<T>(snapshot: Snapshot<T>, ttlMs: number, load: () => Promise<T>, waitIfEmpty: boolean): Promise<T | null> {
+  const fresh = Date.now() - snapshot.at < ttlMs
+  if (!fresh && !snapshot.refreshing) {
+    snapshot.refreshing = load()
+      .then((value) => {
+        snapshot.value = value
+        snapshot.at = Date.now()
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        snapshot.refreshing = null
+      })
+  }
+  if (snapshot.value !== null || !waitIfEmpty || !snapshot.refreshing)
+    return Promise.resolve(snapshot.value)
+  return snapshot.refreshing.then(() => snapshot.value)
+}
+
+const modelSnapshot: Snapshot<Map<string, Candidate>> = { value: null, at: 0, refreshing: null }
+const scanSnapshot: Snapshot<ScannerPayload> = { value: null, at: 0, refreshing: null }
+
+/**
+ * The model's view, game-aware. Never waited on: until the first pass
+ * finishes the scanner simply shows prices and movement without it.
+ */
+async function modelView(): Promise<Map<string, Candidate>> {
+  const value = await stale(modelSnapshot, 60_000, async () => {
     const db = new Database()
     try {
       const candidates = await buildCandidates(db, { venues: ['kalshi'], minEdge: 0.02, limit: 100, gameFor: liveGameForTicker })
@@ -117,7 +153,8 @@ function modelView(): Promise<Map<string, Candidate>> {
     finally {
       db.close()
     }
-  })
+  }, false)
+  return value ?? new Map()
 }
 
 /** Eastern-time dates (YYYYMMDD) worth scanning: yesterday through tomorrow. */
@@ -190,8 +227,11 @@ async function pooled<T, R>(items: T[], limit: number, work: (item: T) => Promis
   return out
 }
 
-export async function scan(now = new Date()): Promise<ScannerPayload> {
-  return cached('scanner:payload', 20_000, () => buildScan(now))
+export async function scan(): Promise<ScannerPayload> {
+  const value = await stale(scanSnapshot, 15_000, () => buildScan(new Date()), true)
+  if (!value)
+    throw new Error('The scanner could not be built.')
+  return value
 }
 
 async function buildScan(now: Date): Promise<ScannerPayload> {
