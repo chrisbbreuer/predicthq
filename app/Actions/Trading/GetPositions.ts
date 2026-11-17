@@ -45,13 +45,13 @@ import { positionScorecards, scorecardKey } from '../../Services/trading/positio
  * multiplier on our request rate at Kalshi — the fastest way to have an
  * account rate limited is to render it.
  *
- * Deliberately shorter than the page's own ten-second poll rather than
- * equal to it. Set to the same ten seconds, whether a given poll reaches
- * the venue comes down to a few milliseconds of scheduling jitter, and
- * the page updates on every second poll about half the time. Eight
- * seconds is still slower than anyone reads and always inside the poll.
+ * Twenty seconds, so a page polling every ten re-reads the venue on every
+ * other poll. Holdings and balances rarely change faster than that, and
+ * what does move by the second — scores and live chances — comes from
+ * public data on every poll anyway. Eight seconds, the old floor, put the
+ * account into Kalshi's rate limit alongside the scheduler's own reads.
  */
-const MIN_REFRESH_SECONDS = 8
+const MIN_REFRESH_SECONDS = 20
 
 interface AccountRow {
   id: number

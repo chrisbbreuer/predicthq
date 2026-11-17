@@ -162,7 +162,8 @@ export async function trackHoldings(holdings: TrackableHolding[], options: Track
     const game = parlay ? null : await within(liveGameFor(holding.marketExternalId, holding.side, options.loadScoreboard, market?.yesSubTitle || holding.outcomeLabel || ''), budget, null)
 
     let spark: Array<[number, number]> = []
-    if (options.sparklines !== false) {
+    // Parlays have no candles at Kalshi; their chance comes from the legs.
+    if (options.sparklines !== false && !parlay) {
       const chart = await within(
         kalshiChart(holding.marketExternalId, game?.state === 'in' ? 'live' : '1w', { single: true, liveSince: game?.startsAt ?? null }),
         budget,

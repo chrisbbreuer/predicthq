@@ -75,7 +75,32 @@ export class KalshiTradingClient implements TradingClient {
     }, 'base64')
   }
 
+  /**
+   * One signed request, with reads retried through a rate limit.
+   *
+   * Kalshi answers 429 when this host's combined traffic (portfolio syncs,
+   * order reconciliation, public ingestion) bunches up, which happens in
+   * bursts rather than steadily. A read that waits a moment and asks again
+   * almost always succeeds, so GETs retry twice, honouring `Retry-After`.
+   * Writes never retry here: an order placement whose fate is unknown is
+   * reconciled by its client order id, not by sending it again.
+   */
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await this.send<T>(method, path, body)
+      }
+      catch (error) {
+        if (!(error instanceof VenueError) || error.status !== 429 || method !== 'GET' || attempt >= 2)
+          throw error
+        const hinted = Number((error as VenueError & { retryAfter?: number }).retryAfter)
+        const wait = Number.isFinite(hinted) && hinted > 0 ? Math.min(hinted * 1000, 3000) : 400 * 2 ** attempt + Math.random() * 250
+        await new Promise(resolve => setTimeout(resolve, wait))
+      }
+    }
+  }
+
+  private async send<T>(method: string, path: string, body?: unknown): Promise<T> {
     const timestamp = Date.now().toString()
     const signedPath = path.split('?')[0]
 
@@ -95,12 +120,14 @@ export class KalshiTradingClient implements TradingClient {
       // Kalshi returns a JSON error body; keep it verbatim rather than
       // paraphrasing, because reconciling a break needs the real text.
       const detail = await response.text().catch(() => '')
-      throw new VenueError(
+      const failure = new VenueError(
         `Kalshi ${method} ${path} failed (${response.status}): ${detail.slice(0, 300)}`,
         'kalshi',
         response.status,
         isRetryableStatus(response.status),
       )
+      Object.assign(failure, { retryAfter: Number(response.headers.get('retry-after')) || undefined })
+      throw failure
     }
 
     return await response.json() as T

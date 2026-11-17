@@ -43,6 +43,15 @@
 
     apply(stored() || (query.matches ? 'dark' : 'light'))
 
+    // Whether this browser holds a session, so the nav can offer "My bets"
+    // instead of "Log in" on every page without waiting for hydration.
+    // Presentation only: every private endpoint still checks the token.
+    try {
+      if (localStorage.getItem('token'))
+        root.setAttribute('data-auth', 'in')
+    }
+    catch (e) {}
+
     query.addEventListener('change', function (event) {
       if (!stored())
         apply(event.matches ? 'dark' : 'light')
@@ -243,6 +252,10 @@
   .live-pulse { position: relative; display: inline-block; width: 7px; height: 7px; border-radius: 9999px; background: var(--live); }
   .live-pulse::after { content: ''; position: absolute; inset: -3px; border-radius: 9999px; border: 2px solid var(--live); opacity: 0; animation: live-pulse 1.8s ease-out infinite; }
   @keyframes live-pulse { 0% { transform: scale(0.6); opacity: 0.8; } 100% { transform: scale(1.6); opacity: 0; } }
+
+  /* Signed-in and signed-out variants, switched by the pre-paint script. */
+  :root:not([data-auth="in"]) .auth-in { display: none !important; }
+  :root[data-auth="in"] .auth-out { display: none !important; }
 
   /* Keyboard focus stays visible on both themes. */
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

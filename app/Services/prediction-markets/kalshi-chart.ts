@@ -147,8 +147,10 @@ export async function kalshiChart(ticker: string, range: ChartRange, options: Ch
   const nowSeconds = Math.floor((options.now ?? new Date()).getTime() / 1000)
   const window = windowFor(range, nowSeconds, seconds(market.openTime), options.liveSince ? seconds(options.liveSince) : null)
 
+  // Kalshi publishes no candles for parlays, so do not ask on every poll.
+  const charted = market.legs.length === 0
   const outcomes = await Promise.all(drawn.map(async (entry): Promise<ChartOutcome> => {
-    const candles = await kalshiCandles(entry.eventTicker || market.eventTicker, entry.ticker, window.start, window.end, window.interval, window.ttlMs)
+    const candles = !charted ? [] : await kalshiCandles(entry.eventTicker || market.eventTicker, entry.ticker, window.start, window.end, window.interval, window.ttlMs)
       .catch(() => [] as KalshiCandle[])
     const points = candlesToPoints(candles)
     const last = currentPrice(entry)

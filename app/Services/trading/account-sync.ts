@@ -125,6 +125,15 @@ export async function syncAccounts(db: Database, options: AccountSyncOptions = {
         continue
       }
 
+      // A rate limit is the venue asking us to slow down, not the account
+      // failing. The last snapshot stays, the next pass re-reads it, and the
+      // page keeps showing when it last synced rather than a red banner that
+      // flickers every time traffic bunches up.
+      if (error instanceof VenueError && error.status === 429) {
+        log.info(`[trading] ${account.venue} rate-limited the sync for account ${account.id}; keeping the last snapshot`)
+        continue
+      }
+
       // Recording the failure is itself a write, and the database refusing
       // writes is one of the ways a sync fails. It must not take the other
       // accounts' passes down with it.

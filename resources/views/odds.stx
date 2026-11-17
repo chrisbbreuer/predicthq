@@ -185,7 +185,11 @@ const navActive = 'board'
       .badge-hold { border: 1px solid var(--border); color: var(--muted); }
 
       .scrim { background: var(--scrim); backdrop-filter: blur(2px); }
-      .drawer { background: var(--surface); border-left: 1px solid var(--border); box-shadow: var(--shadow); }
+      .drawer { background: var(--surface); border-left: 1px solid var(--border); box-shadow: var(--shadow); animation: drawer-in 0.2s ease-out; }
+      /* A keyframe rather than x-transition: the stx runtime reads those
+         class lists as expressions and abandons hydration on them. */
+      @keyframes drawer-in { from { transform: translateX(100%); } to { transform: translateX(0); } }
+      @media (prefers-reduced-motion: reduce) { .drawer { animation: none; } }
 
       .beacon { position: relative; }
       .beacon::after { content: ""; position: absolute; inset: 0; border-radius: 9999px; animation: pulse 2.6s ease-out infinite; }
@@ -648,12 +652,6 @@ const navActive = 'board'
       class="flex fixed right-0 top-0 z-50 flex-col h-full max-w-md w-full drawer"
       x-show="sheetOpen"
       x-cloak
-      x-transition:enter="transition ease-out duration-200"
-      x-transition:enter-start="translate-x-full"
-      x-transition:enter-end="translate-x-0"
-      x-transition:leave="transition ease-in duration-150"
-      x-transition:leave-start="translate-x-0"
-      x-transition:leave-end="translate-x-full"
     >
       <div class="flex items-center justify-between px-5 py-4 border-b bd">
         <div>

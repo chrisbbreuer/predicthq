@@ -1,8 +1,10 @@
 import type { Game, Team } from '../../app/Services/scores/espn'
+import { generateKeyPairSync } from 'node:crypto'
 import { afterEach, describe, expect, it } from 'bun:test'
 import { candlesToPoints, parseRange, thin, windowFor } from '../../app/Services/prediction-markets/kalshi-chart'
 import { clearKalshiCache, currentPrice, isMultivariate, kalshiMarkets, toMarketInfo } from '../../app/Services/prediction-markets/kalshi-public'
 import { trackParlay } from '../../app/Services/trading/book-tracking'
+import { KalshiTradingClient } from '../../app/Services/trading/kalshi-trading'
 import { liveGameCard, matchGame, parseGameTicker, sideForOutcome } from '../../app/Services/trading/live-games'
 
 function team(abbreviation: string, location: string, score: number | null): Team {
@@ -205,5 +207,36 @@ describe('parlay markets', () => {
     ])
     expect(parlay?.won).toBe(1)
     expect(parlay?.chance).toBe(0.426)
+  })
+})
+
+describe('kalshi rate limits', () => {
+  const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 })
+  const pem = privateKey.export({ type: 'pkcs8', format: 'pem' }).toString()
+
+  it('retries a rate-limited read and succeeds', async () => {
+    let calls = 0
+    globalThis.fetch = (async () => {
+      calls++
+      return calls === 1
+        ? new Response('{"error":{"code":"too_many_requests"}}', { status: 429, headers: { 'retry-after': '0.01' } })
+        : Response.json({ balance: 1234 })
+    }) as unknown as typeof fetch
+
+    const client = new KalshiTradingClient({ venue: 'kalshi', apiKeyId: 'key', privateKeyPem: pem })
+    expect(await client.fetchBalance()).toEqual({ available: 12.34 })
+    expect(calls).toBe(2)
+  })
+
+  it('never retries a write', async () => {
+    let calls = 0
+    globalThis.fetch = (async () => {
+      calls++
+      return new Response('{}', { status: 429 })
+    }) as unknown as typeof fetch
+
+    const client = new KalshiTradingClient({ venue: 'kalshi', apiKeyId: 'key', privateKeyPem: pem })
+    await expect(client.placeOrder({ marketExternalId: 'T', side: 'yes', size: 1, limitPrice: 0.5, clientOrderId: 'c1' } as any)).rejects.toThrow('429')
+    expect(calls).toBe(1)
   })
 })

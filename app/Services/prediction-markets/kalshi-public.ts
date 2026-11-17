@@ -51,6 +51,7 @@ interface Entry<T> {
 
 const cache = new Map<string, Entry<unknown>>()
 const MAX_ENTRIES = 2_000
+const FAILURE_TTL_MS = 20_000
 
 /** Run `load` at most once per `ttlMs` for `key`; failures are not cached. */
 export function cached<T>(key: string, ttlMs: number, load: () => Promise<T>): Promise<T> {
@@ -70,11 +71,13 @@ export function cached<T>(key: string, ttlMs: number, load: () => Promise<T>): P
 
   const value = load()
   cache.set(key, { expiresAt: now + ttlMs, value })
-  // A failed upstream read should be retried on the next request, not
-  // served as a failure until the entry ages out.
+  // A failure is remembered briefly, not for the full TTL and not for
+  // none of it: retrying a 404 or a 429 on every poll is how a page
+  // talks Kalshi into rate limiting the whole host.
   value.catch(() => {
-    if (cache.get(key)?.value === value)
-      cache.delete(key)
+    const entry = cache.get(key)
+    if (entry?.value === value)
+      entry.expiresAt = Math.min(entry.expiresAt, Date.now() + FAILURE_TTL_MS)
   })
   return value
 }

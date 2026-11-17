@@ -70,8 +70,10 @@
           <span class="grid place-items-center h-5 min-w-5 px-1 font-bold text-xs rounded-full soft num" x-text="sheet.length"></span>
         </button>
       @endif
-      <a href="/login" data-no-router class="hidden items-center px-3 h-9 font-semibold text-sm rounded-lg sm:inline-flex nav-login">Log in</a>
-      <a href="/signup" data-no-router class="hidden items-center px-4 h-9 font-bold text-sm rounded-lg sm:inline-flex btn btn-primary">Sign up</a>
+      <a href="/login" data-no-router class="auth-out hidden items-center px-3 h-9 font-semibold text-sm rounded-lg sm:inline-flex nav-login">Log in</a>
+      <a href="/signup" data-no-router class="auth-out hidden items-center px-4 h-9 font-bold text-sm rounded-lg sm:inline-flex btn btn-primary">Sign up</a>
+      <a href="/positions" data-no-router class="auth-in hidden items-center px-4 h-9 font-bold text-sm rounded-full sm:inline-flex btn btn-primary">My bets</a>
+      <a href="/account" data-no-router class="auth-in hidden place-items-center h-9 w-9 rounded-full sm:grid icon-btn" aria-label="Account"><i class="h-4 w-4 i-hugeicons-user-circle"></i></a>
       <button class="grid place-items-center h-9 w-9 rounded-lg lg:hidden icon-btn" @click="toggleMenu()" :aria-expanded="menu ? 'true' : 'false'" aria-controls="mobile-nav" aria-label="Toggle menu">
         <i class="h-4 w-4 i-hugeicons-menu-01" x-show="!menu"></i>
         <i class="h-4 w-4 i-hugeicons-cancel-01" x-show="menu" style="display:none"></i>
@@ -105,7 +107,7 @@
           <a href="/account" data-no-router class="mobile-link" @click="menu = false">Account</a>
         </div>
       </div>
-      <div class="flex gap-2 items-center sm:col-span-2 sm:hidden">
+      <div class="auth-out flex gap-2 items-center sm:col-span-2 sm:hidden">
         <a href="/login" data-no-router class="flex flex-1 items-center justify-center px-4 h-11 font-bold text-sm rounded-lg btn" @click="menu = false">Log in</a>
         <a href="/signup" data-no-router class="flex flex-1 items-center justify-center px-4 h-11 font-bold text-sm rounded-lg btn btn-primary" @click="menu = false">Sign up</a>
       </div>
