@@ -2,6 +2,7 @@ import type { Candidate } from './trading/evidence'
 import type { KalshiCandle, KalshiMarketInfo } from './prediction-markets/kalshi-public'
 import type { LiveGame } from './trading/live-games'
 import { Database } from '../Support/db'
+import { snapshot, stale } from '../Support/stale'
 import { candlesToPoints } from './prediction-markets/kalshi-chart'
 import { cached, currentPrice, kalshiCandles, toMarketInfo } from './prediction-markets/kalshi-public'
 import { buildCandidates } from './trading/evidence'
@@ -106,38 +107,8 @@ function seriesMarkets(series: string): Promise<KalshiMarketInfo[] & { raw?: unk
   })
 }
 
-interface Snapshot<T> {
-  value: T | null
-  at: number
-  refreshing: Promise<void> | null
-}
-
-/**
- * Serve the last answer at once and refresh it behind the request when it
- * is older than `ttlMs`. Only the very first caller waits. The model pass
- * reads hundreds of markets and can take most of a minute in production;
- * a scanner that blocked on it would be a scanner nobody waits for.
- */
-function stale<T>(snapshot: Snapshot<T>, ttlMs: number, load: () => Promise<T>, waitIfEmpty: boolean): Promise<T | null> {
-  const fresh = Date.now() - snapshot.at < ttlMs
-  if (!fresh && !snapshot.refreshing) {
-    snapshot.refreshing = load()
-      .then((value) => {
-        snapshot.value = value
-        snapshot.at = Date.now()
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        snapshot.refreshing = null
-      })
-  }
-  if (snapshot.value !== null || !waitIfEmpty || !snapshot.refreshing)
-    return Promise.resolve(snapshot.value)
-  return snapshot.refreshing.then(() => snapshot.value)
-}
-
-const modelSnapshot: Snapshot<Map<string, Candidate>> = { value: null, at: 0, refreshing: null }
-const scanSnapshot: Snapshot<ScannerPayload> = { value: null, at: 0, refreshing: null }
+const modelSnapshot = snapshot<Map<string, Candidate>>()
+const scanSnapshot = snapshot<ScannerPayload>()
 
 /**
  * The model's view, game-aware. Never waited on: until the first pass

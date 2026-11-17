@@ -1,6 +1,8 @@
 import { Database } from './db'
 import { buildCandidates } from '../Services/trading/evidence'
 import { liveGameForTicker } from '../Services/trading/live-games'
+import type { Candidate } from '../Services/trading/evidence'
+import { snapshot, stale } from './stale'
 
 /**
  * Landing-page reads for the intel surface.
@@ -92,35 +94,49 @@ export async function loadIntelSummary(): Promise<IntelSummary> {
  * page renders as an honest empty state rather than falling back to an
  * invented example.
  */
-export async function loadTopCandidate(): Promise<IntelCandidate | null> {
-  const db = open()
+const topCandidate = snapshot<Candidate | false>()
 
-  try {
-    const [candidate] = await buildCandidates(db, { minEdge: 0.02, limit: 1, gameFor: liveGameForTicker })
-    if (!candidate)
-      return null
-
-    return {
-      venue: candidate.venue,
-      question: candidate.question,
-      side: candidate.side,
-      marketPricePct: `${(candidate.marketPrice * 100).toFixed(1)}%`,
-      fairValuePct: `${(candidate.fairValue * 100).toFixed(1)}%`,
-      edgePts: `${candidate.edge > 0 ? '+' : ''}${(candidate.edge * 100).toFixed(1)}`,
-      confidencePct: `${Math.round(candidate.confidence * 100)}%`,
-      evidence: candidate.evidence.map(item => ({
-        kind: item.kind,
-        label: EVIDENCE_LABELS[item.kind] ?? item.kind,
-        summary: item.summary,
-        points: item.contribution === 0
-          ? 'context'
-          : `${item.contribution > 0 ? '+' : ''}${(item.contribution * 100).toFixed(2)} pts`,
-        sampleSize: item.sampleSize,
-        positive: item.contribution > 0,
-      })),
+/**
+ * The engine pass behind the top candidate, served from the last result
+ * and refreshed in the background. Run inline it held every board render
+ * for most of half a minute against production data.
+ */
+async function strongestCandidate(): Promise<Candidate | null> {
+  const value = await stale(topCandidate, 60_000, async () => {
+    const db = open()
+    try {
+      const [candidate] = await buildCandidates(db, { minEdge: 0.02, limit: 1, gameFor: liveGameForTicker })
+      return candidate ?? false
     }
-  }
-  finally {
-    db.close()
+    finally {
+      db.close()
+    }
+  }, false)
+  return value || null
+}
+
+export async function loadTopCandidate(): Promise<IntelCandidate | null> {
+  const candidate = await strongestCandidate()
+  if (!candidate)
+    return null
+
+  return {
+    venue: candidate.venue,
+    question: candidate.question,
+    side: candidate.side,
+    marketPricePct: `${(candidate.marketPrice * 100).toFixed(1)}%`,
+    fairValuePct: `${(candidate.fairValue * 100).toFixed(1)}%`,
+    edgePts: `${candidate.edge > 0 ? '+' : ''}${(candidate.edge * 100).toFixed(1)}`,
+    confidencePct: `${Math.round(candidate.confidence * 100)}%`,
+    evidence: candidate.evidence.map(item => ({
+      kind: item.kind,
+      label: EVIDENCE_LABELS[item.kind] ?? item.kind,
+      summary: item.summary,
+      points: item.contribution === 0
+        ? 'context'
+        : `${item.contribution > 0 ? '+' : ''}${(item.contribution * 100).toFixed(2)} pts`,
+      sampleSize: item.sampleSize,
+      positive: item.contribution > 0,
+    })),
   }
 }
