@@ -116,17 +116,30 @@ export class KalshiTradingClient implements TradingClient {
     return { available: (data.balance ?? 0) / 100 }
   }
 
+  /**
+   * Every open position on the account.
+   *
+   * Paged, for the same reason resting orders are: the endpoint returns a
+   * hundred rows by default, and an account past that would otherwise
+   * have its later positions silently vanish from the book. Asking for
+   * `count_filter=position` keeps closed-out markets (zero held, some
+   * realized P&L) from filling the pages.
+   */
   async fetchPositions(): Promise<VenuePosition[]> {
-    const data = await this.request<{
-      market_positions?: Array<{
-        ticker: string
-        position_fp?: string
-        market_exposure_dollars?: string
-      }>
-    }>('GET', `/portfolio/positions${this.subaccountQuery()}`)
+    type Row = { ticker: string, position_fp?: string, market_exposure_dollars?: string }
+    const rows: Row[] = []
+    let cursor = ''
+    let pages = 0
+    do {
+      const query = `?limit=1000&count_filter=position${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}${this.subaccountQuery('&')}`
+      const page = await this.request<{ market_positions?: Row[], cursor?: string }>('GET', `/portfolio/positions${query}`)
+      rows.push(...(page.market_positions ?? []))
+      cursor = page.cursor ?? ''
+      pages++
+    } while (cursor && pages < 10)
 
     const positions: VenuePosition[] = []
-    for (const p of data.market_positions ?? []) {
+    for (const p of rows) {
       const signedPosition = Number(p.position_fp ?? 0)
       if (!signedPosition)
         continue

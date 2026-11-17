@@ -118,8 +118,8 @@ const heading = marketLeagues.find(item => item.slug === selectedLeague)?.label 
   .league-chip.active { color: var(--accent); border-color: var(--accent); }
   .probability-yes { background: color-mix(in srgb, var(--pos) 12%, var(--surface)); color: var(--pos); }
   .probability-no { background: color-mix(in srgb, var(--neg) 10%, var(--surface)); color: var(--neg); }
-  .circle-callout { background: #3158ed; color: #fff; }
-  .circle-callout p { color: #ecf0ff; }
-  .group-cta { background: #fff; color: #2345ce; }
+  .circle-callout { background: var(--accent); color: var(--on-accent); }
+  .circle-callout p { color: color-mix(in srgb, var(--on-accent) 78%, transparent); }
+  .group-cta { background: var(--on-accent); color: var(--accent); }
   @media (prefers-reduced-motion: reduce) { .market-card { transition: none; } }
 </style>

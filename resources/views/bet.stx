@@ -1,0 +1,511 @@
+<script server>
+/**
+ * PredictHQ: one bet, followed live.
+ *
+ * The game (score, clock, last play), how the market's probability moved
+ * through it, and — for a signed-in holder — what the position is worth
+ * right now. Laid out the way an exchange's game screen reads: the
+ * matchup on top, a big two-line chart, the odds underneath.
+ *
+ * The ticker comes from the query string and is validated here before it
+ * reaches the page. The public half (chart, game, legs) is read from
+ * `/api/markets/kalshi/{ticker}`; the private half (size, cost, P&L) only
+ * from `/api/trading/positions`, which authenticates every call, so this
+ * document never carries anyone's position.
+ */
+const navActive = 'positions'
+const rawTicker = String(query?.ticker ?? '').trim().toUpperCase()
+const ticker = /^[A-Z0-9][A-Z0-9._-]{2,120}$/.test(rawTicker) ? rawTicker : ''
+const side = String(query?.side ?? 'yes').toLowerCase() === 'no' ? 'no' : 'yes'
+const pageTitle = ticker ? `${ticker} | PredictHQ` : 'Bet not found | PredictHQ'
+const pageDescription = 'Follow a bet live: score, clock, and how the odds moved through the game.'
+</script>
+
+<script client>
+import { useIntervalFn } from '@stacksjs/composables'
+import { withCsrfHeader } from '@stacksjs/browser/composables/csrf'
+import { useAuth } from '@stacksjs/browser/composables/useAuth'
+import { axisLabels, chartSvg, chartTop, contracts, cents, gameClock, pct, signedUsd, startLabel, teamColor, teamShort, tone, usd } from '../functions/bets'
+
+const TICKER = {{ ticker }}
+const SIDE = {{ side }}
+const RANGES = [
+  { key: 'live', label: 'LIVE' },
+  { key: '1d', label: '1D' },
+  { key: '1w', label: '1W' },
+  { key: '1m', label: '1M' },
+  { key: 'all', label: 'ALL' },
+]
+
+const auth = useAuth()
+const ranges = state(RANGES)
+const loading = state(true)
+const failed = state('')
+const range = state('live')
+const view = state<any>(null)
+const chart = state('')
+const labels = state<any[]>([])
+const axis = state<string[]>([])
+const outcomes = state<any[]>([])
+const legs = state<any[]>([])
+const position = state<any>(null)
+const signedIn = state(false)
+const hover = state<any>(null)
+let points: any[] = []
+let chartWindow = { start: 0, end: 0 }
+
+const LEAGUE_LABELS: Record<string, string> = { nba: 'NBA', wnba: 'WNBA', nfl: 'NFL', ncaaf: 'College football', ncaab: 'College basketball', nhl: 'NHL', mlb: 'MLB', mls: 'MLS', epl: 'Premier League' }
+
+function teamSide(team: any, key: string, game: any): any {
+  const other = game[key === 'home' ? 'away' : 'home']
+  return {
+    abbr: team.abbreviation,
+    logo: team.logo || '',
+    hasLogo: Boolean(team.logo),
+    score: game.state === 'pre' || team.score === null ? '' : String(team.score),
+    trail: game.state !== 'pre' && Number(team.score) < Number(other.score),
+    rooting: game.rooting === key,
+    record: team.record || '',
+  }
+}
+
+/** Colour for an outcome line: the team's when the label names one. */
+function colorFor(label: string, index: number, game: any): string {
+  if (game) {
+    for (const key of ['home', 'away']) {
+      const team = game[key]
+      const names = [team.location, team.abbreviation, team.name].map((value: string) => String(value || '').toLowerCase())
+      if (names.includes(String(label || '').toLowerCase()))
+        return teamColor(team.color, index === 0 ? 'var(--text)' : 'var(--faint)')
+    }
+  }
+  return index === 0 ? 'var(--text)' : 'var(--faint)'
+}
+
+function abbrFor(label: string, game: any): string {
+  if (game) {
+    for (const key of ['home', 'away']) {
+      const team = game[key]
+      if ([team.location, team.name].map((value: string) => String(value || '').toLowerCase()).includes(String(label || '').toLowerCase()))
+        return team.abbreviation
+    }
+  }
+  return label
+}
+
+function applyMarket(data: any): void {
+  const game = data.game
+  const market = data.market
+  const c = data.chart || { outcomes: [] }
+  chartWindow = { start: c.start, end: c.end }
+
+  const lines = (c.outcomes || []).map((outcome: any, index: number) => ({
+    points: outcome.points || [],
+    color: colorFor(outcome.label, index, game),
+    // Shade the line that is ahead, the way the venue does.
+    fill: false,
+    label: outcome.label,
+    last: outcome.last,
+    ticker: outcome.ticker,
+  }))
+  let leader = 0
+  lines.forEach((line: any, index: number) => {
+    if ((Number(line.last) || 0) > (Number(lines[leader].last) || 0))
+      leader = index
+  })
+  if (lines[leader])
+    lines[leader].fill = true
+  points = lines
+
+  chart.set(chartSvg(lines, c.start, c.end))
+  axis.set(axisLabels(c.start, c.end, c.intervalMinutes))
+  labels.set(lines.map((line: any) => ({
+    key: line.ticker,
+    abbr: abbrFor(line.label, game),
+    value: pct(line.last),
+    color: line.color,
+    top: chartTop(line.last),
+  })))
+  outcomes.set(lines.map((line: any) => ({
+    key: line.ticker,
+    label: line.label,
+    chance: pct(line.last),
+    payout: Number(line.last) > 0 ? (1 / Number(line.last)).toFixed(2) + 'x' : '—',
+    color: line.color,
+    held: line.ticker === TICKER,
+  })))
+
+  legs.set(((data.parlay && data.parlay.legs) || []).map((leg: any, index: number) => ({
+    key: index + leg.ticker,
+    label: leg.label,
+    choice: String(leg.choice || 'yes').toUpperCase(),
+    statusLabel: leg.status === 'won' ? 'Hit' : (leg.status === 'lost' ? 'Missed' : (leg.status === 'live' ? 'Live' : 'Open')),
+    statusClass: leg.status === 'won' ? 'pos' : (leg.status === 'lost' ? 'neg' : (leg.status === 'live' ? 'live' : '')),
+    isLive: leg.status === 'live',
+    chance: pct(leg.chance),
+    gameLine: leg.game ? leg.game.away.abbreviation + (leg.game.state === 'pre' ? ' at ' : ' ' + leg.game.away.score + '–' + leg.game.home.score + ' ') + leg.game.home.abbreviation : '',
+    gameClock: leg.game ? gameClock(leg.game) : '',
+    href: leg.game ? leg.game.gameUrl : '',
+  })))
+
+  view.set({
+    league: game ? (LEAGUE_LABELS[game.league] || String(game.league).toUpperCase()) : 'Kalshi',
+    title: game ? teamShort(game.away) + ' vs ' + teamShort(game.home) : (data.parlay ? data.parlay.total + '-leg parlay' : market.title),
+    subtitle: game ? market.title : (data.parlay ? '' : market.outcomeLabel),
+    hasGame: Boolean(game),
+    isLive: game ? game.state === 'in' : false,
+    isFinal: game ? game.state === 'post' : false,
+    clock: game ? gameClock(game) : '',
+    starts: game && game.state === 'pre' ? startLabel(game.startsAt) : '',
+    lastPlay: game ? (game.lastPlay || (game.state === 'post' ? 'Final' : '')) : '',
+    standing: game && game.rooting && game.state !== 'pre' ? game.standing : '',
+    standingClass: game ? (game.tone === 'live' ? 'live' : game.tone) : '',
+    away: game ? teamSide(game.away, 'away', game) : null,
+    home: game ? teamSide(game.home, 'home', game) : null,
+    volume: '$' + Math.round(Number(market.volume) || 0).toLocaleString('en-US') + ' vol',
+    status: market.result ? 'Settled ' + String(market.result).toUpperCase() : (market.status === 'active' ? '' : market.status),
+    chance: data.parlay ? pct(data.parlay.chance) : pct(SIDE === 'no' && market.price !== null ? 1 - market.price : market.price),
+    isParlay: Boolean(data.parlay),
+    parlaySummary: data.parlay ? [data.parlay.won + ' hit', data.parlay.live + ' live', data.parlay.open + ' to play', data.parlay.lost + ' missed'].join(' · ') : '',
+    url: market.url,
+    empty: lines.every((line: any) => line.points.length < 2),
+  })
+}
+
+async function loadMarket(): Promise<void> {
+  if (!TICKER) {
+    failed.set('No market was named in the link.')
+    loading.set(false)
+    return
+  }
+  try {
+    const response = await fetch('/api/markets/kalshi/' + encodeURIComponent(TICKER) + '?range=' + range() + '&side=' + SIDE, { headers: { Accept: 'application/json' } })
+    const data = await response.json()
+    if (!response.ok)
+      throw new Error(data.message || data.error || ('Request failed (' + response.status + ')'))
+    // A market that is not a game rarely trades every minute, so its
+    // useful default window is the week rather than the last few hours.
+    if (!view() && !data.game && !data.parlay && range() === 'live') {
+      range.set('1w')
+      return await loadMarket()
+    }
+    applyMarket(data)
+    failed.set('')
+  }
+  catch (requestError) {
+    failed.set(requestError instanceof Error ? requestError.message : String(requestError))
+  }
+  finally {
+    loading.set(false)
+  }
+}
+
+async function loadPosition(): Promise<void> {
+  const token = auth.getToken()
+  if (!token)
+    return
+  try {
+    const response = await fetch('/api/trading/positions', {
+      credentials: 'same-origin',
+      headers: withCsrfHeader({ Authorization: 'Bearer ' + token, Accept: 'application/json' }),
+    })
+    if (!response.ok)
+      return
+    signedIn.set(true)
+    const data = await response.json()
+    const row = (data.positions || []).find((candidate: any) => candidate.venue === 'kalshi' && candidate.marketExternalId === TICKER && String(candidate.side).toLowerCase() === SIDE)
+      || (data.positions || []).find((candidate: any) => candidate.venue === 'kalshi' && candidate.marketExternalId === TICKER)
+    if (!row) {
+      position.set(null)
+      return
+    }
+    const marked = row.mark !== null && row.mark !== undefined
+    position.set({
+      side: String(row.side).toUpperCase(),
+      sideClass: String(row.side).toLowerCase() === 'no' ? 'no' : 'yes',
+      outcome: row.outcomeLabel || row.question,
+      size: contracts(row.size),
+      paid: cents(row.avgPrice),
+      cost: usd(row.cost),
+      mark: marked ? cents(row.mark) : 'Unpriced',
+      value: marked ? usd(row.markValue) : '—',
+      pnl: marked ? signedUsd(row.unrealized) : '—',
+      pnlTone: marked ? tone(row.unrealized) : 'muted',
+      toWin: usd(Number(row.size) || 0),
+      profit: signedUsd((Number(row.size) || 0) - (Number(row.cost) || 0)),
+    })
+  }
+  catch {
+    // The public chart is still worth showing without the private card.
+  }
+}
+
+function setRange(key: string): void {
+  range.set(key)
+  hover.set(null)
+  void loadMarket()
+}
+
+/** Read the chart at the pointer: the value of every line at that time. */
+function hoverAt(event: any): void {
+  const target = event && event.currentTarget
+  if (!target || !points.length || !chartWindow.end)
+    return
+  const rect = target.getBoundingClientRect()
+  const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / Math.max(1, rect.width)))
+  const at = chartWindow.start + ratio * (chartWindow.end - chartWindow.start)
+  const values = points.map((line: any) => {
+    let value: any = null
+    for (const point of line.points) {
+      if (point[0] > at)
+        break
+      value = point[1]
+    }
+    return { key: line.ticker, label: abbrFor(line.label, null), value: pct(value), color: line.color }
+  })
+  const when = new Date(at * 1000)
+  hover.set({
+    left: (ratio * 100).toFixed(2) + '%',
+    time: when.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }),
+    values,
+    flip: ratio > 0.7,
+  })
+}
+
+function hoverOff(): void {
+  hover.set(null)
+}
+
+const marketPoll = useIntervalFn(() => void loadMarket(), 10_000, { immediate: false })
+const positionPoll = useIntervalFn(() => void loadPosition(), 15_000, { immediate: false })
+
+onMount(async () => {
+  await Promise.all([loadMarket(), loadPosition()])
+  marketPoll.resume()
+  positionPoll.resume()
+})
+</script>
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    @include('head')
+    <style>
+      .back { width: 44px; height: 44px; border-radius: 9999px; border: 1px solid var(--border); display: grid; place-items: center; background: var(--surface); }
+      .back:hover { background: var(--surface-2); }
+      .matchup { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; }
+      .side { display: grid; grid-template-columns: auto auto; align-items: center; gap: 16px; }
+      .side.away { justify-content: start; }
+      .side.home { justify-content: end; }
+      .logo { width: 72px; height: 72px; object-fit: contain; }
+      .score { font-size: 64px; }
+      .score.trail { color: var(--faint); }
+      .chart-wrap { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 104px; gap: 8px; }
+      .chart-area { position: relative; height: 320px; touch-action: pan-y; cursor: crosshair; }
+      .chart-labels { position: relative; height: 320px; }
+      .chart-label { position: absolute; left: 0; transform: translateY(-50%); line-height: 1; }
+      .hover-line { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--border-strong); pointer-events: none; }
+      .hover-card { position: absolute; top: 6px; padding: 8px 10px; border-radius: 10px; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow); font-size: 12px; pointer-events: none; white-space: nowrap; transform: translateX(10px); }
+      .hover-card.flip { transform: translateX(calc(-100% - 10px)); }
+      .ranges { display: flex; gap: 4px; }
+      .range { height: 34px; padding: 0 12px; border-radius: 9999px; font-size: 13px; font-weight: 800; letter-spacing: 0.08em; color: var(--faint); background: transparent; border: 0; cursor: pointer; }
+      .range:hover { color: var(--text); }
+      .range.on { color: var(--text); background: var(--surface-2); }
+      .odds-row { display: grid; grid-template-columns: minmax(0, 1fr) 90px 90px; gap: 12px; align-items: center; padding: 14px 18px; border-top: 1px solid var(--border); }
+      .odds-cell { display: grid; place-items: center; height: 52px; border-radius: 14px; border: 1px solid var(--border); }
+      .leg { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto 52px; gap: 12px; align-items: center; padding: 12px 18px; border-top: 1px solid var(--border); }
+      .kv { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); font-size: 14px; }
+      .kv:first-of-type { border-top: 0; }
+      @media (max-width: 640px) {
+        .logo { width: 52px; height: 52px; }
+        .score { font-size: 48px; }
+        .side { gap: 10px; }
+        .chart-area, .chart-labels { height: 240px; }
+        .chart-wrap { grid-template-columns: minmax(0, 1fr) 76px; }
+        .leg { grid-template-columns: 56px minmax(0, 1fr) 46px; }
+        .leg .leg-game { display: none; }
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="app">
+      @include('nav')
+
+      <main class="mx-auto px-4 pt-6 pb-4 sm:px-6 max-w-6xl">
+        <div class="flex items-center justify-between">
+          <a href="/positions" data-no-router class="back" aria-label="Back to my bets"><i class="h-5 w-5 i-hugeicons-arrow-left-01"></i></a>
+          <a x-show="view() && view().url" :href="view() ? view().url : '#'" target="_blank" rel="noopener" class="inline-flex gap-2 items-center px-4 h-11 font-semibold text-sm rounded-full btn">View on Kalshi <i class="h-4 w-4 i-hugeicons-arrow-up-right-01"></i></a>
+        </div>
+
+        <p x-show="loading()" class="mt-16 text-center muted">Loading market…</p>
+        <section x-show="!loading() && failed() && !view()" x-cloak class="p-10 mt-8 text-center card">
+          <h1 class="display text-3xl">We couldn't load this bet</h1>
+          <p class="mt-2 muted" x-text="failed()"></p>
+          <a href="/positions" data-no-router class="inline-flex items-center px-6 py-2.5 mt-6 font-bold text-sm rounded-full btn btn-primary">Back to my bets</a>
+        </section>
+
+        <div x-show="view()" x-cloak>
+          <div class="grid gap-8 mt-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+            <div class="min-w-0">
+              <p class="text-xs font-bold tracking-[0.14em] text-center uppercase faint" x-text="view() ? view().league : ''"></p>
+              <h1 class="mt-2 display text-4xl text-center sm:text-5xl" x-text="view() ? view().title : ''"></h1>
+              <p x-show="view() && view().subtitle" class="mt-1 text-center muted" x-text="view() ? view().subtitle : ''"></p>
+
+              {{-- The matchup, when there is a game. --}}
+              <div x-show="view() && view().hasGame" class="mt-8 matchup">
+                <div class="side away">
+                  <div class="text-center">
+                    <img x-show="view() && view().away && view().away.hasLogo" :src="view() && view().away ? view().away.logo : ''" alt="" class="logo">
+                    <div class="flex gap-1.5 items-center justify-center mt-1">
+                      <span class="font-bold" x-text="view() && view().away ? view().away.abbr : ''"></span>
+                      <span x-show="position() && view() && view().away && view().away.rooting" class="pill ink" style="height:18px;font-size:10px">YOU</span>
+                    </div>
+                  </div>
+                  <span class="score figure-xl" :class="view() && view().away && view().away.trail ? 'trail' : ''" x-text="view() && view().away ? view().away.score : ''"></span>
+                </div>
+
+                <div class="text-center">
+                  <div x-show="view() && view().isLive" class="inline-flex gap-1.5 items-center font-extrabold text-sm tracking-[0.12em] live"><span class="live-pulse"></span>LIVE</div>
+                  <div x-show="view() && view().isFinal" class="font-extrabold text-sm tracking-[0.12em] faint">FINAL</div>
+                  <div class="mt-1 font-semibold num" x-text="view() ? (view().starts || view().clock) : ''"></div>
+                  <div x-show="position() && view() && view().standing" class="mt-2"><span class="pill" :class="view() ? view().standingClass : ''" x-text="view() ? view().standing : ''"></span></div>
+                </div>
+
+                <div class="side home">
+                  <span class="score figure-xl" :class="view() && view().home && view().home.trail ? 'trail' : ''" x-text="view() && view().home ? view().home.score : ''"></span>
+                  <div class="text-center">
+                    <img x-show="view() && view().home && view().home.hasLogo" :src="view() && view().home ? view().home.logo : ''" alt="" class="logo">
+                    <div class="flex gap-1.5 items-center justify-center mt-1">
+                      <span class="font-bold" x-text="view() && view().home ? view().home.abbr : ''"></span>
+                      <span x-show="position() && view() && view().home && view().home.rooting" class="pill ink" style="height:18px;font-size:10px">YOU</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <p x-show="view() && view().lastPlay" class="mt-6 text-center muted" x-text="view() ? view().lastPlay : ''"></p>
+              <div x-show="view() && view().isParlay" class="mt-6 text-center">
+                <div class="figure-xl text-6xl" x-text="view() ? view().chance : ''"></div>
+                <div class="mt-1 text-sm muted" x-text="view() ? view().parlaySummary : ''"></div>
+              </div>
+
+              {{-- The chart. Labels sit at each line's latest value. Kalshi
+                   publishes no candles for parlays, so they lead with legs. --}}
+              <div x-show="view() && !view().isParlay">
+              <div class="mt-8 chart-wrap">
+                <div class="chart-area" @pointermove="hoverAt($event)" @pointerleave="hoverOff()">
+                  <div class="absolute inset-0" x-html="chart()"></div>
+                  <p x-show="view() && view().empty" class="grid absolute inset-0 place-items-center text-sm faint">No trades in this window yet.</p>
+                  <template :if="hover()">
+                    <div class="hover-line" :style="'left:' + hover().left"></div>
+                    <div class="hover-card" :class="hover().flip ? 'flip' : ''" :style="'left:' + hover().left">
+                      <div class="faint" x-text="hover().time"></div>
+                      <template :for="value in hover().values">
+                        <div class="flex gap-3 justify-between mt-1 font-semibold"><span :style="'color:' + value.color" x-text="value.label"></span><span class="num" x-text="value.value"></span></div>
+                      </template>
+                    </div>
+                  </template>
+                </div>
+                <div class="chart-labels">
+                  <template :for="label in labels">
+                    <div class="chart-label" :style="'top:' + label.top">
+                      <div class="font-bold text-sm" :style="'color:' + label.color" x-text="label.abbr"></div>
+                      <div class="figure-xl text-4xl sm:text-5xl" :style="'color:' + label.color" x-text="label.value"></div>
+                    </div>
+                  </template>
+                </div>
+              </div>
+              <div class="flex justify-between mt-2 pr-28 text-[11px] faint num">
+                <template :for="tick in axis"><span x-text="tick"></span></template>
+              </div>
+
+              <div class="flex flex-wrap gap-3 items-center justify-between mt-5">
+                <span class="num" x-text="view() ? view().volume : ''"></span>
+                <div class="ranges" role="tablist" aria-label="Chart range">
+                  <template :for="option in ranges">
+                    <button type="button" class="range" :class="range() === option.key ? 'on' : ''" @click="setRange(option.key)" x-text="option.label"></button>
+                  </template>
+                </div>
+              </div>
+              </div>
+
+              {{-- Parlay legs. --}}
+              <section x-show="legs().length > 0" class="overflow-hidden mt-8 card">
+                <div class="px-[18px] py-3 font-bold">Legs</div>
+                <template :for="leg in legs">
+                  <div class="leg">
+                    <span class="pill" :class="leg.statusClass"><span x-show="leg.isLive" class="live-pulse"></span><span x-text="leg.statusLabel"></span></span>
+                    <div class="flex gap-1.5 items-center min-w-0">
+                      <span x-show="leg.choice === 'NO'" class="pill no">NO</span>
+                      <span class="font-semibold text-sm truncate" x-text="leg.label"></span>
+                    </div>
+                    <div class="text-right leg-game">
+                      <div class="text-xs font-semibold num" x-text="leg.gameLine"></div>
+                      <div class="text-[11px]" :class="leg.isLive ? 'live' : 'faint'" x-text="leg.gameClock"></div>
+                    </div>
+                    <span class="font-bold text-sm text-right num" x-text="leg.chance"></span>
+                  </div>
+                </template>
+              </section>
+
+              {{-- The outcomes, priced. --}}
+              <section x-show="outcomes().length > 0 && legs().length === 0" class="overflow-hidden mt-8 card">
+                <div class="grid grid-cols-[minmax(0,1fr)_90px_90px] gap-3 px-[18px] py-3 text-xs font-bold tracking-wide uppercase faint">
+                  <span>Outcome</span><span class="text-center">Chance</span><span class="text-center">Payout</span>
+                </div>
+                <template :for="outcome in outcomes">
+                  <div class="odds-row">
+                    <div class="flex gap-2.5 items-center min-w-0">
+                      <span class="h-2.5 w-2.5 rounded-full shrink-0" :style="'background:' + outcome.color"></span>
+                      <span class="font-semibold truncate" x-text="outcome.label"></span>
+                    </div>
+                    <div class="odds-cell"><span class="font-bold num" x-text="outcome.chance"></span></div>
+                    <div class="odds-cell"><span class="font-bold num pos" x-text="outcome.payout"></span></div>
+                  </div>
+                </template>
+              </section>
+            </div>
+
+            {{-- The private half. --}}
+            <aside class="lg:pt-24">
+              <section x-show="position()" class="p-5 card">
+                <div class="flex gap-2 items-center justify-between">
+                  <span class="font-bold">Your position</span>
+                  <span class="pill" :class="position() ? position().sideClass : ''" x-text="position() ? position().side : ''"></span>
+                </div>
+                <p class="mt-1 text-sm muted" x-text="position() ? position().outcome : ''"></p>
+                <div class="mt-4">
+                  <div class="text-xs font-semibold faint">Value now</div>
+                  <div class="figure-xl text-5xl" x-text="position() ? position().value : ''"></div>
+                  <div class="mt-1 font-semibold num" :class="position() ? position().pnlTone : ''" x-text="position() ? position().pnl : ''"></div>
+                </div>
+                <div class="mt-4">
+                  <div class="kv"><span class="muted">Contracts</span><span class="font-semibold num" x-text="position() ? position().size : ''"></span></div>
+                  <div class="kv"><span class="muted">Average price</span><span class="font-semibold num" x-text="position() ? position().paid : ''"></span></div>
+                  <div class="kv"><span class="muted">Current price</span><span class="font-semibold num" x-text="position() ? position().mark : ''"></span></div>
+                  <div class="kv"><span class="muted">Cost</span><span class="font-semibold num" x-text="position() ? position().cost : ''"></span></div>
+                  <div class="kv"><span class="muted">Pays if it hits</span><span class="font-semibold num" x-text="position() ? position().toWin : ''"></span></div>
+                  <div class="kv"><span class="muted">Profit if it hits</span><span class="font-semibold num pos" x-text="position() ? position().profit : ''"></span></div>
+                </div>
+              </section>
+
+              <section x-show="!position()" class="p-5 card">
+                <div class="font-bold">Chance now</div>
+                <div class="mt-2 figure-xl text-6xl" x-text="view() ? view().chance : '—'"></div>
+                <p class="mt-3 text-sm leading-relaxed muted" x-show="signedIn()">You don't hold this market on a connected account.</p>
+                <p class="mt-3 text-sm leading-relaxed muted" x-show="!signedIn()"><a href="/login" data-no-router class="font-semibold underline">Sign in</a> to see your position beside the chart.</p>
+              </section>
+
+              <p class="mt-4 text-xs leading-relaxed faint">
+                Chance is the live quote midpoint from Kalshi, not a price you can trade at. Scores from ESPN, refreshed every 10 seconds.
+              </p>
+            </aside>
+          </div>
+        </div>
+      </main>
+
+      @include('footer')
+    </div>
+  </body>
+</html>

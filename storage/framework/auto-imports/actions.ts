@@ -28,6 +28,7 @@ export const actions = {
   'Actions/Ingest/IngestOdds': '../../../app/Actions/Ingest/IngestOdds.ts',
   'Actions/Ingest/IngestSchedule': '../../../app/Actions/Ingest/IngestSchedule.ts',
   'Actions/Ingest/RunPipeline': '../../../app/Actions/Ingest/RunPipeline.ts',
+  'Actions/Markets/GetKalshiMarket': '../../../app/Actions/Markets/GetKalshiMarket.ts',
   'Actions/NotifyUser': '../../../app/Actions/NotifyUser.ts',
   'Actions/Odds/BroadcastBoard': '../../../app/Actions/Odds/BroadcastBoard.ts',
   'Actions/Odds/GetBookmaker': '../../../app/Actions/Odds/GetBookmaker.ts',

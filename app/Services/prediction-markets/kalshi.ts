@@ -79,8 +79,17 @@ export class KalshiProvider implements PredictionMarketProvider {
 
   async fetchMarketsByIds(externalIds: string[]): Promise<VenueMarket[]> {
     const markets: VenueMarket[] = []
-    for (const batch of chunk(externalIds, 40)) {
-      const url = `${BASE}/markets?tickers=${batch.map(encodeURIComponent).join(',')}`
+    // Parlay (multivariate) markets only come back when asked for with
+    // `mve_filter=only`; without it the endpoint drops them silently and a
+    // held parlay shows as a bare ticker with no price.
+    const batches = [
+      ...chunk(externalIds.filter(id => !/^KXMVE/i.test(id)), 40).map(batch => ({ batch, filter: '' })),
+      ...chunk(externalIds.filter(id => /^KXMVE/i.test(id)), 40).map(batch => ({ batch, filter: '&mve_filter=only' })),
+    ]
+    for (const { batch, filter } of batches) {
+      if (batch.length === 0)
+        continue
+      const url = `${BASE}/markets?limit=${batch.length}${filter}&tickers=${batch.map(encodeURIComponent).join(',')}`
       const page = await fetchJson<{ markets: KalshiMarket[] }>(url)
       for (const m of page?.markets ?? []) {
         markets.push({

@@ -38,6 +38,12 @@ route.get('/markets/smart-money', 'Actions/PredictionMarkets/GetSmartMoney')
 route.get('/markets/whales', 'Actions/PredictionMarkets/GetWhaleTrades')
 route.get('/markets/graph', 'Actions/PredictionMarkets/GetSignalGraph')
 
+// One Kalshi market with its probability history and live game. Public
+// data only, cached upstream, and throttled because the bet page polls it.
+route.group({ middleware: ['throttle:120,1'] }, () => {
+  route.get('/markets/kalshi/{ticker}', 'Actions/Markets/GetKalshiMarket')
+})
+
 // ---- Bet sheets (signed-in user or an anon token) --------------------------
 // These accept an anonymous token rather than a session, so there is no
 // account to hold responsible for a flood — the rate limit is the only

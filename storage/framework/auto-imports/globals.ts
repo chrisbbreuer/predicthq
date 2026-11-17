@@ -10,6 +10,20 @@ Object.assign(globalThis, autoImports)
 
 // TypeScript declarations
 declare global {
+  const usd: typeof autoImports.usd
+  const signedUsd: typeof autoImports.signedUsd
+  const tone: typeof autoImports.tone
+  const cents: typeof autoImports.cents
+  const pct: typeof autoImports.pct
+  const contracts: typeof autoImports.contracts
+  const teamColor: typeof autoImports.teamColor
+  const gameClock: typeof autoImports.gameClock
+  const startLabel: typeof autoImports.startLabel
+  const teamShort: typeof autoImports.teamShort
+  const sparkSvg: typeof autoImports.sparkSvg
+  const chartSvg: typeof autoImports.chartSvg
+  const chartTop: typeof autoImports.chartTop
+  const axisLabels: typeof autoImports.axisLabels
   const increment: typeof autoImports.increment
   const decrement: typeof autoImports.decrement
   const reset: typeof autoImports.reset

@@ -1,8 +1,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preconnect" href="https://api.fontshare.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..900&family=Geist+Mono:wght@400..600&display=swap">
-<link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@800,700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800;900&family=Geist:wght@400..900&family=Geist+Mono:wght@400..600&display=swap">
 
 <script>
   /*
@@ -74,21 +72,22 @@
     PredictHQ design tokens.
 
     Included from every page's <head>, since it emits the font links as
-    well as the variables. Before this existed each view carried its own
-    copy of the palette, so a brand change meant a find-and-replace across
-    four files and any page that got missed just looked slightly wrong
-    forever.
+    well as the variables, so a palette change is one edit here.
 
-    Two decisions worth knowing:
+    Black and white is the brand. The interface is ink on paper in light
+    mode and paper on ink in dark mode, with exactly two colours that are
+    allowed to mean something: green for up / yes / winning and red for
+    down / no / losing. Nothing decorative is ever green or red, so a
+    coloured number always carries information.
 
-    Cobalt is the brand; green and red are semantic. The old palette used
-    one green for "this is highlighted" and for "this number is up", so on
-    the odds board a best price and a rising price were the same color and
-    neither read as either. The brand now sits in a hue nothing else uses.
+    Surfaces are flat. Hairline borders do the separating and elevation is
+    reserved for things that float (menus, drawers), the way an exchange
+    screen reads: dense, calm, and about the numbers.
 
     Numbers are Geist Mono everywhere. A probability that shifts its column
     width as it ticks is unreadable, and this product is mostly numbers
-    that tick.
+    that tick. Headlines and big scoreboard figures use a condensed
+    grotesk so a score or a percentage can be large without being wide.
   */
 
   [x-cloak] { display: none !important; }
@@ -96,76 +95,79 @@
   html { scroll-behavior: smooth; }
 
   :root {
-    /* Cool off-white, not paper. This is an instrument. */
-    --bg: #f7f9fc;
-    --bg-2: #eef2f8;
+    --bg: #ffffff;
+    --bg-2: #f6f6f6;
     --surface: #ffffff;
-    --surface-2: #f4f7fb;
-    --border: #e3e9f2;
-    /* 3:1 against both light surfaces, so inputs and icon buttons retain a
-       visible boundary without relying on color vision or a box shadow. */
-    --border-strong: #8290a3;
-    --text: #0f141c;
-    --muted: #5b6780;
-    /* Small metadata still clears WCAG AA on --surface-2 (4.63:1). */
-    --faint: #667085;
+    --surface-2: #f5f5f5;
+    --border: #ebebeb;
+    /* 3:1 against white, so inputs and icon buttons keep a visible edge. */
+    --border-strong: #8a8a8a;
+    --text: #0a0a0a;
+    --muted: #5e5e5e;
+    /* Small metadata still clears WCAG AA on --surface-2. */
+    --faint: #6b6b6b;
 
-    --accent: #3e64e0;
-    --accent-strong: #2742b0; /* passes AA as text on --surface */
-    --accent-weak: rgba(62, 100, 224, 0.10);
+    /* The accent is ink. Primary actions are black buttons. */
+    --accent: #0a0a0a;
+    --accent-strong: #0a0a0a;
+    --accent-weak: rgba(10, 10, 10, 0.06);
 
-    /* A best-price highlight is a brand act, so it uses the brand hue. */
-    --best-bg: rgba(62, 100, 224, 0.10);
-    --best-ring: #3e64e0;
-    --best-text: #2742b0;
+    --best-bg: rgba(10, 10, 10, 0.06);
+    --best-ring: #0a0a0a;
+    --best-text: #0a0a0a;
 
     /* Semantic only. Never used for emphasis. */
-    --pos: #087a4b;
-    --neg: #d92d20;
+    --pos: #00824f;
+    --pos-weak: rgba(0, 130, 79, 0.10);
+    --neg: #d4202c;
+    --neg-weak: rgba(212, 32, 44, 0.09);
+    --live: #e5242f;
 
-    --track: #e9eef6;
-    --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
-    --shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 8px 24px rgba(15, 23, 42, 0.07);
+    --track: #efefef;
+    --shadow-sm: none;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 12px 32px rgba(0, 0, 0, 0.08);
     --border-color: var(--border);
     --on-accent: #ffffff;
-    --scrim: rgba(10, 13, 20, 0.45);
+    --scrim: rgba(0, 0, 0, 0.45);
+    --radius: 16px;
   }
 
   /*
     Keyed off the root rather than the .app wrapper, because the pre-paint
-    script above can only reach <html> -- the wrapper does not exist yet
-    when the head runs, which is the whole point of resolving it there.
+    script can only reach <html> -- the wrapper does not exist yet when the
+    head runs, which is the whole point of resolving it there.
   */
   :root[data-theme="dark"] {
-    --bg: #08090b;
-    --bg-2: #0e1013;
-    --surface: #16181c;
-    --surface-2: #1e2126;
-    /* Barely there. Elevation does the separating; the line is a backstop
-       for the few places two surfaces sit at the same height. */
-    --border: #26292f;
-    --border-strong: #626975;
-    --text: #f2f3f5;
-    --muted: #9698a0;
-    --faint: #81848d;
+    --bg: #000000;
+    --bg-2: #0a0a0a;
+    --surface: #0b0b0b;
+    --surface-2: #161616;
+    --border: #232323;
+    --border-strong: #6e6e6e;
+    --text: #f5f5f5;
+    --muted: #a3a3a3;
+    --faint: #8f8f8f;
 
-    --accent: #5b83f5;
-    --accent-strong: #93aef9;
-    --accent-weak: rgba(91, 131, 245, 0.15);
+    --accent: #f5f5f5;
+    --accent-strong: #ffffff;
+    --accent-weak: rgba(255, 255, 255, 0.08);
 
-    --best-bg: rgba(91, 131, 245, 0.15);
-    --best-ring: #5b83f5;
-    --best-text: #93aef9;
+    --best-bg: rgba(255, 255, 255, 0.08);
+    --best-ring: #f5f5f5;
+    --best-text: #ffffff;
 
-    --pos: #34d399;
-    --neg: #f87171;
+    --pos: #22c77a;
+    --pos-weak: rgba(34, 199, 122, 0.14);
+    --neg: #ff5a5f;
+    --neg-weak: rgba(255, 90, 95, 0.13);
+    --live: #ff4d55;
 
-    --track: #1b2333;
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.45), 0 16px 36px rgba(0, 0, 0, 0.5);
+    --track: #1c1c1c;
+    --shadow-sm: none;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.6), 0 16px 40px rgba(0, 0, 0, 0.7);
     --border-color: var(--border);
-    --on-accent: #08090b;
-    --scrim: rgba(2, 4, 8, 0.66);
+    --on-accent: #000000;
+    --scrim: rgba(0, 0, 0, 0.7);
   }
 
   body {
@@ -179,19 +181,23 @@
   a { color: inherit; text-decoration: none; }
 
   /*
-    Display face. Geist carries the UI and Cabinet Grotesk carries the
-    headlines: Geist is a good interface sans and a slightly anonymous
-    display one, and headlines are the only place a product this text-heavy
-    gets to have a voice. Confined to headlines on purpose, where a swapped
-    metric costs a line-break and not a reflowed table.
-
-    Falls back to Geist, so a blocked Fontshare request costs character and
-    not layout.
+    Display face: a condensed grotesk, confined to headlines and scoreboard
+    figures, where a swapped metric costs a line-break and not a reflowed
+    table. Falls back to Geist, so a blocked font request costs character
+    and not layout.
   */
   .display {
-    font-family: 'Cabinet Grotesk', 'Geist', ui-sans-serif, system-ui, sans-serif;
-    font-weight: 800;
-    letter-spacing: -0.022em;
+    font-family: 'Barlow Condensed', 'Geist', ui-sans-serif, system-ui, sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    text-transform: none;
+  }
+  .figure-xl {
+    font-family: 'Barlow Condensed', 'Geist', ui-sans-serif, system-ui, sans-serif;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+    line-height: 1;
   }
 
   /* Tabular mono so a ticking number never reflows its column. */
@@ -204,13 +210,8 @@
   .card {
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 18px;
+    border-radius: var(--radius);
     box-shadow: var(--shadow-sm);
-  }
-  /* On dark the hairline all but disappears and the raise carries the edge. */
-  :root[data-theme="dark"] .card {
-    border-color: rgba(255, 255, 255, 0.06);
-    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 8px 28px rgba(0, 0, 0, 0.5);
   }
   .soft { background: var(--surface-2); }
   .bd { border-color: var(--border); }
@@ -219,22 +220,29 @@
   .accent { color: var(--accent-strong); }
   .pos { color: var(--pos); }
   .neg { color: var(--neg); }
+  .live { color: var(--live); }
 
-  .btn { border: 1px solid var(--border-strong); color: var(--text); background: var(--surface); transition: transform 0.12s ease, border-color 0.12s ease; }
-  .btn:hover { border-color: var(--accent); }
+  .btn { border: 1px solid var(--border); color: var(--text); background: var(--surface); transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease; }
+  .btn:hover { border-color: var(--border-strong); background: var(--surface-2); }
   .btn:active { transform: translateY(1px); }
-  /*
-    The label colour flips with the theme because the fill does.
-    Light: white on #3e64e0 is 5.1:1.
-    Dark: the fill has to stay bright or the button sinks into a near-black
-    page (a darker blue reads 3.5:1 against the background and stops looking
-    raised), so the label goes near-black instead, at 5.7:1.
-  */
+  /* Ink on paper, paper on ink: the label flips with the fill. */
   .btn-primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-  .btn-primary:hover { border-color: var(--accent-strong); }
-  .icon-btn { border: 1px solid var(--border-strong); color: var(--text); background: var(--surface); }
+  .btn-primary:hover { background: var(--accent); border-color: var(--accent); opacity: 0.86; }
+  .icon-btn { border: 1px solid var(--border); color: var(--text); background: var(--surface); }
+  .icon-btn:hover { background: var(--surface-2); }
 
   .brandmark { background: var(--accent); color: var(--on-accent); }
+
+  /* Pill: the one shape for status, side, and filter chips. */
+  .pill { display: inline-flex; align-items: center; gap: 0.35rem; height: 1.5rem; padding: 0 0.6rem; border-radius: 9999px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.01em; background: var(--surface-2); color: var(--muted); white-space: nowrap; }
+  .pill.yes, .pill.pos { background: var(--pos-weak); color: var(--pos); }
+  .pill.no, .pill.neg { background: var(--neg-weak); color: var(--neg); }
+  .pill.ink { background: var(--accent); color: var(--on-accent); }
+  .pill.live { background: var(--neg-weak); color: var(--live); }
+
+  .live-pulse { position: relative; display: inline-block; width: 7px; height: 7px; border-radius: 9999px; background: var(--live); }
+  .live-pulse::after { content: ''; position: absolute; inset: -3px; border-radius: 9999px; border: 2px solid var(--live); opacity: 0; animation: live-pulse 1.8s ease-out infinite; }
+  @keyframes live-pulse { 0% { transform: scale(0.6); opacity: 0.8; } 100% { transform: scale(1.6); opacity: 0; } }
 
   /* Keyboard focus stays visible on both themes. */
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -243,5 +251,6 @@
     html { scroll-behavior: auto; }
     .btn { transition: none; }
     .btn:active { transform: none; }
+    .live-pulse::after { animation: none; }
   }
 </style>

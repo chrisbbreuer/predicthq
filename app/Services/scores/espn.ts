@@ -21,6 +21,10 @@ export interface Team {
   score: number | null
   record: string | null
   winner: boolean
+  /** ESPN's scoreboard logo, empty when the feed has none. */
+  logo?: string
+  /** Primary brand colour as `#rrggbb`, empty when unknown. */
+  color?: string
 }
 
 export interface Game {
@@ -37,6 +41,10 @@ export interface Game {
   broadcast: string | null
   home: Team
   away: Team
+  /** Current period number while live (quarter, half, inning, set). */
+  period?: number
+  /** Most recent play-by-play line ESPN reports, while live. */
+  lastPlay?: string
 }
 
 export interface League {
@@ -66,8 +74,30 @@ export const LEAGUES: League[] = [
   { key: 'atp', label: 'Tennis', path: 'tennis/atp' },
 ]
 
+/**
+ * Leagues reachable by key but kept out of the switcher. They exist so a
+ * venue position on a game in one of them can still be matched to a live
+ * score, which is a different question from what the scores page offers.
+ */
+export const EXTRA_LEAGUES: League[] = [
+  { key: 'ncaab', label: 'College Basketball', path: 'basketball/mens-college-basketball', groups: ['50'], limit: 200 },
+  { key: 'wnba', label: 'WNBA', path: 'basketball/wnba' },
+  { key: 'mls', label: 'MLS', path: 'soccer/usa.1' },
+]
+
 export function leagueFor(key: string): League {
-  return LEAGUES.find(l => l.key === key) ?? LEAGUES[0]!
+  return LEAGUES.find(l => l.key === key) ?? EXTRA_LEAGUES.find(l => l.key === key) ?? LEAGUES[0]!
+}
+
+/** True when `key` names a league this client can fetch. */
+export function isKnownLeague(key: string): boolean {
+  return LEAGUES.some(l => l.key === key) || EXTRA_LEAGUES.some(l => l.key === key)
+}
+
+/** `#rrggbb` from ESPN's bare hex, or empty when it is not one. */
+function hexColor(value: unknown): string {
+  const text = String(value ?? '').replace(/^#/, '').trim()
+  return /^[0-9a-f]{6}$/i.test(text) ? `#${text.toLowerCase()}` : ''
 }
 
 function num(value: unknown): number | null {
@@ -89,6 +119,8 @@ function toTeam(competitor: any): Team {
       ?? competitor?.records?.[0]?.summary
       ?? null,
     winner: competitor?.winner === true,
+    logo: String(team.logo ?? team.logos?.[0]?.href ?? ''),
+    color: hexColor(team.color),
   }
 }
 
@@ -169,6 +201,8 @@ export async function fetchScoreboard(leagueKey: string, date?: string): Promise
       broadcast: competition?.broadcasts?.[0]?.names?.[0] ?? null,
       home: toTeam(homeRaw),
       away: toTeam(awayRaw),
+      period: num(status?.period) ?? undefined,
+      lastPlay: type?.state === 'in' ? String(competition?.situation?.lastPlay?.text ?? '') : '',
     }]
   })
 }

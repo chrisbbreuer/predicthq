@@ -1,9 +1,11 @@
 import type { Database as Db } from '../../Support/db'
+import type { HoldingTrack } from '../../Services/trading/book-tracking'
 import type { PositionScorecard } from '../../Services/trading/position-scores'
 import { Database } from '../../Support/db'
 import { authenticatedUserId } from '../../Support/request-auth'
 import { response } from '@stacksjs/router'
 import { syncAccounts } from '../../Services/trading/account-sync'
+import { trackHoldings, trackKey } from '../../Services/trading/book-tracking'
 import { positionScorecards, scorecardKey } from '../../Services/trading/position-scores'
 
 /**
@@ -184,6 +186,8 @@ export interface Holding {
   openedAt: string
   strategies: Array<{ name: string, mode: string, size: number, cost: number }>
   scorecard?: PositionScorecard | null
+  /** Live game, parlay legs, and probability history, when followable. */
+  track?: HoldingTrack | null
 }
 
 export default {
@@ -276,7 +280,11 @@ export default {
       const paper = holdings.filter(holding => holding.source === 'paper')
       // A score provider going quiet must never hide the portfolio itself.
       // The cards simply fall back to no scorecard until the next poll.
-      const scorecards = await positionScorecards(live).catch(() => new Map())
+      const tracks = await trackHoldings(live).catch(() => new Map<string, HoldingTrack>())
+      // The college-football leg matcher is the fallback for a parlay whose
+      // legs Kalshi did not describe; anything already tracked skips it.
+      const scorecards = await positionScorecards(live.filter(holding => !tracks.get(trackKey(holding))?.parlay))
+        .catch(() => new Map())
 
       return {
         refreshedFromVenue: refreshed,
@@ -311,6 +319,7 @@ export default {
           scorecard: holding.source === 'paper'
             ? null
             : scorecards.get(scorecardKey(holding)) ?? null,
+          track: holding.source === 'paper' ? null : tracks.get(trackKey(holding)) ?? null,
         })),
         orders: working,
         pending: pending.map(decision => ({

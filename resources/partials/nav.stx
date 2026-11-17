@@ -1,16 +1,17 @@
 <header
   class="sticky top-0 z-30 border-b bd"
-  style="background:color-mix(in srgb, var(--surface) 88%, transparent);backdrop-filter:blur(16px)"
+  style="background:color-mix(in srgb, var(--bg) 86%, transparent);backdrop-filter:saturate(1.4) blur(16px)"
   x-data="{ menu: false, toggleMenu() { this.menu = !this.menu } }"
 >
   <div class="flex gap-4 items-center justify-between mx-auto px-4 h-16 sm:px-6 max-w-7xl">
     <a href="/" data-no-router class="flex gap-2.5 items-center shrink-0" aria-label="PredictHQ home">
       <span class="grid place-items-center h-9 w-9 p-2 rounded-xl brandmark">@include('logo')</span>
-      <span class="font-extrabold text-lg tracking-tight">Predict<span class="accent">HQ</span></span>
+      <span class="font-extrabold text-lg tracking-tight">Predict<span class="faint">HQ</span></span>
     </a>
 
     <nav class="hidden gap-1 items-stretch self-stretch font-semibold text-sm lg:flex muted" aria-label="Primary navigation">
       <a href="/" data-no-router class="nav-link {{ navActive === 'home' ? 'is-active' : '' }}" {{ navActive === 'home' ? 'aria-current=page' : '' }}>Home</a>
+      <a href="/positions" data-no-router class="nav-link {{ navActive === 'positions' ? 'is-active' : '' }}" {{ navActive === 'positions' ? 'aria-current=page' : '' }}>My bets</a>
       <a href="/odds" data-no-router class="nav-link {{ navActive === 'board' ? 'is-active' : '' }}" {{ navActive === 'board' ? 'aria-current=page' : '' }}>Odds</a>
       <a href="/live" data-no-router class="nav-link {{ navActive === 'live' ? 'is-active' : '' }}" {{ navActive === 'live' ? 'aria-current=page' : '' }}>Live</a>
       <a href="/scores/nfl/today" data-no-router class="nav-link {{ navActive === 'scores' ? 'is-active' : '' }}" {{ navActive === 'scores' ? 'aria-current=page' : '' }}>Scores</a>
@@ -41,14 +42,14 @@
         </div>
       </details>
 
-      <details class="relative nav-mega {{ ['markets', 'community', 'positions', 'compare'].includes(navActive) ? 'is-active' : '' }}">
+      <details class="relative nav-mega {{ ['markets', 'community', 'compare'].includes(navActive) ? 'is-active' : '' }}">
         <summary class="gap-1 nav-summary">
           Explore
           <i class="h-3.5 w-3.5 i-hugeicons-arrow-down-01 nav-chevron"></i>
         </summary>
         <div class="mega-panel mega-explore">
           <a href="/markets" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-user-multiple-02"></i><span><strong>Smart-money desk</strong><small>Leaderboard, whale tape, and signal graph.</small></span></a>
-          <a href="/positions" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-briefcase-01"></i><span><strong>My book</strong><small>Private positions, orders, and live scores.</small></span></a>
+          <a href="/positions" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-briefcase-01"></i><span><strong>My bets</strong><small>Live games, positions, and probability charts.</small></span></a>
           <a href="/community" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-bubble-chat"></i><span><strong>Community</strong><small>Talk through a market before it settles.</small></span></a>
           <a href="/history" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-clock-01"></i><span><strong>History &amp; results</strong><small>Your trades, wins, losses, and track record.</small></span></a>
           <a href="/groups" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-user-group"></i><span><strong>Groups &amp; referrals</strong><small>Bring your friends and build your circle.</small></span></a>
@@ -88,7 +89,7 @@
           <a href="/live" data-no-router class="mobile-link" @click="menu = false">Live moves</a>
           <a href="/scores/nfl/today" data-no-router class="mobile-link" @click="menu = false">Scores</a>
           <a href="/markets" data-no-router class="mobile-link" @click="menu = false">Smart money</a>
-          <a href="/positions" data-no-router class="mobile-link" @click="menu = false">My book</a>
+          <a href="/positions" data-no-router class="mobile-link" @click="menu = false">My bets</a>
         </div>
       </div>
       <div>
@@ -113,14 +114,14 @@
 </header>
 
 <style>
-  .nav-link, .nav-summary { position: relative; display: flex; align-items: center; height: 100%; padding: 0 0.7rem; color: var(--muted); cursor: pointer; list-style: none; transition: color 0.12s ease, background 0.12s ease; }
+  .nav-link, .nav-summary { position: relative; display: flex; align-items: center; height: 100%; padding: 0 0.7rem; white-space: nowrap; color: var(--muted); cursor: pointer; list-style: none; transition: color 0.12s ease, background 0.12s ease; }
   .nav-summary::-webkit-details-marker { display: none; }
   .nav-link:hover, .nav-summary:hover, .nav-mega[open] > .nav-summary { color: var(--text); background: var(--surface-2); }
   .nav-link.is-active, .nav-mega.is-active > .nav-summary { color: var(--text); }
-  .nav-link.is-active::after, .nav-mega.is-active > .nav-summary::after { content: ''; position: absolute; left: 0.7rem; right: 0.7rem; bottom: -1px; height: 2px; border-radius: 2px 2px 0 0; background: var(--accent); }
+  .nav-link.is-active::after, .nav-mega.is-active > .nav-summary::after { content: ''; position: absolute; left: 0.7rem; right: 0.7rem; bottom: -1px; height: 2px; border-radius: 2px 2px 0 0; background: var(--text); }
   .nav-chevron { transition: transform 0.15s ease; }
   .nav-mega[open] .nav-chevron { transform: rotate(180deg); }
-  .mega-panel { position: absolute; top: calc(100% - 5px); z-index: 50; padding: 0.75rem; border: 1px solid var(--border-strong); border-radius: 1rem; background: var(--surface); box-shadow: var(--shadow); color: var(--text); }
+  .mega-panel { position: absolute; top: calc(100% - 5px); z-index: 50; padding: 0.75rem; border: 1px solid var(--border); border-radius: 1rem; background: var(--surface); box-shadow: var(--shadow); color: var(--text); }
   .mega-features { left: 50%; width: min(680px, calc(100vw - 2rem)); transform: translateX(-50%); }
   .mega-explore { right: 0; width: 360px; }
   .mega-kicker { margin: 0.35rem 0.65rem 0.45rem; color: var(--faint); font-size: 0.68rem; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; }
@@ -129,10 +130,10 @@
   .mega-link strong, .mega-link small { display: block; }
   .mega-link strong { font-size: 0.86rem; line-height: 1.2; }
   .mega-link small { margin-top: 0.2rem; color: var(--muted); font-size: 0.73rem; font-weight: 500; line-height: 1.35; }
-  .mega-icon { width: 1.1rem; height: 1.1rem; margin-top: 0.05rem; flex: none; color: var(--accent-strong); }
-  .mega-cta { display: flex; align-items: center; justify-content: space-between; margin-top: 0.5rem; padding: 0.75rem 0.85rem; border-radius: 0.75rem; background: var(--accent-weak); color: var(--accent-strong); font-size: 0.8rem; font-weight: 800; }
+  .mega-icon { width: 1.1rem; height: 1.1rem; margin-top: 0.05rem; flex: none; color: var(--text); }
+  .mega-cta { display: flex; align-items: center; justify-content: space-between; margin-top: 0.5rem; padding: 0.75rem 0.85rem; border-radius: 0.75rem; background: var(--accent); color: var(--on-accent); font-size: 0.8rem; font-weight: 800; }
   .mobile-link { padding: 0.65rem; border-bottom: 1px solid var(--border); color: var(--text); font-weight: 700; }
-  .mobile-link:hover { color: var(--accent-strong); }
+  .mobile-link:hover { color: var(--muted); }
   .nav-login { color: var(--text); transition: background 0.12s ease; }
   .nav-login:hover { background: var(--surface-2); }
   @media (prefers-reduced-motion: reduce) { .nav-link, .nav-summary, .nav-chevron, .nav-login { transition: none; } }

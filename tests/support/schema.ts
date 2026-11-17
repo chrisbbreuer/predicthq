@@ -74,7 +74,27 @@ function statementsFor(path: string, wanted: Set<string>): string[] {
     .split(';')
     .map(statement => statement.trim())
     .filter(statement => statement.length > 0)
-    .filter(statement => [...wanted].some(table => statement.includes(table)))
+    .filter((statement) => {
+      // A statement that names the table it acts on runs only when that
+      // table was asked for. Mention alone is not enough: `subscriptions`
+      // appears inside `alert_subscriptions`, and selecting by substring
+      // ran another table's rebuild against a database that never had it.
+      const target = targetTable(statement)
+      if (target)
+        return wanted.has(target)
+      return [...wanted].some(table => statement.includes(table))
+    })
+}
+
+/**
+ * The table a DDL or insert statement acts on, without the query builder's
+ * `_qb_tmp_` rebuild prefix. Null for anything else (a bare DROP INDEX,
+ * say), which falls back to matching by mention.
+ */
+function targetTable(statement: string): string | null {
+  const match = statement.match(/^(?:CREATE\s+TABLE|ALTER\s+TABLE|DROP\s+TABLE|INSERT\s+INTO)\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?["`]?(\w+)["`]?/i)
+    ?? statement.match(/^CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?["`]?\w+["`]?\s+ON\s+["`]?(\w+)["`]?/i)
+  return match ? match[1]!.replace(/^_qb_tmp_/, '') : null
 }
 
 /** A database with those tables, created and indexed. */

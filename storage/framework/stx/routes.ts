@@ -2,17 +2,10 @@
 // Source: resources/views/
 
 export const routes = [
-  { pattern: '/cms/blocks/columns', filePath: 'storage/framework/defaults/resources/views/cms/blocks/columns.stx', isDynamic: false, params: [] },
-  { pattern: '/cms/blocks/cta', filePath: 'storage/framework/defaults/resources/views/cms/blocks/cta.stx', isDynamic: false, params: [] },
-  { pattern: '/cms/blocks/embed', filePath: 'storage/framework/defaults/resources/views/cms/blocks/embed.stx', isDynamic: false, params: [] },
-  { pattern: '/cms/blocks/form', filePath: 'storage/framework/defaults/resources/views/cms/blocks/form.stx', isDynamic: false, params: [] },
-  { pattern: '/cms/blocks/hero', filePath: 'storage/framework/defaults/resources/views/cms/blocks/hero.stx', isDynamic: false, params: [] },
-  { pattern: '/cms/blocks/image', filePath: 'storage/framework/defaults/resources/views/cms/blocks/image.stx', isDynamic: false, params: [] },
-  { pattern: '/cms/blocks/rich-text', filePath: 'storage/framework/defaults/resources/views/cms/blocks/rich-text.stx', isDynamic: false, params: [] },
+  { pattern: '/auth/oauth/consent', filePath: 'storage/framework/defaults/resources/views/auth/oauth/consent.stx', isDynamic: false, params: [] },
   { pattern: '/checkout/contact', filePath: 'storage/framework/defaults/resources/views/checkout/contact.stx', isDynamic: false, params: [] },
   { pattern: '/checkout/payment', filePath: 'storage/framework/defaults/resources/views/checkout/payment.stx', isDynamic: false, params: [] },
   { pattern: '/checkout/shipping', filePath: 'storage/framework/defaults/resources/views/checkout/shipping.stx', isDynamic: false, params: [] },
-  { pattern: '/cms/page', filePath: 'storage/framework/defaults/resources/views/cms/page.stx', isDynamic: false, params: [] },
   { pattern: '/errors/404', filePath: 'storage/framework/defaults/resources/views/errors/404.stx', isDynamic: false, params: [] },
   { pattern: '/errors/tester', filePath: 'storage/framework/defaults/resources/views/errors/tester.stx', isDynamic: false, params: [] },
   { pattern: '/features/api', filePath: 'resources/views/features/api.stx', isDynamic: false, params: [] },
@@ -25,6 +18,7 @@ export const routes = [
   { pattern: '/features/smart-money', filePath: 'resources/views/features/smart-money.stx', isDynamic: false, params: [] },
   { pattern: '/', filePath: 'resources/views/index.stx', isDynamic: false, params: [] },
   { pattern: '/account', filePath: 'resources/views/account.stx', isDynamic: false, params: [] },
+  { pattern: '/bet', filePath: 'resources/views/bet.stx', isDynamic: false, params: [] },
   { pattern: '/cart', filePath: 'storage/framework/defaults/resources/views/cart.stx', isDynamic: false, params: [] },
   { pattern: '/coming-soon', filePath: 'storage/framework/defaults/resources/views/coming-soon.stx', isDynamic: false, params: [] },
   { pattern: '/community', filePath: 'resources/views/community.stx', isDynamic: false, params: [] },
