@@ -1,5 +1,8 @@
 import { response } from '@stacksjs/router'
+import { Database } from '../../Support/db'
 import { kalshiChart, parseRange } from '../../Services/prediction-markets/kalshi-chart'
+import { kalshiEventMarkets } from '../../Services/prediction-markets/kalshi-public'
+import { gameBoard } from '../../Services/scores/game-board'
 import { isKnownLeague } from '../../Services/scores/espn'
 import { kalshiEventFor } from '../../Services/scores/kalshi-event'
 import { gameDetail } from '../../Services/trading/leg-progress'
@@ -33,14 +36,37 @@ export default {
       return response.error('ESPN has no game with that id.', 404)
 
     const market = await kalshiEventFor(league, id, game).catch(() => null)
-    const chart = market
-      ? await kalshiChart(market.tickers[0]!, parseRange(request?.get?.('range')), { liveSince: game.state === 'pre' ? null : game.startsAt ?? null }).catch(() => null)
-      : null
+    const range = parseRange(request?.get?.('range'))
+    const [chart, outcomes, board] = await Promise.all([
+      market
+        ? kalshiChart(market.tickers[0]!, range, { liveSince: game.state === 'pre' ? null : game.startsAt ?? null }).catch(() => null)
+        : Promise.resolve(null),
+      market ? kalshiEventMarkets(market.eventTicker).catch(() => []) : Promise.resolve([]),
+      boardFor(id),
+    ])
+    // Every contract trades on exactly one outcome's market, so the event's
+    // volume is the sum across its outcomes.
+    const volume = outcomes.reduce((sum, outcome) => sum + (Number(outcome.volume) || 0), 0)
 
     return {
       asOf: new Date().toISOString(),
       game,
-      kalshi: market && chart ? { eventTicker: market.eventTicker, tickers: market.tickers, chart } : null,
+      kalshi: market && chart ? { eventTicker: market.eventTicker, tickers: market.tickers, chart, range, volume } : null,
+      board,
     }
   },
+}
+
+/** The game's prices from our own odds feed, or null when it has none. */
+async function boardFor(espnId: string) {
+  const db = new Database()
+  try {
+    return await gameBoard(db, espnId)
+  }
+  catch {
+    return null
+  }
+  finally {
+    db.close()
+  }
 }

@@ -1,5 +1,8 @@
 import type { GameDetail } from './espn'
-import { cached, kalshiEventMarkets } from '../prediction-markets/kalshi-public'
+import type { KalshiMarketInfo } from '../prediction-markets/kalshi-public'
+import { cached, kalshiEventMarkets, kalshiSeriesOpenMarkets } from '../prediction-markets/kalshi-public'
+import { findGame } from '../odds/books/exchange-games'
+import { gamesOn, parseGameTicker } from '../trading/live-games'
 
 /**
  * The Kalshi winner market for an ESPN game, when Kalshi lists one.
@@ -88,6 +91,38 @@ export function kalshiEventFor(league: string, gameId: string, game: Pick<GameDe
       if (markets.length > 0)
         return { eventTicker, tickers: markets.map(market => market.ticker) }
     }
-    return null
+    return await eventFromSeries(league, gameId)
   })
+}
+
+/**
+ * The game's event found by reading the series and matching each listed
+ * game to ESPN, the way the odds adapters do.
+ *
+ * Guessing the ticker from ESPN's abbreviations works for pro teams and
+ * fails for college ones: Kalshi writes Notre Dame at Florida as `FLAND`,
+ * where ESPN has `ND` and `FLA` in the other order. Matching the series'
+ * own tickers against the day's ESPN games handles both.
+ */
+async function eventFromSeries(league: string, gameId: string): Promise<GameMarket | null> {
+  const series = WINNER_SERIES[league]
+  if (!series)
+    return null
+  const markets = await kalshiSeriesOpenMarkets(series).catch(() => [] as KalshiMarketInfo[])
+  const byEvent = new Map<string, KalshiMarketInfo[]>()
+  for (const market of markets) {
+    const list = byEvent.get(market.eventTicker) ?? []
+    list.push(market)
+    byEvent.set(market.eventTicker, list)
+  }
+  for (const [eventTicker, outcomes] of byEvent) {
+    const ref = parseGameTicker(outcomes[0]!.ticker)
+    if (!ref || ref.league !== league)
+      continue
+    const games = await gamesOn(league, ref.date).catch(() => [])
+    const game = findGame(league, ref.date, ref.code, games, outcomes.map(outcome => outcome.yesSubTitle).filter(Boolean))
+    if (game?.id === gameId)
+      return { eventTicker, tickers: outcomes.map(outcome => outcome.ticker) }
+  }
+  return null
 }

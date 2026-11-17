@@ -317,3 +317,19 @@ export function kalshiSettledMarkets(series: string, minCloseTs: number, maxClos
     return out
   })
 }
+
+/** Every open market in one series, briefly cached, following the cursor. */
+export function kalshiSeriesOpenMarkets(series: string, ttlMs = 60_000): Promise<KalshiMarketInfo[]> {
+  return cached(`series-open:${series}`, ttlMs, async () => {
+    const out: KalshiMarketInfo[] = []
+    let cursor = ''
+    for (let page = 0; page < 5; page++) {
+      const data = await getPatiently<{ markets?: unknown[], cursor?: string }>(`/markets?series_ticker=${encodeURIComponent(series)}&status=open&limit=1000${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`)
+      out.push(...(data.markets ?? []).map(toMarketInfo))
+      cursor = data.cursor ?? ''
+      if (!cursor || !(data.markets?.length))
+        break
+    }
+    return out
+  })
+}
