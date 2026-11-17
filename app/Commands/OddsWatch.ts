@@ -4,10 +4,13 @@ import process from 'node:process'
 import { log } from '@stacksjs/cli'
 import { ExitCode } from '@stacksjs/types'
 import { Database } from '../Support/db'
-import { pollableSports } from '../Services/ingest/odds'
+import { ingestOdds, pollableSports } from '../Services/ingest/odds'
+import { enableIdentityMemo } from '../Services/ingest/resolve'
+import { IngestRunTracker } from '../Services/ingest/run'
 import { activeAdapters, booksWithoutAdapters } from '../Services/odds/books'
 import { bookContextFor } from '../Services/odds/context'
 import { OddsEngine } from '../Services/odds/engine'
+import { PushBuffer } from '../Services/odds/push-buffer'
 
 /**
  * `buddy odds:watch` — the long-running price loop.
@@ -75,6 +78,18 @@ export default function (cli: CLI) {
 
       const sports = await pollableSports(db)
 
+      // This process resolves the same games all day; remember their ids.
+      enableIdentityMemo()
+
+      // Streamed prices, coalesced per game and written every two seconds
+      // through the same writer polling uses, so a pushed price and a
+      // polled one are stored, de-duplicated and snapshotted identically.
+      const pushes = new PushBuffer(async (events) => {
+        const result = await ingestOdds(db, { name: 'stream', fetchEvents: async () => events })
+        if (result.pricesChanged > 0)
+          log.debug(`[odds] stream: ${result.pricesChanged} price${result.pricesChanged === 1 ? '' : 's'} moved across ${events.length} game${events.length === 1 ? '' : 's'}`)
+      })
+
       const engine = new OddsEngine({
         db,
         adapters,
@@ -83,6 +98,10 @@ export default function (cli: CLI) {
         loadEvents: () => loadScheduledEvents(db),
         fallbackAvailable,
         tickMs: Number(options.tick) || 250,
+        // A socket's discovery reads need a tracker to count against; it
+        // is never opened as a run row, since the stream has no "pass".
+        trackerFor: adapter => new IngestRunTracker(db, `${adapter.slug}-stream`, 'odds'),
+        onPush: (book, event) => pushes.add(book, event),
         onChange: ({ sports: polled, changed }) => {
           log.info(`${changed} price${changed === 1 ? '' : 's'} moved across ${polled.join(', ')}`)
         },
@@ -108,6 +127,7 @@ export default function (cli: CLI) {
       // one redundant pass per pushing book at startup.
       engine.startSubscriptions()
       engine.start()
+      pushes.start()
 
       // The board changes shape constantly — games start, games finish —
       // so the schedule has to be recomputed. Every thirty seconds is far
@@ -121,8 +141,10 @@ export default function (cli: CLI) {
         // `stop` closes the sockets too; a half-shut process holding a
         // socket open is how a supervisor restart ends up with two.
         engine.stop()
-        log.info('Odds loop stopped.')
-        process.exit(0)
+        void pushes.stop().finally(() => {
+          log.info('Odds loop stopped.')
+          process.exit(0)
+        })
       }
 
       process.on('SIGINT', shutdown)

@@ -33,6 +33,15 @@ export default defineModel({
 
   traits: {
     useTimestamps: true,
+    // Our odds feed, at `/api/feed/events`. Every game we price. Filter with `?sport_id=` or `?status=`, sort with `?sort=commence_at`.
+    // Reads only, for signed-in callers and API tokens: the rows are
+    // written by ingestion and nothing else.
+    useApi: {
+      uri: 'events',
+      prefix: 'feed',
+      routes: ['index', 'show'],
+      middleware: ['auth'],
+    },
     useSeeder: { count: 0 },
   },
 

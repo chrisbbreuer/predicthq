@@ -1,0 +1,442 @@
+{
+ "nba:20261117": [
+  {
+   "id": "401910002",
+   "league": "nba",
+   "startsAt": "2026-11-18T00:30Z",
+   "state": "pre",
+   "status": "11/17 - 7:30 PM EST",
+   "clock": "",
+   "venue": "Scotiabank Arena",
+   "broadcast": null,
+   "home": {
+    "abbreviation": "TOR",
+    "location": "Toronto",
+    "name": "Toronto Raptors",
+    "shortName": "Raptors",
+    "score": 0,
+    "record": "5-8",
+    "winner": false,
+    "logo": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/tor.png",
+    "color": "#d91244"
+   },
+   "away": {
+    "abbreviation": "NY",
+    "location": "New York",
+    "name": "New York Knicks",
+    "shortName": "Knicks",
+    "score": 0,
+    "record": "7-6",
+    "winner": false,
+    "logo": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/ny.png",
+    "color": "#1d428a"
+   },
+   "period": 0,
+   "lastPlay": ""
+  },
+  {
+   "id": "401910003",
+   "league": "nba",
+   "startsAt": "2026-11-18T01:00Z",
+   "state": "pre",
+   "status": "11/17 - 8:00 PM EST",
+   "clock": "",
+   "venue": "Target Center",
+   "broadcast": "BlazerVision",
+   "home": {
+    "abbreviation": "MIN",
+    "location": "Minnesota",
+    "name": "Minnesota Timberwolves",
+    "shortName": "Timberwolves",
+    "score": 0,
+    "record": "10-4",
+    "winner": false,
+    "logo": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/min.png",
+    "color": "#266092"
+   },
+   "away": {
+    "abbreviation": "POR",
+    "location": "Portland",
+    "name": "Portland Trail Blazers",
+    "shortName": "Trail Blazers",
+    "score": 0,
+    "record": "9-4",
+    "winner": false,
+    "logo": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/por.png",
+    "color": "#e03a3e"
+   },
+   "period": 0,
+   "lastPlay": ""
+  },
+  {
+   "id": "401910004",
+   "league": "nba",
+   "startsAt": "2026-11-18T01:00Z",
+   "state": "pre",
+   "status": "11/17 - 8:00 PM EST",
+   "clock": "",
+   "venue": "Frost Bank Center",
+   "broadcast": "NBC",
+   "home": {
+    "abbreviation": "SA",
+    "location": "San Antonio",
+    "name": "San Antonio Spurs",
+    "shortName": "Spurs",
+    "score": 0,
+    "record": "12-2",
+    "winner": false,
+    "logo": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/sa.png",
+    "color": "#000000"
+   },
+   "away": {
+    "abbreviation": "DET",
+    "location": "Detroit",
+    "name": "Detroit Pistons",
+    "shortName": "Pistons",
+    "score": 0,
+    "record": "8-4",
+    "winner": false,
+    "logo": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/det.png",
+    "color": "#1d428a"
+   },
+   "period": 0,
+   "lastPlay": ""
+  },
+  {
+   "id": "401910006",
+   "league": "nba",
+   "startsAt": "2026-11-18T03:30Z",
+   "state": "pre",
+   "status": "11/17 - 10:30 PM EST",
+   "clock": "",
+   "venue": "Intuit Dome",
+   "broadcast": "ClipperVision",
+   "home": {
+    "abbreviation": "LAC",
+    "location": "LA",
+    "name": "LA Clippers",
+    "shortName": "Clippers",
+    "score": 0,
+    "record": "4-8",
+    "winner": false,
+    "logo": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/lac.png",
+    "color": "#12173f"
+   },
+   "away": {
+    "abbreviation": "UTAH",
+    "location": "Utah",
+    "name": "Utah Jazz",
+    "shortName": "Jazz",
+    "score": 0,
+    "record": "1-13",
+    "winner": false,
+    "logo": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/utah.png",
+    "color": "#4e008e"
+   },
+   "period": 0,
+   "lastPlay": ""
+  },
+  {
+   "id": "401910005",
+   "league": "nba",
+   "startsAt": "2026-11-18T04:00Z",
+   "state": "pre",
+   "status": "11/17 - 11:00 PM EST",
+   "clock": "",
+   "venue": "crypto.com Arena",
+   "broadcast": "Spectrum Sports Net",
+   "home": {
+    "abbreviation": "LAL",
+    "location": "Los Angeles",
+    "name": "Los Angeles Lakers",
+    "shortName": "Lakers",
+    "score": 0,
+    "record": "12-2",
+    "winner": false,
+    "logo": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/lal.png",
+    "color": "#552583"
+   },
+   "away": {
+    "abbreviation": "CHA",
+    "location": "Charlotte",
+    "name": "Charlotte Hornets",
+    "shortName": "Hornets",
+    "score": 0,
+    "record": "4-9",
+    "winner": false,
+    "logo": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/cha.png",
+    "color": "#008ca8"
+   },
+   "period": 0,
+   "lastPlay": ""
+  }
+ ],
+ "epl:20261201": [
+  {
+   "id": "401879221",
+   "league": "epl",
+   "startsAt": "2026-12-01T20:00Z",
+   "state": "pre",
+   "status": "Scheduled",
+   "clock": "",
+   "venue": "Coventry Building Society Arena",
+   "broadcast": null,
+   "home": {
+    "abbreviation": "COV",
+    "location": "Coventry City",
+    "name": "Coventry City",
+    "shortName": "Coventry",
+    "score": 0,
+    "record": "3-0-7",
+    "winner": false,
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/388.png",
+    "color": "#87cced"
+   },
+   "away": {
+    "abbreviation": "IPS",
+    "location": "Ipswich Town",
+    "name": "Ipswich Town",
+    "shortName": "Ipswich",
+    "score": 0,
+    "record": "3-2-5",
+    "winner": false,
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/373.png",
+    "color": "#0000fa"
+   },
+   "lastPlay": ""
+  }
+ ],
+ "epl:20261121": [
+  {
+   "id": "401879233",
+   "league": "epl",
+   "startsAt": "2026-11-21T12:30Z",
+   "state": "pre",
+   "status": "Scheduled",
+   "clock": "",
+   "venue": "Etihad Stadium",
+   "broadcast": null,
+   "home": {
+    "abbreviation": "MNC",
+    "location": "Manchester City",
+    "name": "Manchester City",
+    "shortName": "Man City",
+    "score": 0,
+    "record": "7-0-3",
+    "winner": false,
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/382.png",
+    "color": "#99c5ea"
+   },
+   "away": {
+    "abbreviation": "FUL",
+    "location": "Fulham",
+    "name": "Fulham",
+    "shortName": "Fulham",
+    "score": 0,
+    "record": "2-4-4",
+    "winner": false,
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/370.png",
+    "color": "#ffffff"
+   },
+   "lastPlay": ""
+  },
+  {
+   "id": "401879238",
+   "league": "epl",
+   "startsAt": "2026-11-21T15:00Z",
+   "state": "pre",
+   "status": "Scheduled",
+   "clock": "",
+   "venue": "Vitality Stadium",
+   "broadcast": null,
+   "home": {
+    "abbreviation": "BOU",
+    "location": "AFC Bournemouth",
+    "name": "AFC Bournemouth",
+    "shortName": "Bournemouth",
+    "score": 0,
+    "record": "4-3-3",
+    "winner": false,
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/349.png",
+    "color": "#f42727"
+   },
+   "away": {
+    "abbreviation": "NFO",
+    "location": "Nottingham Forest",
+    "name": "Nottingham Forest",
+    "shortName": "Nottm Forest",
+    "score": 0,
+    "record": "2-3-5",
+    "winner": false,
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/393.png",
+    "color": "#c8102e"
+   },
+   "lastPlay": ""
+  },
+  {
+   "id": "401878756",
+   "league": "epl",
+   "startsAt": "2026-11-21T15:00Z",
+   "state": "pre",
+   "status": "Scheduled",
+   "clock": "",
+   "venue": "Villa Park",
+   "broadcast": null,
+   "home": {
+    "abbreviation": "AVL",
+    "location": "Aston Villa",
+    "name": "Aston Villa",
+    "shortName": "Aston Villa",
+    "score": 0,
+    "record": "3-4-3",
+    "winner": false,
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/362.png",
+    "color": "#660e36"
+   },
+   "away": {
+    "abbreviation": "SUN",
+    "location": "Sunderland",
+    "name": "Sunderland",
+    "shortName": "Sunderland",
+    "score": 0,
+    "record": "2-2-6",
+    "winner": false,
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/366.png",
+    "color": "#eb172b"
+   },
+   "lastPlay": ""
+  },
+  {
+   "id": "401879236",
+   "league": "epl",
+   "startsAt": "2026-11-21T15:00Z",
+   "state": "pre",
+   "status": "Scheduled",
+   "clock": "",
+   "venue": "Stamford Bridge",
+   "broadcast": null,
+   "home": {
+    "abbreviation": "CHE",
+    "location": "Chelsea",
+    "name": "Chelsea",
+    "shortName": "Chelsea",
+    "score": 0,
+    "record": "5-1-4",
+    "winner": false,
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/363.png",
+    "color": "#144992"
+   },
+   "away": {
+    "abbreviation": "LEE",
+    "location": "Leeds United",
+    "name": "Leeds United",
+    "shortName": "Leeds",
+    "score": 0,
+    "record": "3-5-2",
+    "winner": false,
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/357.png",
+    "color": "#ffffff"
+   },
+   "lastPlay": ""
+  },
+  {
+   "id": "401879235",
+   "league": "epl",
+   "startsAt": "2026-11-21T15:00Z",
+   "state": "pre",
+   "status": "Scheduled",
+   "clock": "",
+   "venue": "Coventry Building Society Arena",
+   "broadcast": null,
+   "home": {
+    "abbreviation": "COV",
+    "location": "Coventry City",
+    "name": "Coventry City",
+    "shortName": "Coventry",
+    "score": 0,
+    "record": "3-0-7",
+    "winner": false,
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/388.png",
+    "color": "#87cced"
+   },
+   "away": {
+    "abbreviation": "CRY",
+    "location": "Crystal Palace",
+    "name": "Crystal Palace",
+    "shortName": "C Palace",
+    "score": 0,
+    "record": "2-1-7",
+    "winner": false,
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/384.png",
+    "color": "#0202fb"
+   },
+   "lastPlay": ""
+  },
+  {
+   "id": "401878754",
+   "league": "epl",
+   "startsAt": "2026-11-21T15:00Z",
+   "state": "pre",
+   "status": "Scheduled",
+   "clock": "",
+   "venue": "Tottenham Hotspur Stadium",
+   "broadcast": null,
+   "home": {
+    "abbreviation": "TOT",
+    "location": "Tottenham Hotspur",
+    "name": "Tottenham Hotspur",
+    "shortName": "Spurs",
+    "score": 0,
+    "record": "3-3-4",
+    "winner": false,
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/367.png",
+    "color": "#ffffff"
+   },
+   "away": {
+    "abbreviation": "IPS",
+    "location": "Ipswich Town",
+    "name": "Ipswich Town",
+    "shortName": "Ipswich",
+    "score": 0,
+    "record": "3-2-5",
+    "winner": false,
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/373.png",
+    "color": "#0000fa"
+   },
+   "lastPlay": ""
+  },
+  {
+   "id": "401879232",
+   "league": "epl",
+   "startsAt": "2026-11-21T17:30Z",
+   "state": "pre",
+   "status": "Scheduled",
+   "clock": "",
+   "venue": "St. James' Park",
+   "broadcast": null,
+   "home": {
+    "abbreviation": "NEW",
+    "location": "Newcastle United",
+    "name": "Newcastle United",
+    "shortName": "Newcastle",
+    "score": 0,
+    "record": "3-3-4",
+    "winner": false,
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/361.png",
+    "color": "#000000"
+   },
+   "away": {
+    "abbreviation": "ARS",
+    "location": "Arsenal",
+    "name": "Arsenal",
+    "shortName": "Arsenal",
+    "score": 0,
+    "record": "9-0-1",
+    "winner": false,
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/359.png",
+    "color": "#e20520"
+   },
+   "lastPlay": ""
+  }
+ ]
+}

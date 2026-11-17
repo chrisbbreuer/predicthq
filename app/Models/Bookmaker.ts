@@ -29,6 +29,15 @@ export default defineModel({
 
   traits: {
     useTimestamps: true,
+    // Our odds feed, at `/api/feed/books`. The books and exchanges we price from. Read-only: the list is reference data every ingest path keys on.
+    // Reads only, for signed-in callers and API tokens: the rows are
+    // written by ingestion and nothing else.
+    useApi: {
+      uri: 'books',
+      prefix: 'feed',
+      routes: ['index', 'show'],
+      middleware: ['auth'],
+    },
     // Reference data. `providerKey` must match the feed's own key exactly
     // or the book's prices are silently dropped, and `consensusWeight`
     // encodes the judgement described in the class note above.

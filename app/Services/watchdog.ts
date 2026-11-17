@@ -58,7 +58,7 @@ export interface WatchdogSummary {
  * Find every loop that has stopped producing, and announce the new ones.
  */
 export async function runWatchdog(db: Database, now: Date = new Date()): Promise<WatchdogSummary> {
-  const stalls = await findStalls(db, now)
+  const stalls = [...await findStalls(db, now), ...await findQuietBooks(db, now)]
   let alerted = 0
 
   for (const stall of stalls) {
@@ -129,6 +129,56 @@ export async function findStalls(db: Database, now: Date = new Date()): Promise<
     })
   }
 
+  return stalls
+}
+
+/** Books that push prices, and so should never fall silent on a live game. */
+const STREAMING_BOOKS = ['kalshi', 'polymarket']
+
+/** Minutes a streaming book may go without updating a live or imminent game. */
+const QUIET_AFTER_MINUTES = 15
+
+/**
+ * Streaming books that have gone quiet on games that matter right now.
+ *
+ * `ingest_runs` cannot see this: the stream writes through one shared
+ * "stream" run, so one book dying while the other keeps pushing looks
+ * healthy there. Judged per book, and only on games from two hours before
+ * now to an hour ahead, which a live exchange reprices constantly. A book
+ * with no such games is not judged at all, so a quiet night is not an
+ * alert.
+ */
+export async function findQuietBooks(db: Database, now: Date = new Date()): Promise<Stall[]> {
+  const from = new Date(now.getTime() - 2 * 3_600_000).toISOString()
+  const to = new Date(now.getTime() + 3_600_000).toISOString()
+  const rows = await db.query<{ book: string, quotes: number | string, last_update: string | Date | null }>(`
+    SELECT b.slug AS book, COUNT(*) AS quotes, MAX(o.updated_at) AS last_update
+    FROM odds o
+    JOIN bookmakers b ON b.id = o.bookmaker_id
+    JOIN selections sel ON sel.id = o.selection_id
+    JOIN markets m ON m.id = sel.market_id
+    JOIN market_events e ON e.id = m.market_event_id
+    WHERE b.slug IN (${STREAMING_BOOKS.map(() => '?').join(', ')})
+      AND e.commence_at >= ? AND e.commence_at <= ?
+    GROUP BY b.slug
+  `).all(...STREAMING_BOOKS, from, to)
+
+  const stalls: Stall[] = []
+  for (const row of rows) {
+    if (Number(row.quotes) === 0 || !row.last_update)
+      continue
+    const last = row.last_update instanceof Date ? row.last_update.getTime() : Date.parse(String(row.last_update).replace(' ', 'T') + (String(row.last_update).endsWith('Z') ? '' : 'Z'))
+    const ageMinutes = Math.round((now.getTime() - last) / 60_000)
+    if (!Number.isFinite(ageMinutes) || ageMinutes <= QUIET_AFTER_MINUTES)
+      continue
+    stalls.push({
+      provider: row.book,
+      kind: 'stream',
+      status: 'quiet',
+      ageMinutes,
+      reason: `has not updated a live or imminent game in ${ageMinutes} minutes`,
+    })
+  }
   return stalls
 }
 

@@ -26,6 +26,13 @@ route.group({ middleware: ['auth', 'throttle:30,1'] }, () => {
   route.delete('/groups/{id}/invitations/{invitationId}', 'Actions/Groups/RevokeGroupInvitation')
   route.delete('/groups/{id}/members/{userId}', 'Actions/Groups/RemoveGroupMember')
 })
+// Our odds feed. The REST side (`/api/feed/books`, `events`, `markets`,
+// `selections`, `odds`, `history`) is generated from the models by
+// `useApi`; the live stream is the one endpoint written by hand.
+route.group({ middleware: ['auth', 'throttle:30,1'] }, () => {
+  route.get('/feed/stream', 'Actions/Feed/StreamOdds')
+})
+
 route.get('/odds', 'Actions/V1/GetBoard')
 route.get('/odds/arbitrage', 'Actions/V1/GetArbitrage')
 route.get('/odds/edges', 'Actions/V1/GetEdges')

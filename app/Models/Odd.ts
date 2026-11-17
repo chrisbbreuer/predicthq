@@ -27,6 +27,15 @@ export default defineModel({
 
   traits: {
     useTimestamps: true,
+    // Our odds feed, at `/api/feed/odds`. Each book's current price per selection. Filter with `?selection_id=` or `?bookmaker_id=`.
+    // Reads only, for signed-in callers and API tokens: the rows are
+    // written by ingestion and nothing else.
+    useApi: {
+      uri: 'odds',
+      prefix: 'feed',
+      routes: ['index', 'show'],
+      middleware: ['auth'],
+    },
     useSeeder: { count: 0 },
   },
 

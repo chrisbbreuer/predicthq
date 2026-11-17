@@ -1,7 +1,9 @@
 import type { BookAdapter } from './adapter'
 import { enabledBooks } from '../../../../config/odds'
 import { draftkings } from './draftkings'
+import { kalshi } from './kalshi'
 import { pinnacle } from './pinnacle'
+import { polymarket } from './polymarket'
 
 /**
  * The adapter registry.
@@ -25,6 +27,8 @@ import { pinnacle } from './pinnacle'
 const ADAPTERS: BookAdapter[] = [
   pinnacle,
   draftkings,
+  kalshi,
+  polymarket,
 ]
 
 /**

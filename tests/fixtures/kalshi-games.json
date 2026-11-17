@@ -1,0 +1,123 @@
+{
+ "nba": [
+  {
+   "ticker": "KXNBAGAME-26NOV17PORMIN-POR",
+   "event_ticker": "KXNBAGAME-26NOV17PORMIN",
+   "status": "active",
+   "yes_sub_title": "Portland",
+   "yes_bid_dollars": "0.4200",
+   "yes_ask_dollars": "0.4300",
+   "volume_fp": "168333.24"
+  },
+  {
+   "ticker": "KXNBAGAME-26NOV17PORMIN-MIN",
+   "event_ticker": "KXNBAGAME-26NOV17PORMIN",
+   "status": "active",
+   "yes_sub_title": "Minnesota",
+   "yes_bid_dollars": "0.5700",
+   "yes_ask_dollars": "0.5800",
+   "volume_fp": "114258.38"
+  },
+  {
+   "ticker": "KXNBAGAME-26NOV17NYKTOR-TOR",
+   "event_ticker": "KXNBAGAME-26NOV17NYKTOR",
+   "status": "active",
+   "yes_sub_title": "Toronto",
+   "yes_bid_dollars": "0.3800",
+   "yes_ask_dollars": "0.3900",
+   "volume_fp": "144199.89"
+  },
+  {
+   "ticker": "KXNBAGAME-26NOV17NYKTOR-NYK",
+   "event_ticker": "KXNBAGAME-26NOV17NYKTOR",
+   "status": "active",
+   "yes_sub_title": "New York",
+   "yes_bid_dollars": "0.6100",
+   "yes_ask_dollars": "0.6200",
+   "volume_fp": "785733.01"
+  },
+  {
+   "ticker": "KXNBAGAME-26NOV17UTALAC-UTA",
+   "event_ticker": "KXNBAGAME-26NOV17UTALAC",
+   "status": "active",
+   "yes_sub_title": "Utah",
+   "yes_bid_dollars": "0.3200",
+   "yes_ask_dollars": "0.3300",
+   "volume_fp": "53771.55"
+  },
+  {
+   "ticker": "KXNBAGAME-26NOV17UTALAC-LAC",
+   "event_ticker": "KXNBAGAME-26NOV17UTALAC",
+   "status": "active",
+   "yes_sub_title": "Los Angeles C",
+   "yes_bid_dollars": "0.6800",
+   "yes_ask_dollars": "0.6900",
+   "volume_fp": "103540.85"
+  },
+  {
+   "ticker": "KXNBAGAME-26NOV17CHALAL-LAL",
+   "event_ticker": "KXNBAGAME-26NOV17CHALAL",
+   "status": "active",
+   "yes_sub_title": "Los Angeles L",
+   "yes_bid_dollars": "0.7200",
+   "yes_ask_dollars": "0.7300",
+   "volume_fp": "371885.21"
+  },
+  {
+   "ticker": "KXNBAGAME-26NOV17CHALAL-CHA",
+   "event_ticker": "KXNBAGAME-26NOV17CHALAL",
+   "status": "active",
+   "yes_sub_title": "Charlotte",
+   "yes_bid_dollars": "0.2700",
+   "yes_ask_dollars": "0.2800",
+   "volume_fp": "99008.96"
+  },
+  {
+   "ticker": "KXNBAGAME-26NOV17DETSAS-SAS",
+   "event_ticker": "KXNBAGAME-26NOV17DETSAS",
+   "status": "active",
+   "yes_sub_title": "San Antonio",
+   "yes_bid_dollars": "0.7900",
+   "yes_ask_dollars": "0.8000",
+   "volume_fp": "167073.05"
+  },
+  {
+   "ticker": "KXNBAGAME-26NOV17DETSAS-DET",
+   "event_ticker": "KXNBAGAME-26NOV17DETSAS",
+   "status": "active",
+   "yes_sub_title": "Detroit",
+   "yes_bid_dollars": "0.2000",
+   "yes_ask_dollars": "0.2100",
+   "volume_fp": "231423.45"
+  }
+ ],
+ "epl": [
+  {
+   "ticker": "KXEPLGAME-26DEC01COVIPS-TIE",
+   "event_ticker": "KXEPLGAME-26DEC01COVIPS",
+   "status": "active",
+   "yes_sub_title": "Tie",
+   "yes_bid_dollars": "0.0300",
+   "yes_ask_dollars": "0.9800",
+   "volume_fp": "0.00"
+  },
+  {
+   "ticker": "KXEPLGAME-26DEC01COVIPS-IPS",
+   "event_ticker": "KXEPLGAME-26DEC01COVIPS",
+   "status": "active",
+   "yes_sub_title": "Ipswich Town",
+   "yes_bid_dollars": "0.0300",
+   "yes_ask_dollars": "0.9500",
+   "volume_fp": "0.00"
+  },
+  {
+   "ticker": "KXEPLGAME-26DEC01COVIPS-COV",
+   "event_ticker": "KXEPLGAME-26DEC01COVIPS",
+   "status": "active",
+   "yes_sub_title": "Coventry",
+   "yes_bid_dollars": "0.0400",
+   "yes_ask_dollars": "0.9500",
+   "volume_fp": "0.00"
+  }
+ ]
+}

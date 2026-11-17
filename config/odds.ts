@@ -160,6 +160,13 @@ const BOOKS: BookBudget[] = [
   { slug: 'smarkets', enabled: false, transport: 'json', requestsPerSecond: 2, regions: ['uk', 'eu'] },
   { slug: 'matchbook', enabled: false, transport: 'json', requestsPerSecond: 1, regions: ['uk', 'eu'] },
 
+  // Prediction exchanges with official public data and push streams. Both
+  // stream every price change, so polling is the fallback and discovery
+  // path, not the main one. Kalshi's public read tier allows 20 requests a
+  // second; these budgets leave room for the trading and history code.
+  { slug: 'kalshi', enabled: true, transport: 'websocket', requestsPerSecond: 5, regions: ['us'] },
+  { slug: 'polymarket', enabled: true, transport: 'websocket', requestsPerSecond: 5, regions: ['global'] },
+
   // UK/EU, for the ten soccer leagues in the catalogue. These are the most
   // likely to need a primed session or a real browser, hence the lower
   // budgets — a browser transport costs a page load, not a fetch.

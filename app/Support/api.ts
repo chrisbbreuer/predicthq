@@ -77,7 +77,7 @@ export interface RequestLike {
 }
 
 /** Read one request header, whichever accessor the runtime provides. */
-function readHeader(request: RequestLike | undefined, name: string): string | undefined {
+export function readHeader(request: RequestLike | undefined, name: string): string | undefined {
   const viaMethod = request?.header?.(name)
   if (typeof viaMethod === 'string')
     return viaMethod

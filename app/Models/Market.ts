@@ -28,6 +28,15 @@ export default defineModel({
 
   traits: {
     useTimestamps: true,
+    // Our odds feed, at `/api/feed/markets`. One bet type at one line on one game. Filter with `?market_event_id=`.
+    // Reads only, for signed-in callers and API tokens: the rows are
+    // written by ingestion and nothing else.
+    useApi: {
+      uri: 'markets',
+      prefix: 'feed',
+      routes: ['index', 'show'],
+      middleware: ['auth'],
+    },
     useSeeder: { count: 0 },
   },
 

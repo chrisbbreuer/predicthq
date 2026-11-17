@@ -27,6 +27,45 @@ import { lineKey, nameSimilarity, norm, nowIso } from '../../Support/keys'
  * mysterious.
  */
 
+/**
+ * Remembered ids, for processes that resolve the same identities all day.
+ *
+ * The realtime loop resolves every streamed game every two seconds, and
+ * each resolution is a handful of reads plus touch-and-update writes for
+ * rows that have not changed. Teams, events, markets and selections are
+ * never deleted, so an id once found stays right; remembering it for a few
+ * minutes takes those queries off the shared database.
+ *
+ * Off by default and switched on by `odds:watch` alone: tests rebuild their
+ * database between cases, and an id remembered from the last one would
+ * point at a row the next one never made. Only ids read back from a
+ * committed row are remembered, never one just inserted inside a
+ * transaction that might still roll back.
+ */
+const memo = new Map<string, { id: number, at: number }>()
+let memoTtlMs = 0
+
+export function enableIdentityMemo(ttlMs = 10 * 60_000): void {
+  memoTtlMs = ttlMs
+}
+
+function recall(key: string): number | null {
+  if (memoTtlMs <= 0)
+    return null
+  const hit = memo.get(key)
+  if (!hit || Date.now() - hit.at > memoTtlMs)
+    return null
+  return hit.id
+}
+
+function remember(key: string, id: number): void {
+  if (memoTtlMs <= 0)
+    return
+  if (memo.size > 100_000)
+    memo.clear()
+  memo.set(key, { id, at: Date.now() })
+}
+
 export interface SportRow {
   id: number
   slug: string
@@ -152,12 +191,18 @@ export async function resolveTeam(
   if (!key)
     return null
 
+  const memoKey = `team:${sportId}:${key}`
+  const known = recall(memoKey)
+  if (known !== null)
+    return known
+
   const exact = await db
     .query('SELECT id FROM sports_teams WHERE sport_id = ? AND search_key = ?')
     .get(sportId, key) as { id: number } | null
 
   if (exact) {
     await refreshTeam(db, exact.id, extra)
+    remember(memoKey, exact.id)
     return exact.id
   }
 
@@ -276,6 +321,13 @@ export interface EventIdentity {
  * downstream.
  */
 export async function resolveEvent(db: Database, identity: EventIdentity): Promise<{ eventId: number, created: boolean }> {
+  // Remembered links skip the touch and the update: both were done when it
+  // was first found, and repeating them every flush rewrites the same row.
+  const memoKey = `event:${identity.provider}:${identity.externalId}:${identity.commenceAt}`
+  const known = recall(memoKey)
+  if (known !== null)
+    return { eventId: known, created: false }
+
   const existingLink = await db
     .query('SELECT market_event_id FROM event_sources WHERE provider = ? AND external_id = ?')
     .get(identity.provider, identity.externalId) as { market_event_id: number } | null
@@ -283,6 +335,7 @@ export async function resolveEvent(db: Database, identity: EventIdentity): Promi
   if (existingLink) {
     await touchEventSource(db, identity.provider, identity.externalId)
     await updateEvent(db, existingLink.market_event_id, identity)
+    remember(memoKey, existingLink.market_event_id)
     return { eventId: existingLink.market_event_id, created: false }
   }
 
@@ -443,13 +496,20 @@ export async function resolveMarket(db: Database, identity: MarketIdentity): Pro
   // player's market for the second player's price.
   const playerName = identity.playerName ?? ''
 
+  const memoKey = `market:${identity.eventId}:${identity.marketType}:${key}:${period}:${playerName}`
+  const known = recall(memoKey)
+  if (known !== null)
+    return known
+
   const existing = await db.query(`
     SELECT id FROM markets
     WHERE market_event_id = ? AND market_type = ? AND line_key = ? AND period = ? AND player_name = ?
   `).get(identity.eventId, identity.marketType, key, period, playerName) as { id: number } | null
 
-  if (existing)
+  if (existing) {
+    remember(memoKey, existing.id)
     return existing.id
+  }
 
   const res = await db.prepare(`
     INSERT INTO markets
@@ -490,11 +550,17 @@ export interface SelectionIdentity {
 export async function resolveSelection(db: Database, identity: SelectionIdentity): Promise<number> {
   const key = lineKey(identity.point)
 
+  const memoKey = `selection:${identity.marketId}:${identity.side}:${key}`
+  const known = recall(memoKey)
+  if (known !== null)
+    return known
+
   const existing = await db.query(`
     SELECT id FROM selections WHERE market_id = ? AND side = ? AND point_key = ?
   `).get(identity.marketId, identity.side, key) as { id: number } | null
 
   if (existing) {
+    remember(memoKey, existing.id)
     await db.prepare(`
       UPDATE selections SET
         label = ?,
