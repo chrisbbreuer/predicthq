@@ -82,7 +82,14 @@ export const LEAGUES: League[] = [
 export const EXTRA_LEAGUES: League[] = [
   { key: 'ncaab', label: 'College Basketball', path: 'basketball/mens-college-basketball', groups: ['50'], limit: 200 },
   { key: 'wnba', label: 'WNBA', path: 'basketball/wnba' },
+  { key: 'ncaaw', label: "Women's College Basketball", path: 'basketball/womens-college-basketball', groups: ['50'], limit: 200 },
   { key: 'mls', label: 'MLS', path: 'soccer/usa.1' },
+  { key: 'ucl', label: 'Champions League', path: 'soccer/uefa.champions' },
+  { key: 'uefa-nations', label: 'UEFA Nations League', path: 'soccer/uefa.nations' },
+  { key: 'laliga', label: 'LaLiga', path: 'soccer/esp.1' },
+  { key: 'seriea', label: 'Serie A', path: 'soccer/ita.1' },
+  { key: 'bundesliga', label: 'Bundesliga', path: 'soccer/ger.1' },
+  { key: 'ligue1', label: 'Ligue 1', path: 'soccer/fra.1' },
 ]
 
 export function leagueFor(key: string): League {

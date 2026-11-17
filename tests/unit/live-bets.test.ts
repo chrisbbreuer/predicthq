@@ -71,6 +71,25 @@ describe('kalshi game tickers', () => {
     expect(matchGame(parseGameTicker('KXNBAGAME-26NOV16PHXDEN-DEN')!, games)).toBeNull()
   })
 
+  it('falls back to the market wording when a college code is spelled differently', () => {
+    const games = [
+      game(team('ACU', 'Abilene Christian', 30), team('MOST', 'Missouri State', 41)),
+      game(team('SEMO', 'Southeast Missouri State', 20), team('MIDW', 'Midway', 18)),
+    ]
+    const ref = parseGameTicker('KXNCAAMBGAME-26NOV16ACMOSU-MOSU')!
+    expect(matchGame(ref, games)).toBeNull()
+    const found = matchGame(ref, games, 'Missouri St.')
+    expect(found?.id).toBe('ACU-MOST')
+    expect(liveGameCard(found!, ref, 'yes', 'Missouri St.')).toMatchObject({ rooting: 'home', standing: 'Ahead' })
+    // A name that fits two games is no match at all.
+    expect(matchGame(ref, [...games, game(team('X', 'Missouri State', 1), team('Y', 'Other', 2))], 'Missouri St.')).toBeNull()
+  })
+
+  it('maps women\'s college basketball and European soccer series', () => {
+    expect(parseGameTicker('KXNCAAWBGAME-26NOV16LAMTXAM-TXAM')).toMatchObject({ league: 'ncaaw', code: 'LAMTXAM' })
+    expect(parseGameTicker('KXUEFANLSPREAD-26NOV17BIHROU-ROU2')).toMatchObject({ league: 'uefa-nations', code: 'BIHROU', winner: false })
+  })
+
   it('knows which side an outcome names', () => {
     const g = game(team('GS', 'Golden State', 50), team('NO', 'New Orleans', 48))
     expect(sideForOutcome('GSW', g)).toBe('away')

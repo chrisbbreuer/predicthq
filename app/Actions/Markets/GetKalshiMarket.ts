@@ -42,7 +42,7 @@ export default {
     try {
       const market = await kalshiMarket(ticker)
       const parlay: ParlayTracker | null = market.legs.length > 0 ? await trackParlay(market).catch(() => null) : null
-      const game: LiveGame | null = parlay ? null : await liveGameFor(ticker, side).catch(() => null)
+      const game: LiveGame | null = parlay ? null : await liveGameFor(ticker, side, undefined, market.yesSubTitle).catch(() => null)
       const chart = await kalshiChart(ticker, range, { liveSince: game?.startsAt ?? null })
 
       return {

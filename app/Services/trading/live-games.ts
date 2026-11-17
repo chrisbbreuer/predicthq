@@ -74,6 +74,13 @@ export interface LiveGame {
  */
 const LEAGUE_PREFIXES: Array<[string, string]> = [
   ['KXNCAAMB', 'ncaab'],
+  ['KXNCAAWB', 'ncaaw'],
+  ['KXUEFANL', 'uefa-nations'],
+  ['KXUCL', 'ucl'],
+  ['KXLALIGA', 'laliga'],
+  ['KXSERIEA', 'seriea'],
+  ['KXBUNDESLIGA', 'bundesliga'],
+  ['KXLIGUE1', 'ligue1'],
   ['KXNCAAF', 'ncaaf'],
   ['KXWNBA', 'wnba'],
   ['KXNBA', 'nba'],
@@ -176,7 +183,7 @@ function splitCode(code: string, game: Game): boolean {
 }
 
 /** Which side an outcome suffix (`BOS`, `BOS6`) names, if either. */
-export function sideForOutcome(outcome: string, game: Game): 'home' | 'away' | null {
+export function sideForOutcome(outcome: string, game: Game, hint = ''): 'home' | 'away' | null {
   const letters = outcome.toUpperCase().replace(/[^A-Z]/g, '')
   if (!letters)
     return null
@@ -186,12 +193,50 @@ export function sideForOutcome(outcome: string, game: Game): 'home' | 'away' | n
     return 'home'
   if (away && !home)
     return 'away'
+  // The code did not say; the market's wording may ("Missouri St.").
+  const wanted = normalizeName(hint)
+  if (wanted.length >= 3) {
+    const byName = (team: Team) => [team.location, team.shortName, team.name].map(normalizeName).some(name => name.length >= 3 && wanted === name)
+    if (byName(game.home) && !byName(game.away))
+      return 'home'
+    if (byName(game.away) && !byName(game.home))
+      return 'away'
+  }
   return null
 }
 
-/** Find the game a parsed ticker is about among one day's games. */
-export function matchGame(ref: GameTickerRef, games: Game[]): Game | null {
-  return games.find(game => splitCode(ref.code, game)) ?? null
+/** Lowercase letters and digits only, with `St.` read as `State`. */
+function normalizeName(value: unknown): string {
+  return String(value ?? '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/\bst\b\.?/g, 'state')
+    .replace(/[^a-z0-9]+/g, '')
+}
+
+/**
+ * The game a market's wording names, when exactly one of the day's games
+ * fits. College codes are the reason this exists: Kalshi writes Abilene
+ * Christian at Missouri State as `ACMOSU` where ESPN has `ACU` and `MOST`,
+ * but the market itself says "Missouri St.", which is unambiguous.
+ */
+function gameByName(hint: string, games: Game[]): Game | null {
+  const wanted = normalizeName(hint)
+  if (wanted.length < 3)
+    return null
+  const names = (team: Team) => [team.location, team.shortName, team.name].map(normalizeName).filter(name => name.length >= 3)
+  const hits = games.filter(game => [game.home, game.away].some(team =>
+    names(team).some(name => wanted === name || (name.length >= 5 && wanted.startsWith(name)))))
+  return hits.length === 1 ? hits[0]! : null
+}
+
+/**
+ * Find the game a parsed ticker is about among one day's games: by the
+ * team code first, then by the market's own wording (`hint`, e.g. its
+ * outcome label) when the code is spelled in a way ESPN does not use.
+ */
+export function matchGame(ref: GameTickerRef, games: Game[], hint = ''): Game | null {
+  return games.find(game => splitCode(ref.code, game)) ?? (hint ? gameByName(hint, games) : null)
 }
 
 function liveTeam(team: Team): LiveTeam {
@@ -213,8 +258,8 @@ function liveTeam(team: Team): LiveTeam {
  * Boston, NO on it roots for Orlando. Standing is only computed for winner
  * markets, because "ahead" means nothing for a player prop or a total.
  */
-export function liveGameCard(game: Game, ref: GameTickerRef | null, side: string): LiveGame {
-  const selected = ref && ref.winner ? sideForOutcome(ref.outcome, game) : null
+export function liveGameCard(game: Game, ref: GameTickerRef | null, side: string, hint = ''): LiveGame {
+  const selected = ref && ref.winner ? sideForOutcome(ref.outcome, game, hint) : null
   const rooting = selected === null
     ? null
     : (String(side).toLowerCase() === 'no' ? (selected === 'home' ? 'away' : 'home') : selected)
@@ -270,12 +315,13 @@ export async function liveGameFor(
   ticker: string,
   side: string,
   loader: typeof fetchScoreboard = fetchScoreboard,
+  hint = '',
 ): Promise<LiveGame | null> {
   const ref = parseGameTicker(ticker)
   if (!ref)
     return null
 
   const games = await gamesOn(ref.league, ref.date, loader).catch(() => [] as Game[])
-  const game = matchGame(ref, games)
-  return game ? liveGameCard(game, ref, side) : null
+  const game = matchGame(ref, games, hint)
+  return game ? liveGameCard(game, ref, side, hint) : null
 }

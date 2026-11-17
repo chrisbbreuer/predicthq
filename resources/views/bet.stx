@@ -233,6 +233,10 @@ async function loadPosition(): Promise<void> {
       pnlTone: marked ? tone(row.unrealized) : 'muted',
       toWin: usd(Number(row.size) || 0),
       profit: signedUsd((Number(row.size) || 0) - (Number(row.cost) || 0)),
+      // A parlay's last trade is the holder's own purchase; its legs' live
+      // prices are the better guide to what it is worth now.
+      isParlay: Boolean(row.track && row.track.parlay),
+      estValue: row.track && row.track.parlay && row.track.parlay.chance !== null ? usd((Number(row.size) || 0) * Number(row.track.parlay.chance)) : '—',
     })
   }
   catch {
@@ -476,9 +480,9 @@ onMount(async () => {
                 </div>
                 <p class="mt-1 text-sm muted" x-text="position() ? position().outcome : ''"></p>
                 <div class="mt-4">
-                  <div class="text-xs font-semibold faint">Value now</div>
-                  <div class="figure-xl text-5xl" x-text="position() ? position().value : ''"></div>
-                  <div class="mt-1 font-semibold num" :class="position() ? position().pnlTone : ''" x-text="position() ? position().pnl : ''"></div>
+                  <div class="text-xs font-semibold faint" x-text="position() && position().isParlay ? 'Estimated value (from legs)' : 'Value now'"></div>
+                  <div class="figure-xl text-5xl" x-text="position() ? (position().isParlay ? position().estValue : position().value) : ''"></div>
+                  <div x-show="position() && !position().isParlay" class="mt-1 font-semibold num" :class="position() ? position().pnlTone : ''" x-text="position() ? position().pnl : ''"></div>
                 </div>
                 <div class="mt-4">
                   <div class="kv"><span class="muted">Contracts</span><span class="font-semibold num" x-text="position() ? position().size : ''"></span></div>

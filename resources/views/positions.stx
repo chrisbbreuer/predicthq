@@ -266,6 +266,11 @@ function holding(row: any, isPaper: boolean): any {
     pnl: marked ? signedUsd(row.unrealized) : '—',
     pnlTone: marked ? tone(row.unrealized) : 'muted',
     toWin: usd(Number(row.size) || 0),
+    // A parlay's last trade is the holder's own purchase, so its "mark" is
+    // just the cost. The legs' live prices say more; shown as an estimate
+    // and kept out of the totals, since correlated legs make the product
+    // a rough figure rather than a price.
+    estValue: track && track.parlay && track.parlay.chance !== null ? usd((Number(row.size) || 0) * Number(track.parlay.chance)) : '—',
     chance: pct(chance),
     chanceTone: chance === null ? 'muted' : (chance >= 0.5 ? 'pos' : 'neg'),
     hasSpark: spark.length > 1,
@@ -888,7 +893,7 @@ onMount(start)
                   <div class="stat-strip">
                     <div><span class="stat-label">Contracts</span><span class="stat-value num" x-text="position.size"></span></div>
                     <div><span class="stat-label">Cost</span><span class="stat-value num" x-text="position.cost"></span></div>
-                    <div><span class="stat-label">P&amp;L</span><span class="stat-value num" :class="position.pnlTone" x-text="position.pnl"></span></div>
+                    <div><span class="stat-label" title="Your contracts times the product of each leg's live price. Legs in the same game move together, so this is a rough guide, not a price.">Est. value</span><span class="stat-value num" x-text="position.estValue"></span></div>
                     <div><span class="stat-label">To win</span><span class="stat-value num" x-text="position.toWin"></span></div>
                   </div>
                 </div>
@@ -1047,7 +1052,7 @@ onMount(start)
           </p>
 
           <p class="mt-10 max-w-3xl text-xs leading-relaxed faint">
-            Positions and balances are read from the venue itself, including anything you traded in its own app. Values mark against the last trade; the chance shown is the live quote midpoint, an estimate rather than a price you can sell at. Scores from ESPN.
+            Positions and balances are read from the venue itself, including anything you traded in its own app. Values mark against the last trade; the chance shown is the live quote midpoint, an estimate rather than a price you can sell at. A parlay's chance and estimated value multiply its legs' live prices. Scores from ESPN.
           </p>
         </div>
       </main>

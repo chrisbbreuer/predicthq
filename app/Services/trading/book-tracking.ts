@@ -94,7 +94,8 @@ export async function trackParlay(
 
   const legs = await Promise.all(market.legs.map(async (leg, index): Promise<ParlayLeg> => {
     const info = legMarkets.get(leg.marketTicker)
-    const game = await liveGameFor(leg.marketTicker, leg.side, loadScoreboard).catch(() => null)
+    const label = (labels.length === market.legs.length ? labels[index] : '') || info?.title || leg.marketTicker
+    const game = await liveGameFor(leg.marketTicker, leg.side, loadScoreboard, info?.yesSubTitle || label).catch(() => null)
     const settled = info?.result === 'yes' || info?.result === 'no'
     const status = settled
       ? (info!.result === leg.side ? 'won' : 'lost')
@@ -102,7 +103,7 @@ export async function trackParlay(
 
     return {
       ticker: leg.marketTicker,
-      label: (labels.length === market.legs.length ? labels[index] : '') || info?.title || leg.marketTicker,
+      label,
       choice: leg.side,
       chance: settled ? (status === 'won' ? 1 : 0) : sideChance(info ? currentPrice(info) : null, leg.side),
       status,
@@ -158,7 +159,7 @@ export async function trackHoldings(holdings: TrackableHolding[], options: Track
     const parlay = market && market.legs.length > 0
       ? await within(trackParlay(market, options.loadScoreboard), budget, null)
       : null
-    const game = parlay ? null : await within(liveGameFor(holding.marketExternalId, holding.side, options.loadScoreboard), budget, null)
+    const game = parlay ? null : await within(liveGameFor(holding.marketExternalId, holding.side, options.loadScoreboard, market?.yesSubTitle || holding.outcomeLabel || ''), budget, null)
 
     let spark: Array<[number, number]> = []
     if (options.sparklines !== false) {
