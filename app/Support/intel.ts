@@ -60,7 +60,23 @@ function open(): Database {
   return new Database()
 }
 
+const summarySnapshot = snapshot<IntelSummary>()
+
+const EMPTY_SUMMARY: IntelSummary = { marketCount: 0, tradeCount: 0, traderCount: 0, whaleCount: 0, venueCount: 0, recentFills: 0 }
+
+/**
+ * The headline counts, from the last read and refreshed every five
+ * minutes behind the request. Counting every trade on the tape took about
+ * ten seconds against production data and ran on every board render; a
+ * count that is a few minutes old says exactly the same thing. Until the
+ * first read lands the counts are zero, which the pages render as no
+ * stats strip rather than a wrong one.
+ */
 export async function loadIntelSummary(): Promise<IntelSummary> {
+  return (await stale(summarySnapshot, 5 * 60_000, readIntelSummary, false)) ?? EMPTY_SUMMARY
+}
+
+async function readIntelSummary(): Promise<IntelSummary> {
   const db = open()
 
   try {
