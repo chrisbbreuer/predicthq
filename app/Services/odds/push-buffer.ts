@@ -1,4 +1,7 @@
+import type { Database } from '../../Support/db'
 import type { FeedEvent } from './provider'
+import { ingestOdds } from '../ingest/odds'
+import { mergeFeedEvents } from './native'
 
 /**
  * Coalesces pushed prices before they are written.
@@ -60,4 +63,31 @@ export class PushBuffer {
       this.flushing = false
     }
   }
+}
+
+/** Games written per transaction when flushing streamed prices. */
+const STREAM_BATCH = 8
+
+/**
+ * Write one flush of streamed prices. Returns how many prices moved.
+ *
+ * Two things this has to get right, both learned the hard way:
+ *
+ * - **One id per game.** Games go through the same merge polling uses, so
+ *   a game gets the same canonical id whichever path saw it. The venue's
+ *   raw ticker beside polling's merged id was two ids for one book on one
+ *   game, and the event matcher made the second a duplicate event.
+ * - **Short transactions.** Vitess aborts a transaction open past thirty
+ *   seconds, and a flush right after startup can carry the whole slate,
+ *   so games are written a few at a time.
+ */
+export async function writePushed(db: Database, pushed: FeedEvent[], batchSize = STREAM_BATCH): Promise<number> {
+  const events = mergeFeedEvents(pushed)
+  let changed = 0
+  for (let i = 0; i < events.length; i += batchSize) {
+    const batch = events.slice(i, i + batchSize)
+    const result = await ingestOdds(db, { name: 'stream', fetchEvents: async () => batch })
+    changed += result.pricesChanged
+  }
+  return changed
 }

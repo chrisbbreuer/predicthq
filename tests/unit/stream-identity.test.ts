@@ -2,6 +2,8 @@ import type { FeedEvent } from '../../app/Services/odds/provider'
 import { rmSync } from 'node:fs'
 import { afterEach, describe, expect, it } from 'bun:test'
 import { ingestOdds } from '../../app/Services/ingest/odds'
+import { mergeFeedEvents } from '../../app/Services/odds/native'
+import { writePushed } from '../../app/Services/odds/push-buffer'
 import { schemaFor } from '../support/schema'
 
 /**
@@ -77,6 +79,19 @@ describe('streamed books on one game', () => {
     // between the two never matched on the same date.
     await ingestOdds(db, { name: 'stream', fetchEvents: async () => [{ ...game('kalshi', 'KXNBAGAME-26NOV17NYKTOR', 2.6), commenceAt: '2026-11-18T00:30Z' }] })
     await ingestOdds(db, { name: 'stream', fetchEvents: async () => [game('polymarket', '1284999', 2.55)] })
+
+    const events = db.query('SELECT COUNT(*) AS n FROM market_events').get() as { n: number }
+    expect(events.n).toBe(1)
+  })
+})
+
+describe('a game seen by polling, then by the stream', () => {
+  it('stays one event', async () => {
+    const db = freshDb() as any
+    // Polling merges first, which gives a single-book game a canonical id.
+    await ingestOdds(db, { name: 'composite', fetchEvents: async () => mergeFeedEvents([game('kalshi', 'KXNBAGAME-26NOV17NYKTOR', 2.6)]) })
+    // The stream pushes the venue's raw ticker.
+    await writePushed(db, [game('kalshi', 'KXNBAGAME-26NOV17NYKTOR', 2.5)])
 
     const events = db.query('SELECT COUNT(*) AS n FROM market_events').get() as { n: number }
     expect(events.n).toBe(1)

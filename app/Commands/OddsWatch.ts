@@ -4,13 +4,13 @@ import process from 'node:process'
 import { log } from '@stacksjs/cli'
 import { ExitCode } from '@stacksjs/types'
 import { Database } from '../Support/db'
-import { ingestOdds, pollableSports } from '../Services/ingest/odds'
+import { pollableSports } from '../Services/ingest/odds'
 import { enableIdentityMemo } from '../Services/ingest/resolve'
 import { IngestRunTracker } from '../Services/ingest/run'
 import { activeAdapters, booksWithoutAdapters } from '../Services/odds/books'
 import { bookContextFor } from '../Services/odds/context'
 import { OddsEngine } from '../Services/odds/engine'
-import { PushBuffer } from '../Services/odds/push-buffer'
+import { PushBuffer, writePushed } from '../Services/odds/push-buffer'
 
 /**
  * `buddy odds:watch` — the long-running price loop.
@@ -46,9 +46,6 @@ async function loadScheduledEvents(db: Database): Promise<ScheduledEvent[]> {
     ORDER BY e.commence_at ASC
   `).all(horizon)
 }
-
-/** Games written per transaction when flushing streamed prices. */
-const STREAM_BATCH = 8
 
 export default function (cli: CLI) {
   cli
@@ -91,13 +88,10 @@ export default function (cli: CLI) {
       // A few games per transaction: Vitess aborts any transaction open past
       // thirty seconds, and a flush right after startup, before any id is
       // remembered, can carry every game on the slate.
-      const pushes = new PushBuffer(async (events) => {
-        for (let i = 0; i < events.length; i += STREAM_BATCH) {
-          const batch = events.slice(i, i + STREAM_BATCH)
-          const result = await ingestOdds(db, { name: 'stream', fetchEvents: async () => batch })
-          if (result.pricesChanged > 0)
-            log.debug(`[odds] stream: ${result.pricesChanged} price${result.pricesChanged === 1 ? '' : 's'} moved across ${batch.length} game${batch.length === 1 ? '' : 's'}`)
-        }
+      const pushes = new PushBuffer(async (pushed) => {
+        const changed = await writePushed(db, pushed)
+        if (changed > 0)
+          log.debug(`[odds] stream: ${changed} price${changed === 1 ? '' : 's'} moved across ${pushed.length} game${pushed.length === 1 ? '' : 's'}`)
       })
 
       const engine = new OddsEngine({
