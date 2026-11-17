@@ -496,6 +496,7 @@ class PolymarketStream {
       this.attempts = 0
       this.lastMessageAt = Date.now()
       this.syncSubscription()
+      log.info(`[odds] polymarket stream connected, ${this.index.size} tokens across ${this.games.size} games`)
       if (this.ping)
         clearInterval(this.ping)
       this.ping = setInterval(() => {

@@ -417,6 +417,7 @@ class KalshiStream {
       this.attempts = 0
       this.lastMessageAt = Date.now()
       this.syncSubscription()
+      log.info(`[odds] kalshi stream connected, ${this.tickers().length} markets across ${this.games.size} games`)
     }
 
     socket.onmessage = (frame) => {

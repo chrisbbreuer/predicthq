@@ -65,8 +65,13 @@ export class PushBuffer {
   }
 }
 
-/** Games written per transaction when flushing streamed prices. */
-const STREAM_BATCH = 8
+/**
+ * Games written per transaction when flushing streamed prices. Small,
+ * because right after a restart every id is resolved from the database
+ * again, which costs a Polymarket game hundreds of round trips; eight per
+ * transaction still ran past Vitess's thirty-second limit.
+ */
+const STREAM_BATCH = 2
 
 /**
  * Write one flush of streamed prices. Returns how many prices moved.
