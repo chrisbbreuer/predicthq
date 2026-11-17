@@ -26,11 +26,10 @@ export default {
    * - Full emails: ['chris@stacksjs.com']
    * - Objects: [{ email: 'chris', password: '...' }]
    */
-  mailboxes: [
-    'chris',
-    'blake',
-    'glenn',
-  ],
+  // None. chris@, blake@ and glenn@stacksjs.com belong to the stacks project:
+  // declaring them here made this app's deploys reconcile those mailboxes with
+  // its own MAIL_PASSWORD_* values, which replaced their owners' passwords.
+  mailboxes: [],
 
   url: env.APP_URL || 'https://stacksjs.com',
   charset: 'UTF-8',
