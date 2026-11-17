@@ -1,4 +1,5 @@
 import { Database } from './db'
+import { snapshot, stale } from './stale'
 
 /** Traders need this many scored fills before ranking as smart money. */
 const MIN_RESOLVED = 2
@@ -215,4 +216,23 @@ export async function loadGraph(traderLimit = 40, database?: Database): Promise<
     if (!database)
       db.close()
   }
+}
+
+const graphSnapshot = snapshot<GraphPayload>()
+const whaleSnapshot = snapshot<BigTrade[]>()
+
+/**
+ * The smart-money page's two heavy reads, served from the last result and
+ * refreshed in the background every two minutes. The graph walks the top
+ * traders' flow (~3s against production data) and the whale tape sorts
+ * millions of trades; neither changes meaningfully inside two minutes.
+ * The first request after a restart waits once.
+ */
+export async function loadGraphCached(): Promise<GraphPayload> {
+  return (await stale(graphSnapshot, 120_000, () => loadGraph(), true)) ?? { nodes: [], links: [] }
+}
+
+export async function loadBigTradesCached(limit = 10): Promise<BigTrade[]> {
+  const trades = await stale(whaleSnapshot, 120_000, () => loadBigTrades(30), true)
+  return (trades ?? []).slice(0, limit)
 }

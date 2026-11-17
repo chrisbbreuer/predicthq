@@ -7,7 +7,7 @@
  * server, so it renders with zero client layout work; the browser adds
  * tooltip, pan, and zoom interactions on top.
  */
-import { loadBigTrades, loadGraph, loadSmartMoney } from '../../app/Support/prediction-markets'
+import { loadBigTradesCached, loadGraphCached, loadSmartMoney } from '../../app/Support/prediction-markets'
 const canonicalPath = '/markets'
 
 const W = 920
@@ -21,7 +21,7 @@ const fmtUsd = (n) => {
 }
 const truncate = (s, n) => (s.length > n ? `${s.slice(0, n - 1)}…` : s)
 
-const graph = await loadGraph()
+const graph = await loadGraphCached()
 const leaders = (await loadSmartMoney(12)).map(t => ({
   alias: truncate(t.alias, 22),
   venue: t.venue,
@@ -32,7 +32,7 @@ const leaders = (await loadSmartMoney(12)).map(t => ({
   maxBet: fmtUsd(t.maxTradeSize),
   whale: t.isWhale,
 }))
-const whales = (await loadBigTrades(10)).map(t => ({
+const whales = (await loadBigTradesCached(10)).map(t => ({
   venue: t.venue,
   mark: t.venue === 'kalshi' ? 'KAL' : 'PM',
   question: truncate(t.question, 60),

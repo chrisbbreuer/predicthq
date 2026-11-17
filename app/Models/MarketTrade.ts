@@ -25,6 +25,11 @@ export default defineModel({
     { name: 'venue_external_id', columns: ['venue', 'externalId'], unique: true },
     { name: 'market', columns: ['predictionMarketId'] },
     { name: 'trader', columns: ['marketTraderId'] },
+    // The whale tape sorts the whole table by size, and the evidence engine
+    // reads one market's trades over a time window. At several million
+    // rows both were full scans; the smart-money page took ~27s to render.
+    { name: 'notional', columns: ['notional'] },
+    { name: 'market_traded_at', columns: ['predictionMarketId', 'tradedAt'] },
   ],
 
   attributes: {
