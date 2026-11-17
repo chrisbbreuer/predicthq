@@ -3,7 +3,7 @@ import type { PlaceOrderResult, TradingClient } from './venue'
 import { log } from '@stacksjs/logging'
 import { clientFor, revokeAccount } from './execute'
 import { bookOrderFill } from './positions'
-import { isAuthFailure, VenueError } from './venue'
+import { rejectsCredentials } from './venue'
 
 /**
  * Reconciling our record of an order with the venue's.
@@ -150,7 +150,7 @@ export async function syncOrders(db: Database, options: SyncOptions = {}): Promi
     catch (error) {
       summary.unreachable++
 
-      if (error instanceof VenueError && isAuthFailure(error.status)) {
+      if (rejectsCredentials(error)) {
         await revokeAccount(db, order.exchange_account_id, message(error))
         clients.delete(order.exchange_account_id)
         log.warn(`[trading] ${order.venue} rejected our credentials during sync; account ${order.exchange_account_id} marked revoked`)

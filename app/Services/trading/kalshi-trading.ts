@@ -9,7 +9,7 @@ import type {
   VenuePosition,
 } from './venue'
 import { createSign } from 'node:crypto'
-import { isAuthFailure, isRetryableStatus, VenueError } from './venue'
+import { isAuthFailure, isRetryableStatus, isTransientAuthFailure, VenueError } from './venue'
 
 const BASE = process.env.KALSHI_API_BASE_URL || 'https://external-api.kalshi.com/trade-api/v2'
 
@@ -91,7 +91,10 @@ export class KalshiTradingClient implements TradingClient {
         return await this.send<T>(method, path, body)
       }
       catch (error) {
-        if (!(error instanceof VenueError) || error.status !== 429 || method !== 'GET' || attempt >= 2)
+        // A stale-timestamp 401 is retried too: each attempt signs afresh.
+        const retryable = error instanceof VenueError
+          && (error.status === 429 || (error.status === 401 && isTransientAuthFailure(error.message)))
+        if (!retryable || method !== 'GET' || attempt >= 2)
           throw error
         const hinted = Number((error as VenueError & { retryAfter?: number }).retryAfter)
         const wait = Number.isFinite(hinted) && hinted > 0 ? Math.min(hinted * 1000, 3000) : 400 * 2 ** attempt + Math.random() * 250

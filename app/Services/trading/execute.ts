@@ -10,7 +10,7 @@ import { KalshiTradingClient } from './kalshi-trading'
 import { executePaper } from './paper'
 import { PolymarketTradingClient } from './polymarket-trading'
 import { accountOpenExposure, bookOrderFill, cumulativeRealizedLoss, openExposure, openPositionCount, realizedPnlSince } from './positions'
-import { VenueError, isAuthFailure } from './venue'
+import { rejectsCredentials } from './venue'
 
 /**
  * Turning an accepted decision into an order, or refusing to.
@@ -510,7 +510,7 @@ async function placeOne(
     await db.prepare(`UPDATE trade_decisions SET status = 'failed', status_reason = ?, updated_at = ? WHERE id = ?`)
       .run(message.slice(0, 300), new Date().toISOString(), decision.id)
 
-    if (error instanceof VenueError && isAuthFailure(error.status)) {
+    if (rejectsCredentials(error)) {
       await revokeAccount(db, account.id, message)
       log.warn(`[trading] ${decision.venue} rejected our credentials; account ${account.id} marked revoked`)
     }

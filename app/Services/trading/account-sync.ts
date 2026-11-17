@@ -6,7 +6,7 @@ import { KalshiProvider } from '../prediction-markets/kalshi'
 import { polymarketUsMarkets } from '../prediction-markets/polymarket-us'
 import { PolymarketProvider } from '../prediction-markets/polymarket'
 import { clientFor, revokeAccount } from './execute'
-import { isAuthFailure, VenueError } from './venue'
+import { rejectsCredentials, VenueError } from './venue'
 
 /**
  * Asking the venue what the account actually holds.
@@ -118,7 +118,7 @@ export async function syncAccounts(db: Database, options: AccountSyncOptions = {
       // the account is marked rather than retried each minute. The error
       // is also written to the account row: a portfolio page that has
       // stopped updating has to be able to say why.
-      if (error instanceof VenueError && isAuthFailure(error.status)) {
+      if (rejectsCredentials(error)) {
         await revokeAccount(db, account.id, message(error))
           .catch(revokeError => log.warn(`[trading] could not mark account ${account.id} revoked: ${message(revokeError)}`))
         log.warn(`[trading] ${account.venue} rejected our credentials; account ${account.id} marked revoked`)
@@ -180,7 +180,7 @@ async function syncOne(
       orders = await client.fetchOpenOrders()
     }
     catch (error) {
-      if (error instanceof VenueError && isAuthFailure(error.status))
+      if (rejectsCredentials(error))
         throw error
 
       log.warn(`[trading] could not list resting orders for account ${account.id}: ${message(error)}`)

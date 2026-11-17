@@ -121,3 +121,23 @@ export function isRetryableStatus(status: number): boolean {
 export function isAuthFailure(status: number): boolean {
   return status === 401 || status === 403
 }
+
+/**
+ * A 401 about the request, not the key.
+ *
+ * Kalshi rejects a signature whose timestamp has gone stale by the time it
+ * arrives (`header_timestamp_expired`). That says the request sat in a
+ * queue, not that the key is bad; the next request, signed fresh, works.
+ * Treating it as dead credentials revoked a working account on 17 Nov 2026.
+ */
+export function isTransientAuthFailure(message: string): boolean {
+  return /header_timestamp_expired|timestamp expired|request expired/i.test(message)
+}
+
+/**
+ * Whether a failure means the venue has rejected these credentials for
+ * good, which is the only case that should revoke an account.
+ */
+export function rejectsCredentials(error: unknown): boolean {
+  return error instanceof VenueError && isAuthFailure(error.status) && !isTransientAuthFailure(error.message)
+}
