@@ -1,0 +1,303 @@
+<script server>
+/**
+ * PredictHQ: live scanner.
+ *
+ * Every game market in play or about to be, with its price, how that
+ * price has moved over five, fifteen, and sixty minutes, whether trading
+ * has surged, and the model's game-aware view beside it.
+ *
+ * A data view for making your own call: it reports movement as movement
+ * and shows the model with the evidence behind it. It has no order
+ * buttons. Public data only, so it renders for anyone.
+ *
+ * @see app/Services/scanner.ts for the payload.
+ */
+const navActive = 'scanner'
+const pageTitle = 'PredictHQ: live scanner'
+const pageDescription = 'Live and upcoming game markets with price movement, volume surges, and model fair value.'
+const POLL_SECONDS = 20
+</script>
+
+<script client>
+import { useIntervalFn } from '@stacksjs/composables'
+import { gameClock, pct, sparkSvg, startLabel, teamShort } from '../functions/bets'
+
+const LEAGUE_LABELS: Record<string, string> = { 'nba': 'NBA', 'wnba': 'WNBA', 'nfl': 'NFL', 'ncaaf': 'College football', 'ncaab': 'College basketball', 'ncaaw': "Women's college basketball", 'nhl': 'NHL', 'mlb': 'MLB', 'mls': 'MLS', 'epl': 'Premier League', 'ucl': 'Champions League', 'uefa-nations': 'Nations League', 'laliga': 'LaLiga', 'seriea': 'Serie A', 'bundesliga': 'Bundesliga' }
+
+const loading = state(true)
+const failed = state('')
+const stamp = state('')
+const filter = state('all')
+const league = state('all')
+const leagues = state<any[]>([])
+const events = state<any[]>([])
+const movers = state<any[]>([])
+const counts = state<any>({ all: 0, live: 0, upcoming: 0 })
+const modelAvailable = state(false)
+let all: any[] = []
+
+function points(value: number | null): string {
+  if (value === null || value === undefined)
+    return '—'
+  const p = Math.round(value * 100)
+  return (p > 0 ? '+' : '') + p
+}
+
+function moveTone(value: number | null): string {
+  if (value === null || value === undefined || Math.abs(value) < 0.005)
+    return 'faint'
+  return value > 0 ? 'pos' : 'neg'
+}
+
+function outcomeView(outcome: any): any {
+  const model = outcome.model
+  return {
+    key: outcome.ticker,
+    label: outcome.label,
+    price: pct(outcome.price),
+    bidAsk: outcome.bid !== null && outcome.ask !== null ? Math.round(outcome.bid * 100) + '¢ / ' + Math.round(outcome.ask * 100) + '¢' : '',
+    c5: points(outcome.change5m),
+    c5Tone: moveTone(outcome.change5m),
+    c15: points(outcome.change15m),
+    c15Tone: moveTone(outcome.change15m),
+    c60: points(outcome.change60m),
+    c60Tone: moveTone(outcome.change60m),
+    c24: points(outcome.change24h),
+    c24Tone: moveTone(outcome.change24h),
+    volume: '$' + Math.round(outcome.volume24h * (outcome.price || 0.5)).toLocaleString('en-US'),
+    surge: outcome.volumeSurge === null ? '' : outcome.volumeSurge.toFixed(1) + '×',
+    spark: sparkSvg(outcome.points || [], 120, 32),
+    hasSpark: (outcome.points || []).length > 1,
+    hasModel: Boolean(model),
+    model: model
+      ? (String(model.side).toUpperCase() + ' fair ' + pct(model.fairValue) + ' · edge ' + (model.edge > 0 ? '+' : '') + Math.round(model.edge * 100) + ' · ' + model.signals + ' signal' + (model.signals === 1 ? '' : 's') + ' · conf ' + Math.round(model.confidence * 100) + '%' + (model.inPlay ? ' · in-play' : ''))
+      : '',
+    flags: (outcome.flags || []).map((flag: string, index: number) => ({ key: String(index), label: flag, cls: /Rising/.test(flag) ? 'pos' : (/Falling/.test(flag) ? 'neg' : '') })),
+    href: '/bet?ticker=' + encodeURIComponent(outcome.ticker) + '&side=yes',
+  }
+}
+
+function eventView(event: any): any {
+  const game = event.game
+  const live = event.state === 'in'
+  return {
+    key: event.eventTicker,
+    league: event.league,
+    leagueLabel: LEAGUE_LABELS[event.league] || String(event.league).toUpperCase(),
+    live,
+    title: game ? teamShort(game.away) + ' at ' + teamShort(game.home) : event.eventTicker,
+    score: game && live ? game.away.abbreviation + ' ' + game.away.score + '–' + game.home.score + ' ' + game.home.abbreviation : '',
+    status: game ? (live ? gameClock(game) : startLabel(game.startsAt)) : 'Scheduled',
+    gameHref: game ? game.gameUrl : '',
+    hasGame: Boolean(game),
+    volume: '$' + Math.round(event.outcomes.reduce((sum: number, o: any) => sum + o.volume24h * (o.price || 0.5), 0)).toLocaleString('en-US') + ' 24h',
+    outcomes: event.outcomes.map(outcomeView),
+  }
+}
+
+function render(): void {
+  const shown = all.filter((event: any) =>
+    (filter() === 'all' || (filter() === 'live' ? event.live : !event.live))
+    && (league() === 'all' || event.league === league()))
+  events.set(shown)
+}
+
+function setFilter(value: string): void {
+  filter.set(value)
+  render()
+}
+
+function setLeague(value: string): void {
+  league.set(value)
+  render()
+}
+
+async function load(): Promise<void> {
+  try {
+    const response = await fetch('/api/scanner', { headers: { Accept: 'application/json' } })
+    const data = await response.json()
+    if (!response.ok)
+      throw new Error(data.message || data.error || ('Request failed (' + response.status + ')'))
+    all = (data.events || []).map(eventView)
+    modelAvailable.set(Boolean(data.modelAvailable))
+    counts.set({ all: all.length, live: all.filter((e: any) => e.live).length, upcoming: all.filter((e: any) => !e.live).length })
+    const seen: string[] = []
+    for (const event of all) {
+      if (!seen.includes(event.league))
+        seen.push(event.league)
+    }
+    leagues.set(seen.map(key => ({ key, label: LEAGUE_LABELS[key] || key.toUpperCase() })))
+
+    const moving: any[] = []
+    for (const event of data.events || []) {
+      for (const outcome of event.outcomes) {
+        if (outcome.change15m !== null && Math.abs(outcome.change15m) >= 0.03)
+          moving.push({ event, outcome })
+      }
+    }
+    moving.sort((a, b) => Math.abs(b.outcome.change15m) - Math.abs(a.outcome.change15m))
+    movers.set(moving.slice(0, 6).map(({ event, outcome }) => ({
+      key: outcome.ticker,
+      label: outcome.label,
+      context: event.game ? event.game.away.abbreviation + ' ' + event.game.away.score + '–' + event.game.home.score + ' ' + event.game.home.abbreviation + ' · ' + gameClock(event.game) : event.eventTicker,
+      price: pct(outcome.price),
+      move: points(outcome.change15m),
+      tone: moveTone(outcome.change15m),
+      href: '/bet?ticker=' + encodeURIComponent(outcome.ticker) + '&side=yes',
+    })))
+    render()
+    const at = new Date()
+    stamp.set(('0' + at.getHours()).slice(-2) + ':' + ('0' + at.getMinutes()).slice(-2) + ':' + ('0' + at.getSeconds()).slice(-2))
+    failed.set('')
+  }
+  catch (requestError) {
+    failed.set(requestError instanceof Error ? requestError.message : String(requestError))
+  }
+  finally {
+    loading.set(false)
+  }
+}
+
+const poll = useIntervalFn(() => void load(), {{ POLL_SECONDS }} * 1000, { immediate: false })
+
+onMount(async () => {
+  await load()
+  poll.resume()
+})
+</script>
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    @include('head')
+    <style>
+      .chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+      .chips::-webkit-scrollbar { display: none; }
+      .chip { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border-radius: 9999px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+      .chip:hover { color: var(--text); border-color: var(--border-strong); }
+      .chip.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+      .chip-count { font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; opacity: 0.7; }
+      .mover { display: block; min-width: 200px; padding: 14px 16px; }
+      .mover:hover { border-color: var(--border-strong); }
+      .event { padding: 18px; }
+      .out { display: grid; grid-template-columns: minmax(0, 1.4fr) 64px 120px repeat(4, 52px) 70px; gap: 10px; align-items: center; padding: 10px 8px; margin: 0 -8px; border-top: 1px solid var(--border); border-radius: 10px; }
+      .out:hover { background: var(--surface-2); }
+      .out-head { border-top: 0; padding-top: 4px; padding-bottom: 4px; font-size: 11px; font-weight: 700; color: var(--faint); }
+      .out-head:hover { background: transparent; }
+      .cell { text-align: right; font-family: 'Geist Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; font-size: 13px; }
+      .spark { height: 32px; }
+      @media (max-width: 860px) {
+        .out { grid-template-columns: minmax(0, 1fr) 56px 52px 52px; }
+        .out .wide { display: none; }
+      }
+    </style>
+  </head>
+
+  <body x-data="{ menu: false, theme: predicthqTheme.current(), toggleTheme() { this.theme = predicthqTheme.toggle() }, toggleMenu() { this.menu = !this.menu } }">
+    <div class="app">
+      @include('nav')
+
+      <main class="mx-auto px-4 pt-8 pb-8 sm:px-6 max-w-6xl">
+        <div class="flex flex-wrap gap-4 items-end justify-between">
+          <div>
+            <div class="flex gap-2 items-center text-sm font-semibold muted"><span class="live-pulse"></span>Live scanner</div>
+            <h1 class="mt-2 display text-5xl">Where the markets are moving</h1>
+            <p class="mt-2 max-w-2xl muted">Every live and upcoming game on Kalshi: the price, how far it has moved in the last 5, 15, and 60 minutes, whether trading is surging, and the model's game-aware read. Refreshes every {{ POLL_SECONDS }} seconds.</p>
+          </div>
+          <span class="text-xs faint num" x-text="loading() ? 'Loading…' : (stamp() ? 'Updated ' + stamp() : '')"></span>
+        </div>
+
+        <p x-show="failed()" x-cloak class="px-4 py-3 mt-5 text-sm rounded-xl card"><span class="neg font-bold">Not updating</span> <span class="muted" x-text="'— ' + failed()"></span></p>
+
+        {{-- Biggest movers in the last fifteen minutes. --}}
+        <section x-show="movers().length > 0" x-cloak class="mt-8">
+          <h2 class="font-bold text-lg">Biggest 15-minute moves</h2>
+          <div class="flex gap-3 mt-3 overflow-x-auto pb-1">
+            <template :for="mover in movers">
+              <a :href="mover.href" data-no-router class="mover card shrink-0">
+                <div class="flex gap-3 items-baseline justify-between">
+                  <span class="font-semibold truncate" x-text="mover.label"></span>
+                  <span class="font-bold num" :class="mover.tone" x-text="mover.move"></span>
+                </div>
+                <div class="mt-1 figure-xl text-3xl" x-text="mover.price"></div>
+                <div class="mt-1 text-xs faint truncate" x-text="mover.context"></div>
+              </a>
+            </template>
+          </div>
+        </section>
+
+        <nav class="flex flex-wrap gap-3 items-center mt-8" aria-label="Filter">
+          <div class="chips">
+            <button type="button" class="chip" :class="filter() === 'all' ? 'on' : ''" @click="setFilter('all')">All <span class="chip-count" x-text="counts().all"></span></button>
+            <button type="button" class="chip" :class="filter() === 'live' ? 'on' : ''" @click="setFilter('live')"><span class="live-pulse"></span> Live <span class="chip-count" x-text="counts().live"></span></button>
+            <button type="button" class="chip" :class="filter() === 'upcoming' ? 'on' : ''" @click="setFilter('upcoming')">Upcoming <span class="chip-count" x-text="counts().upcoming"></span></button>
+          </div>
+          <div class="chips">
+            <button type="button" class="chip" :class="league() === 'all' ? 'on' : ''" @click="setLeague('all')">Every league</button>
+            <template :for="option in leagues">
+              <button type="button" class="chip" :class="league() === option.key ? 'on' : ''" @click="setLeague(option.key)" x-text="option.label"></button>
+            </template>
+          </div>
+        </nav>
+
+        <p x-show="!loading() && !modelAvailable()" x-cloak class="mt-4 text-xs faint">The model has no reading on these markets right now; prices and movement are still live.</p>
+
+        <section class="grid gap-4 mt-5">
+          <template :for="event in events">
+            <article class="event card">
+              <div class="flex flex-wrap gap-2 items-center justify-between">
+                <div class="flex gap-2 items-center min-w-0">
+                  <span class="text-xs font-bold tracking-wide uppercase faint" x-text="event.leagueLabel"></span>
+                  <span x-show="event.live" class="pill live"><span class="live-pulse"></span><span x-text="event.status"></span></span>
+                  <span x-show="!event.live" class="pill" x-text="event.status"></span>
+                </div>
+                <div class="flex gap-3 items-center">
+                  <span class="text-xs faint num" x-text="event.volume"></span>
+                  <a x-show="event.hasGame" :href="event.gameHref" data-no-router class="inline-flex gap-1 items-center text-xs font-semibold muted hover:opacity-70">Game <i class="h-3.5 w-3.5 i-hugeicons-arrow-right-01"></i></a>
+                </div>
+              </div>
+              <div class="flex flex-wrap gap-3 items-baseline justify-between mt-2">
+                <h3 class="font-bold text-lg" x-text="event.title"></h3>
+                <span x-show="event.score" class="font-bold num" x-text="event.score"></span>
+              </div>
+
+              <div class="mt-3">
+                <div class="out out-head">
+                  <span>Outcome</span><span class="text-right">Chance</span><span class="wide">Last hour</span>
+                  <span class="text-right">5m</span><span class="text-right">15m</span><span class="text-right wide">60m</span><span class="text-right wide">24h</span><span class="text-right wide">Surge</span>
+                </div>
+                <template :for="outcome in event.outcomes">
+                  <a :href="outcome.href" data-no-router class="out">
+                    <div class="min-w-0">
+                      <div class="font-semibold truncate" x-text="outcome.label"></div>
+                      <div class="flex flex-wrap gap-1.5 items-center mt-1">
+                        <span class="text-[11px] faint num" x-text="outcome.bidAsk"></span>
+                        <template :for="flag in outcome.flags"><span class="pill" :class="flag.cls" style="height:18px;font-size:10px" x-text="flag.label"></span></template>
+                      </div>
+                      <div x-show="outcome.hasModel" class="mt-1 text-[11px] muted num" x-text="outcome.model"></div>
+                    </div>
+                    <span class="figure-xl text-2xl text-right" x-text="outcome.price"></span>
+                    <div class="spark wide" x-html="outcome.spark"></div>
+                    <span class="cell" :class="outcome.c5Tone" x-text="outcome.c5"></span>
+                    <span class="cell" :class="outcome.c15Tone" x-text="outcome.c15"></span>
+                    <span class="cell wide" :class="outcome.c60Tone" x-text="outcome.c60"></span>
+                    <span class="cell wide" :class="outcome.c24Tone" x-text="outcome.c24"></span>
+                    <span class="cell wide faint" x-text="outcome.surge"></span>
+                  </a>
+                </template>
+              </div>
+            </article>
+          </template>
+        </section>
+
+        <p x-show="!loading() && events().length === 0" x-cloak class="mt-10 text-center muted">No games match these filters right now.</p>
+
+        <p class="mt-10 max-w-3xl text-xs leading-relaxed faint">
+          Moves are in percentage points of the quote midpoint. Surge compares the last 15 minutes of contracts traded with the hour's 15-minute average. Fair value is the model's estimate from trade flow and venue evidence; in play it counts only flow since the game began and ignores pre-game priors, and outcomes of one game are made to agree. None of this is a recommendation. Prediction markets carry risk; trade only what you can afford to lose.
+        </p>
+      </main>
+
+      @include('footer')
+    </div>
+  </body>
+</html>

@@ -1,5 +1,6 @@
 import { Database } from '../../Support/db'
 import { buildCandidates } from '../../Services/trading/evidence'
+import { liveGameForTicker } from '../../Services/trading/live-games'
 
 /**
  * GET /api/trading/candidates — what the model would look at right now.
@@ -27,6 +28,7 @@ export default {
         categories: category ? [category] : [],
         minEdge,
         limit,
+        gameFor: liveGameForTicker,
       })
 
       return { count: candidates.length, minEdge, candidates }

@@ -4,6 +4,8 @@ import { outcomeSideOf, resolveFixture } from '../ingest/kalshi-games'
 import { findIncoherence, fixtureKeyOf, strikeOf } from '../quant/coherence'
 import { movementFor } from '../quant/movement'
 import { assessScheduleEdge, loadScheduleContext } from '../quant/schedule'
+import type { LiveGame } from './live-games'
+import { parseGameTicker } from './live-games'
 
 /**
  * Evidence — the measurable case for or against a side, computed from
@@ -106,6 +108,26 @@ export interface EvidenceOptions {
   /** Minimum absolute edge to report a candidate at all. */
   minEdge?: number
   limit?: number
+  /**
+   * The game a market is about, with its live state. When given, markets
+   * on finished games are skipped and markets on games in progress are
+   * judged on in-play evidence only. Production callers pass
+   * `liveGameForTicker`; leaving it out keeps the engine offline.
+   */
+  gameFor?: (ticker: string) => Promise<LiveGame | null>
+}
+
+/**
+ * In play, a price moves on every possession and the flow behind it is
+ * minutes old at best, so the evidence may move fair value by half as much
+ * as it may before the game. Pre-game priors (rest, squad strength, book
+ * steam) are dropped outright: the score has already overtaken them.
+ */
+const IN_PLAY_SCALE = 0.5
+const PRE_GAME_ONLY = new Set(['schedule_rest', 'steam', 'squad_mismatch'])
+
+export interface MarketContext {
+  game?: LiveGame | null
 }
 
 /**
@@ -150,9 +172,24 @@ export async function buildCandidates(db: Database, options: EvidenceOptions = {
 
   for (const rawMarket of markets) {
     const market = normalizeMarketRow(rawMarket)
-    const candidate = await evaluateMarket(db, market)
-    if (candidate && Math.abs(candidate.edge) >= minEdge)
+    const game = options.gameFor && market.venue === 'kalshi' && parseGameTicker(market.external_id)
+      ? await options.gameFor(market.external_id).catch(() => null)
+      : null
+    // A finished game is decided; its last price is the market catching
+    // up to a result, not a disagreement worth trading.
+    if (game?.state === 'post')
+      continue
+    const candidate = await evaluateMarket(db, market, { game })
+    if (candidate)
       candidates.push(candidate)
+  }
+
+  // Siblings first, then the floor: an edge that only existed because two
+  // outcomes of one game disagreed with each other should not survive.
+  reconcileSiblings(candidates)
+  for (let i = candidates.length - 1; i >= 0; i--) {
+    if (Math.abs(candidates[i]!.edge) < minEdge)
+      candidates.splice(i, 1)
   }
 
   // Strongest conviction first: edge alone rewards thin markets where
@@ -166,8 +203,16 @@ export async function buildCandidates(db: Database, options: EvidenceOptions = {
  * Evaluate one market: gather the per-side flow, pick the side the
  * evidence favours, and record what moved the estimate.
  */
-async function evaluateMarket(db: Database, market: MarketRow): Promise<Candidate | null> {
-  const since = new Date(Date.now() - WINDOW_HOURS * 3600_000).toISOString()
+async function evaluateMarket(db: Database, market: MarketRow, context: MarketContext = {}): Promise<Candidate | null> {
+  const game = context.game ?? null
+  const inPlay = game?.state === 'in'
+  const tipOff = inPlay ? Date.parse(game!.startsAt) : Number.NaN
+  // In play, only what was traded since the game began says anything about
+  // the game as it stands; earlier flow was a bet on a game not yet played.
+  const sinceMs = inPlay && Number.isFinite(tipOff)
+    ? Math.max(tipOff, Date.now() - WINDOW_HOURS * 3600_000)
+    : Date.now() - WINDOW_HOURS * 3600_000
+  const since = new Date(sinceMs).toISOString()
 
   const flowRows = await db.prepare<FlowDatabaseRow>(`
     SELECT
@@ -262,7 +307,8 @@ async function evaluateMarket(db: Database, market: MarketRow): Promise<Candidat
     FROM market_trades
     WHERE prediction_market_id = ? AND side = ? AND traded_at >= ?
   `).get(
-    new Date(Date.now() - 3600_000 * 4).toISOString(),
+    // In play the useful "recent" is the last few minutes, not four hours.
+    new Date(Date.now() - (inPlay ? 15 * 60_000 : 3600_000 * 4)).toISOString(),
     market.id,
     leader.side,
     since,
@@ -519,10 +565,26 @@ async function evaluateMarket(db: Database, market: MarketRow): Promise<Candidat
     }
   }
 
+  if (inPlay) {
+    for (let i = evidence.length - 1; i >= 0; i--) {
+      if (PRE_GAME_ONLY.has(evidence[i]!.kind))
+        evidence.splice(i, 1)
+    }
+    evidence.push({
+      kind: 'in_play',
+      summary: `in play: ${game!.away.abbreviation} ${game!.away.score ?? 0}-${game!.home.score ?? 0} ${game!.home.abbreviation}, ${game!.status}. Only flow since tip-off counts; pre-game priors dropped`,
+      value: 0,
+      contribution: 0,
+      sampleSize: 1,
+      windowHours: round((Date.now() - sinceMs) / 3600_000, 2),
+    })
+  }
+
+  const cap = inPlay ? MAX_TOTAL_CONTRIBUTION * IN_PLAY_SCALE : MAX_TOTAL_CONTRIBUTION
   const totalContribution = clamp(
-    evidence.reduce((sum, item) => sum + item.contribution, 0),
-    -MAX_TOTAL_CONTRIBUTION,
-    MAX_TOTAL_CONTRIBUTION,
+    evidence.reduce((sum, item) => sum + item.contribution, 0) * (inPlay ? IN_PLAY_SCALE : 1),
+    -cap,
+    cap,
   )
 
   const fairValue = clamp(marketPrice + totalContribution, 0.01, 0.99)
@@ -540,6 +602,55 @@ async function evaluateMarket(db: Database, market: MarketRow): Promise<Candidat
     confidence: confidenceFrom(evidence, totalFills),
     liquidity: Number(market.liquidity),
     evidence,
+  }
+}
+
+/**
+ * Make mutually exclusive outcomes agree with each other.
+ *
+ * Each market is judged on its own, so both teams of one game can come
+ * out "underpriced" — Phoenix at 59% and Denver at 51% is a claim that
+ * the game has a 110% chance of being won, and both edges are artefacts.
+ * For winner markets of one event, each candidate's fair value is turned
+ * into a probability of its outcome, those are scaled to sum to at most
+ * one (exactly one for a two-way game with both sides present), and the
+ * edges recomputed. What no longer clears the floor falls out after.
+ */
+export function reconcileSiblings(candidates: Candidate[]): void {
+  const groups = new Map<string, Candidate[]>()
+  for (const candidate of candidates) {
+    const ref = candidate.venue === 'kalshi' ? parseGameTicker(candidate.externalId) : null
+    if (!ref?.winner)
+      continue
+    groups.set(ref.eventTicker, [...(groups.get(ref.eventTicker) ?? []), candidate])
+  }
+
+  for (const group of groups.values()) {
+    if (group.length < 2)
+      continue
+    const outcomeOf = (c: Candidate) => c.side === 'yes' ? c.fairValue : 1 - c.fairValue
+    const total = group.reduce((sum, c) => sum + outcomeOf(c), 0)
+    const twoWay = group.length === 2 && !group.some(c => /-TIE$/i.test(c.externalId))
+    if (total <= 0 || (!twoWay && total <= 1))
+      continue
+
+    for (const candidate of group) {
+      const outcome = outcomeOf(candidate) / total
+      const fair = clamp(candidate.side === 'yes' ? outcome : 1 - outcome, 0.01, 0.99)
+      const shift = round(fair - candidate.fairValue, 4)
+      if (Math.abs(shift) < 0.0001)
+        continue
+      candidate.evidence.push({
+        kind: 'coherence',
+        summary: `outcomes of this event summed to ${pct(total)}; scaled to agree`,
+        value: round(total, 4),
+        contribution: shift,
+        sampleSize: group.length,
+        windowHours: 0,
+      })
+      candidate.fairValue = round(fair, 4)
+      candidate.edge = round(fair - candidate.marketPrice, 4)
+    }
   }
 }
 

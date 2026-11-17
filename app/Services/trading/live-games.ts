@@ -325,3 +325,8 @@ export async function liveGameFor(
   const game = matchGame(ref, games, hint)
   return game ? liveGameCard(game, ref, side, hint) : null
 }
+
+/** `liveGameFor` keyed by ticker alone, for the candidate engine. */
+export function liveGameForTicker(ticker: string): Promise<LiveGame | null> {
+  return liveGameFor(ticker, 'yes')
+}

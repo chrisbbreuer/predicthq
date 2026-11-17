@@ -44,6 +44,8 @@ route.group({ middleware: ['throttle:120,1'] }, () => {
   route.get('/markets/kalshi/{ticker}', 'Actions/Markets/GetKalshiMarket')
   // One game for the game page: box score, stats, and Kalshi's chart.
   route.get('/scores/{league}/game/{id}', 'Actions/Scores/GetGame')
+  // Every live and upcoming game market, with movement and the model.
+  route.get('/scanner', 'Actions/Markets/GetScanner')
 })
 
 // ---- Bet sheets (signed-in user or an anon token) --------------------------

@@ -6,6 +6,7 @@ import { resolveEntitlements } from '../billing/entitlements'
 import { judgeCandidates } from './decide'
 import { buildCandidates } from './evidence'
 import { executeStrategy, stakeFor } from './execute'
+import { liveGameForTicker } from './live-games'
 
 /**
  * One pass of the trading loop for one strategy.
@@ -106,6 +107,9 @@ export async function runStrategy(db: Database, strategy: Strategy): Promise<Run
     venues: strategy.venue === 'both' ? [] : [strategy.venue],
     categories,
     minEdge: strategy.min_edge,
+    // Game-aware: no order on a finished game, in-play markets judged on
+    // in-play evidence only.
+    gameFor: liveGameForTicker,
   })
 
   summary.candidates = candidates.length

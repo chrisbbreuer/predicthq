@@ -39,6 +39,7 @@ export const routes = [
   { pattern: '/privacy', filePath: 'resources/views/privacy.stx', isDynamic: false, params: [] },
   { pattern: '/register', filePath: 'storage/framework/defaults/resources/views/register.stx', isDynamic: false, params: [] },
   { pattern: '/risk', filePath: 'resources/views/risk.stx', isDynamic: false, params: [] },
+  { pattern: '/scanner', filePath: 'resources/views/scanner.stx', isDynamic: false, params: [] },
   { pattern: '/signup', filePath: 'resources/views/signup.stx', isDynamic: false, params: [] },
   { pattern: '/terms', filePath: 'resources/views/terms.stx', isDynamic: false, params: [] },
   { pattern: '/scores/:league/game/:id', filePath: 'resources/views/scores/[league]/game/[id].stx', isDynamic: true, params: ["league","id"] },

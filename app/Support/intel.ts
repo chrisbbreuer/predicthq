@@ -1,5 +1,6 @@
 import { Database } from './db'
 import { buildCandidates } from '../Services/trading/evidence'
+import { liveGameForTicker } from '../Services/trading/live-games'
 
 /**
  * Landing-page reads for the intel surface.
@@ -95,7 +96,7 @@ export async function loadTopCandidate(): Promise<IntelCandidate | null> {
   const db = open()
 
   try {
-    const [candidate] = await buildCandidates(db, { minEdge: 0.02, limit: 1 })
+    const [candidate] = await buildCandidates(db, { minEdge: 0.02, limit: 1, gameFor: liveGameForTicker })
     if (!candidate)
       return null
 

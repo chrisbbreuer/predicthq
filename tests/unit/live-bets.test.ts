@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it } from 'bun:test'
 import { candlesToPoints, parseRange, thin, windowFor } from '../../app/Services/prediction-markets/kalshi-chart'
 import { clearKalshiCache, currentPrice, isMultivariate, kalshiMarkets, toMarketInfo } from '../../app/Services/prediction-markets/kalshi-public'
 import { trackParlay } from '../../app/Services/trading/book-tracking'
+import { reconcileSiblings } from '../../app/Services/trading/evidence'
+import { flagsFor, movementFrom } from '../../app/Services/scanner'
 import { KalshiTradingClient } from '../../app/Services/trading/kalshi-trading'
 import { propKind, propProgress, spreadProgress, totalProgress } from '../../app/Services/trading/leg-progress'
 import { candidateEvents, kalshiDate } from '../../app/Services/scores/kalshi-event'
@@ -307,5 +309,53 @@ describe('kalshi game events', () => {
     expect(kalshiDate('2026-11-17T00:00Z')).toBe('26NOV16')
     expect(candidateEvents('nba', { startsAt: '2026-11-17T01:00Z', away: team('GS', 'Golden State', null) as any, home: team('NO', 'New Orleans', null) as any }))
       .toEqual(['KXNBAGAME-26NOV16GSNO', 'KXNBAGAME-26NOV16GSNOP', 'KXNBAGAME-26NOV16GSWNO', 'KXNBAGAME-26NOV16GSWNOP'])
+  })
+})
+
+describe('candidate coherence', () => {
+  const candidate = (externalId: string, side: string, marketPrice: number, fairValue: number) => ({
+    predictionMarketId: 1, venue: 'kalshi', externalId, question: '', category: '', side,
+    marketPrice, fairValue, edge: fairValue - marketPrice, confidence: 0.8, liquidity: 0, evidence: [] as any[],
+  })
+
+  it('scales two sides of one game that both claim an edge back to 100%', () => {
+    const list = [
+      candidate('KXNBAGAME-26NOV16PHXDEN-PHX', 'yes', 0.56, 0.5923),
+      candidate('KXNBAGAME-26NOV16PHXDEN-DEN', 'yes', 0.47, 0.5094),
+    ]
+    reconcileSiblings(list)
+    expect(list[0]!.fairValue + list[1]!.fairValue).toBeCloseTo(1, 3)
+    expect(list[0]!.edge).toBeLessThan(0)
+    expect(list[1]!.evidence.at(-1)).toMatchObject({ kind: 'coherence' })
+  })
+
+  it('leaves unrelated markets and coherent three-way sets alone', () => {
+    const list = [
+      candidate('KXUEFANLGAME-26NOV17DENNOR-DEN', 'yes', 0.42, 0.46),
+      candidate('KXUEFANLGAME-26NOV17DENNOR-TIE', 'yes', 0.24, 0.26),
+      candidate('KXFEDDECISION-28JAN-H26', 'yes', 0.05, 0.09),
+    ]
+    reconcileSiblings(list)
+    expect(list.map(c => c.fairValue)).toEqual([0.46, 0.26, 0.09])
+  })
+})
+
+describe('scanner movement', () => {
+  const candles = Array.from({ length: 61 }, (_, i) => ({
+    ts: 1_000_000 + i * 60,
+    close: 0.4 + (i >= 50 ? 0.1 : 0) + (i >= 58 ? 0.05 : 0),
+    bid: null,
+    ask: null,
+    volume: i >= 46 ? 30 : 5,
+  }))
+
+  it('reads 5, 15, and 60 minute changes and a volume surge from minute candles', () => {
+    const move = movementFrom(candles)
+    expect(move.change5m).toBe(0.05)
+    expect(move.change15m).toBe(0.15)
+    expect(move.change60m).toBe(0.15)
+    expect(move.volumeSurge).toBeGreaterThan(2)
+    expect(flagsFor({ change15m: move.change15m, volumeSurge: move.volumeSurge, spread: 0.01 })).toEqual(['Rising fast', 'Volume surge'])
+    expect(flagsFor({ change15m: -0.09, volumeSurge: 1, spread: 0.06 })).toEqual(['Falling fast', 'Wide spread'])
   })
 })

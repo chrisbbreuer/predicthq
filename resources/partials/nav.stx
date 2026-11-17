@@ -13,6 +13,7 @@
       <a href="/" data-no-router class="nav-link {{ navActive === 'home' ? 'is-active' : '' }}" {{ navActive === 'home' ? 'aria-current=page' : '' }}>Home</a>
       <a href="/positions" data-no-router class="nav-link {{ navActive === 'positions' ? 'is-active' : '' }}" {{ navActive === 'positions' ? 'aria-current=page' : '' }}>My bets</a>
       <a href="/odds" data-no-router class="nav-link {{ navActive === 'board' ? 'is-active' : '' }}" {{ navActive === 'board' ? 'aria-current=page' : '' }}>Odds</a>
+      <a href="/scanner" data-no-router class="nav-link {{ navActive === 'scanner' ? 'is-active' : '' }}" {{ navActive === 'scanner' ? 'aria-current=page' : '' }}>Scanner</a>
       <a href="/live" data-no-router class="nav-link {{ navActive === 'live' ? 'is-active' : '' }}" {{ navActive === 'live' ? 'aria-current=page' : '' }}>Live</a>
       <a href="/scores/nfl/today" data-no-router class="nav-link {{ navActive === 'scores' ? 'is-active' : '' }}" {{ navActive === 'scores' ? 'aria-current=page' : '' }}>Scores</a>
 
@@ -88,6 +89,7 @@
         <div class="grid">
           <a href="/" data-no-router class="mobile-link" @click="menu = false">Home</a>
           <a href="/odds" data-no-router class="mobile-link" @click="menu = false">Odds board</a>
+          <a href="/scanner" data-no-router class="mobile-link" @click="menu = false">Live scanner</a>
           <a href="/live" data-no-router class="mobile-link" @click="menu = false">Live moves</a>
           <a href="/scores/nfl/today" data-no-router class="mobile-link" @click="menu = false">Scores</a>
           <a href="/markets" data-no-router class="mobile-link" @click="menu = false">Smart money</a>

@@ -38,6 +38,7 @@ declare module '@stacksjs/stx' {
     '/privacy': {  }
     '/register': {  }
     '/risk': {  }
+    '/scanner': {  }
     '/signup': {  }
     '/terms': {  }
     '/scores/:league/game/:id': { league: string; id: string }
