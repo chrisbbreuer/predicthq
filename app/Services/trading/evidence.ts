@@ -126,6 +126,16 @@ export interface EvidenceOptions {
 const IN_PLAY_SCALE = 0.5
 const PRE_GAME_ONLY = new Set(['schedule_rest', 'steam', 'squad_mismatch'])
 
+/**
+ * Venues whose tape names no trader. There, raw flow and its drift are
+ * recorded for the reader but carry no weight: replaying 854 Kalshi games
+ * (10-16 Nov 2026, 1,815 model views) found neither moved the outcome
+ * beyond the price at all, while they leaned the model onto longshot YES,
+ * which lost 17% after fees. Smart-money and accuracy signals need named
+ * traders, so on these venues they never fire either.
+ */
+const ANONYMOUS_TAPE = new Set(['kalshi'])
+
 export interface MarketContext {
   game?: LiveGame | null
   /**
@@ -267,11 +277,12 @@ async function evaluateMarket(db: Database, market: MarketRow, context: MarketCo
   // on the price itself rather than 0.5: a side already quoted at 0.8
   // should attract ~80% of the flow, so only the excess is information.
   const flowShare = leader.notional / totalNotional
+  const flowWeight = ANONYMOUS_TAPE.has(market.venue) ? 0 : 1
   evidence.push({
     kind: 'flow_imbalance',
     summary: `${pct(flowShare)} of $${round(totalNotional)} traded in ${WINDOW_HOURS}h bought ${leader.side}`,
     value: round(flowShare, 4),
-    contribution: clampSignal((flowShare - marketPrice) * 0.10),
+    contribution: clampSignal((flowShare - marketPrice) * 0.10 * flowWeight),
     sampleSize: totalFills,
     windowHours: WINDOW_HOURS,
   })
@@ -334,7 +345,7 @@ async function evaluateMarket(db: Database, market: MarketRow, context: MarketCo
       kind: 'price_trend',
       summary: `${leader.side} traded at ${pct(trend.recent)} in the last 4h vs ${pct(trend.baseline)} over ${WINDOW_HOURS}h`,
       value: round(drift, 4),
-      contribution: clampSignal(drift * 0.25),
+      contribution: clampSignal(drift * 0.25 * flowWeight),
       sampleSize: trend.n,
       windowHours: WINDOW_HOURS,
     })
