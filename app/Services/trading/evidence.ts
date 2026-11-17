@@ -86,7 +86,7 @@ interface FlowRow {
   wins: number
 }
 
-type MarketDatabaseRow = Omit<MarketRow, 'id' | 'last_price' | 'liquidity'> & {
+export type MarketDatabaseRow = Omit<MarketRow, 'id' | 'last_price' | 'liquidity'> & {
   id: number | string
   last_price: number | string
   liquidity: number | string
@@ -128,6 +128,13 @@ const PRE_GAME_ONLY = new Set(['schedule_rest', 'steam', 'squad_mismatch'])
 
 export interface MarketContext {
   game?: LiveGame | null
+  /**
+   * Replay the evaluation at this moment (ms) instead of now: every window
+   * ends here and no trade after it is read. Used by the backtest.
+   */
+  asOf?: number
+  /** The YES price at `asOf`, which `last_price` (today's) cannot supply. */
+  yesPriceAt?: number
 }
 
 /**
@@ -204,14 +211,17 @@ export async function buildCandidates(db: Database, options: EvidenceOptions = {
  * evidence favours, and record what moved the estimate.
  */
 async function evaluateMarket(db: Database, market: MarketRow, context: MarketContext = {}): Promise<Candidate | null> {
+  const replay = typeof context.asOf === 'number'
+  const now = replay ? context.asOf! : Date.now()
+  const until = new Date(now).toISOString()
   const game = context.game ?? null
   const inPlay = game?.state === 'in'
   const tipOff = inPlay ? Date.parse(game!.startsAt) : Number.NaN
   // In play, only what was traded since the game began says anything about
   // the game as it stands; earlier flow was a bet on a game not yet played.
   const sinceMs = inPlay && Number.isFinite(tipOff)
-    ? Math.max(tipOff, Date.now() - WINDOW_HOURS * 3600_000)
-    : Date.now() - WINDOW_HOURS * 3600_000
+    ? Math.max(tipOff, now - WINDOW_HOURS * 3600_000)
+    : now - WINDOW_HOURS * 3600_000
   const since = new Date(sinceMs).toISOString()
 
   const flowRows = await db.prepare<FlowDatabaseRow>(`
@@ -224,9 +234,9 @@ async function evaluateMarket(db: Database, market: MarketRow, context: MarketCo
       COALESCE(SUM(CASE WHEN t.is_winner = 1 THEN 1 ELSE 0 END), 0) AS wins
     FROM market_trades t
     LEFT JOIN market_traders tr ON tr.id = t.market_trader_id
-    WHERE t.prediction_market_id = ? AND t.traded_at >= ?
+    WHERE t.prediction_market_id = ? AND t.traded_at >= ? AND t.traded_at < ?
     GROUP BY t.side
-  `).all(market.id, since)
+  `).all(market.id, since, until)
   const flows = flowRows.map(normalizeFlowRow)
 
   const totalFills = flows.reduce((sum, f) => sum + f.fills, 0)
@@ -245,7 +255,8 @@ async function evaluateMarket(db: Database, market: MarketRow, context: MarketCo
 
   // `last_price` is quoted for the yes side. A candidate on any other
   // side is worth the complement.
-  const marketPrice = leader.side === 'yes' ? market.last_price : 1 - market.last_price
+  const yesPrice = replay && typeof context.yesPriceAt === 'number' ? context.yesPriceAt : market.last_price
+  const marketPrice = leader.side === 'yes' ? yesPrice : 1 - yesPrice
 
   const evidence: EvidenceItem[] = []
 
@@ -305,13 +316,14 @@ async function evaluateMarket(db: Database, market: MarketRow, context: MarketCo
       COALESCE(AVG(price), 0) AS baseline,
       COUNT(*) AS n
     FROM market_trades
-    WHERE prediction_market_id = ? AND side = ? AND traded_at >= ?
+    WHERE prediction_market_id = ? AND side = ? AND traded_at >= ? AND traded_at < ?
   `).get(
     // In play the useful "recent" is the last few minutes, not four hours.
-    new Date(Date.now() - (inPlay ? 15 * 60_000 : 3600_000 * 4)).toISOString(),
+    new Date(now - (inPlay ? 15 * 60_000 : 3600_000 * 4)).toISOString(),
     market.id,
     leader.side,
     since,
+    until,
   )
 
   if (trend && trend.recent > 0 && trend.baseline > 0) {
@@ -342,7 +354,8 @@ async function evaluateMarket(db: Database, market: MarketRow, context: MarketCo
   // The same question priced on the other venue. Two venues that
   // disagree is the cleanest signal available, and the only one here
   // that does not depend on our own trader modelling.
-  const other = await db.prepare<{ venue: string, last_price: number }>(`
+  // Today's price on the other venue says nothing about a replayed moment.
+  const other = replay ? null : await db.prepare<{ venue: string, last_price: number }>(`
     SELECT venue, last_price
     FROM prediction_markets
     WHERE venue != ? AND status = 'open' AND question = ? AND last_price > 0
@@ -383,7 +396,7 @@ async function evaluateMarket(db: Database, market: MarketRow, context: MarketCo
   //
   // `feature_snapshots.reverse_line_move` has been written as a hardcoded
   // zero since it was added, so this is the first real computation of it.
-  const half = new Date(Date.now() - (WINDOW_HOURS / 2) * 3600_000).toISOString()
+  const half = new Date(now - (WINDOW_HOURS / 2) * 3600_000).toISOString()
 
   const halves = await db.prepare<{ earlier: number, later: number, recentFills: number }>(`
     SELECT
@@ -391,8 +404,8 @@ async function evaluateMarket(db: Database, market: MarketRow, context: MarketCo
       COALESCE(AVG(CASE WHEN traded_at >= ? THEN price END), 0) AS later,
       COALESCE(SUM(CASE WHEN traded_at >= ? THEN 1 ELSE 0 END), 0) AS recentFills
     FROM market_trades
-    WHERE prediction_market_id = ? AND traded_at >= ?
-  `).get(half, half, half, market.id, since)
+    WHERE prediction_market_id = ? AND traded_at >= ? AND traded_at < ?
+  `).get(half, half, half, market.id, since, until)
 
   // Both halves need real trades, or the "move" is just one half being
   // empty and averaging to zero.
@@ -427,7 +440,8 @@ async function evaluateMarket(db: Database, market: MarketRow, context: MarketCo
   // per-signal cap on its own.
   const fixtureKey = fixtureKeyOf(market.external_id)
 
-  if (fixtureKey && strikeOf(market.external_id) !== null) {
+  // Ladder rungs are read at today's prices, so a replay skips them.
+  if (!replay && fixtureKey && strikeOf(market.external_id) !== null) {
     const siblings = await db.prepare<{ ticker: string, price: number }>(`
       SELECT external_id AS ticker, last_price AS price
       FROM prediction_markets
@@ -576,7 +590,7 @@ async function evaluateMarket(db: Database, market: MarketRow, context: MarketCo
       value: 0,
       contribution: 0,
       sampleSize: 1,
-      windowHours: round((Date.now() - sinceMs) / 3600_000, 2),
+      windowHours: round((now - sinceMs) / 3600_000, 2),
     })
   }
 
@@ -715,4 +729,17 @@ function round(value: number, places = 2): number {
 
 function pct(value: number): string {
   return `${(value * 100).toFixed(1)}%`
+}
+
+/**
+ * Evaluate one market as the engine would have at `asOf`, for backtests.
+ * Reads only trades before that moment and prices the market at
+ * `yesPriceAt`, the YES price then.
+ */
+export async function evaluateMarketAt(
+  db: Database,
+  row: MarketDatabaseRow,
+  options: { asOf: number, yesPriceAt: number, game?: LiveGame | null },
+): Promise<Candidate | null> {
+  return await evaluateMarket(db, normalizeMarketRow(row), { asOf: options.asOf, yesPriceAt: options.yesPriceAt, game: options.game ?? null })
 }

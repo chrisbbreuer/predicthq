@@ -51,4 +51,5 @@ export default {
   'trading:halt': 'Trading',
   'trading:resume': 'Trading',
   'trading:status': 'Trading',
+  'trading:backtest': 'Trading',
 } satisfies CommandRegistry

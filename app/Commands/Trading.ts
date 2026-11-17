@@ -3,6 +3,7 @@ import process from 'node:process'
 import { log } from '@stacksjs/cli'
 import { ExitCode } from '@stacksjs/types'
 import { Database } from '../Support/db'
+import { backtestGames } from '../Services/trading/backtest'
 import { haltState, setHalt } from '../Services/trading/halt'
 
 /**
@@ -96,4 +97,60 @@ export default function (cli: CLI) {
         db.close()
       }
     })
+
+  /**
+   * `buddy trading:backtest --date 20261116` - replay a finished day of
+   * games and score each strategy against how they ended, using only what
+   * was knowable at each checkpoint. Reads only; never places an order.
+   */
+  cli
+    .command('trading:backtest', 'Replay a finished day of games and score each strategy')
+    .option('--date <date>', 'Eastern date of the games, YYYYMMDD (default: yesterday)', { default: '' })
+    .option('--stake <stake>', 'Dollars per bet', { default: '1' })
+    .option('--bankroll <bankroll>', 'Starting bankroll for the sequential simulation', { default: '10' })
+    .option('--min-edge <edge>', 'Minimum model edge in probability points', { default: '0.03' })
+    .option('--max-events <n>', 'Cap on games replayed', { default: '400' })
+    .option('--json <path>', 'Also write the full report, every bet included, to this file', { default: '' })
+    .action(async (options: { date?: string, stake?: string, bankroll?: string, minEdge?: string, maxEvents?: string, json?: string }) => {
+      const db = new Database()
+      try {
+        const date = options.date || yesterdayEastern()
+        if (!/^\d{8}$/.test(date))
+          throw new Error('--date must be YYYYMMDD')
+        const report = await backtestGames(db, {
+          date,
+          stake: Number(options.stake) || 1,
+          bankroll: Number(options.bankroll) || 10,
+          minEdge: Number(options.minEdge) || 0.03,
+          maxEvents: Number(options.maxEvents) || 400,
+        })
+        log.info(`Backtest ${report.date}: ${report.events} games, ${report.checkpoints} checkpoints`)
+        log.info(`Brier (lower is better): market ${report.brier.market ?? '-'}, model ${report.brier.model ?? '-'} (model had a view at ${report.brier.modelViews})`)
+        for (const result of report.strategies) {
+          const roi = result.roi === null ? '-' : `${(result.roi * 100).toFixed(1)}%`
+          const pnl = `${result.pnl >= 0 ? '+' : ''}${result.pnl.toFixed(2)}`
+          log.info(`  ${result.strategy.padEnd(9)} ${String(result.bets).padStart(4)} bets ${String(result.wins).padStart(4)} won  staked ${result.staked.toFixed(2)}  fees ${result.fees.toFixed(2)}  P&L ${pnl}  ROI ${roi}  bankroll ends ${result.endingBankroll.toFixed(2)}`)
+        }
+        if (Object.keys(report.skipped).length)
+          log.info(`Skipped: ${Object.entries(report.skipped).map(([reason, count]) => `${reason} ${count}`).join(', ')}`)
+        if (options.json)
+          await Bun.write(options.json, JSON.stringify(report, null, 2))
+      }
+      catch (error) {
+        log.error(`Backtest failed: ${error instanceof Error ? error.message : String(error)}`)
+        process.exit(ExitCode.FatalError)
+      }
+      finally {
+        db.close()
+      }
+    })
+
+}
+
+/** Yesterday's date in US Eastern, `YYYYMMDD`. */
+function yesterdayEastern(): string {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' })
+    .formatToParts(new Date(Date.now() - 86_400_000))
+  const get = (type: string) => parts.find(part => part.type === type)?.value ?? ''
+  return `${get('year')}${get('month')}${get('day')}`
 }
