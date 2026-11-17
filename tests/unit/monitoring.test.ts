@@ -103,6 +103,26 @@ describe('health', () => {
     expect(health.checks.find(c => c.name === 'database')!.status).toBe('ok')
   })
 
+  it('says so when the database answers reads but refuses writes', async () => {
+    const readOnly = {
+      query: (sql: string) => ({ get: async () => (sql.includes('ingest_runs') ? { last_at: new Date().toISOString() } : { 1: 1 }) }),
+      prepare: () => ({
+        run: async () => { throw new Error('The MySQL server is running with the --read-only option so it cannot execute this statement (errno 1290)') },
+      }),
+    }
+
+    const health = await checkHealth(readOnly as any)
+
+    expect(health.status).toBe('degraded')
+    expect(health.checks.find(c => c.name === 'database')!.status).toBe('ok')
+    expect(health.checks.find(c => c.name === 'database-writes')).toMatchObject({ status: 'degraded', detail: 'read-only: the primary is refusing writes' })
+  })
+
+  it('reports writes as healthy on a writable database', async () => {
+    const health = await checkHealth(db as any)
+    expect(health.checks.find(c => c.name === 'database-writes')!.status).toBe('ok')
+  })
+
   it('is down when the database cannot answer', async () => {
     const broken = {
       query: () => ({ get: async () => { throw new Error('connection refused') } }),

@@ -46,6 +46,7 @@ export interface Health {
 export async function checkHealth(db: Database = new Database()): Promise<Health> {
   const checks = [
     await checkDatabase(db),
+    await checkWrites(db),
     await checkCache(),
     await checkIngest(db),
   ]
@@ -74,6 +75,35 @@ async function checkDatabase(db: Database): Promise<Check> {
   }
   catch (error) {
     return { name: 'database', status: 'down', detail: message(error), required: true }
+  }
+}
+
+/**
+ * Whether the database accepts writes, not just reads.
+ *
+ * `SELECT 1` answered happily for months while the production primary was
+ * read-only: sign-ins could not store a session, venue syncs could not
+ * store a balance, ingestion stopped, and every deploy failed at migrate,
+ * all behind a health check that said "reachable". A no-op UPDATE that
+ * matches no row is refused by a read-only server before it looks for one,
+ * so it detects exactly that state at the cost of an index probe.
+ *
+ * Degraded rather than down: a read-only primary is shared by every
+ * instance, and draining them all would turn read-only pages into none.
+ */
+async function checkWrites(db: Database): Promise<Check> {
+  try {
+    await db.prepare('UPDATE ingest_runs SET status = status WHERE id = -1').run()
+    return { name: 'database-writes', status: 'ok', detail: 'writable', required: false }
+  }
+  catch (error) {
+    const detail = message(error)
+    return {
+      name: 'database-writes',
+      status: 'degraded',
+      detail: /read-only|read only|1290/i.test(detail) ? 'read-only: the primary is refusing writes' : detail.slice(0, 200),
+      required: false,
+    }
   }
 }
 

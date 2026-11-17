@@ -120,11 +120,16 @@ export async function syncAccounts(db: Database, options: AccountSyncOptions = {
       // stopped updating has to be able to say why.
       if (error instanceof VenueError && isAuthFailure(error.status)) {
         await revokeAccount(db, account.id, message(error))
+          .catch(revokeError => log.warn(`[trading] could not mark account ${account.id} revoked: ${message(revokeError)}`))
         log.warn(`[trading] ${account.venue} rejected our credentials; account ${account.id} marked revoked`)
         continue
       }
 
+      // Recording the failure is itself a write, and the database refusing
+      // writes is one of the ways a sync fails. It must not take the other
+      // accounts' passes down with it.
       await noteFailure(db, account.id, error instanceof VenueError ? message(error) : 'Portfolio sync could not complete. Your last successful snapshot is preserved. Please retry.', stamp)
+        .catch(noteError => log.warn(`[trading] could not record the sync failure for account ${account.id}: ${message(noteError)}`))
       log.warn(`[trading] could not sync account ${account.id}: ${message(error)}`)
     }
   }
