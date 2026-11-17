@@ -2,7 +2,7 @@ import type { Database } from '../../Support/db'
 import type { KalshiCandle } from '../prediction-markets/kalshi-public'
 import type { Candidate, MarketDatabaseRow } from './evidence'
 import type { LiveGame } from './live-games'
-import { kalshiCandles } from '../prediction-markets/kalshi-public'
+import { kalshiCandles, kalshiMarkets } from '../prediction-markets/kalshi-public'
 import { evaluateMarketAt } from './evidence'
 import { liveGameFor, parseGameTicker } from './live-games'
 
@@ -58,6 +58,10 @@ export interface BacktestBet {
   fee: number
   won: boolean
   pnl: number
+  /** The market's midpoint at the time. */
+  mid: number
+  /** The model's YES probability, when it had a view. */
+  fair: number | null
 }
 
 export interface StrategyResult {
@@ -83,7 +87,7 @@ export interface BacktestReport {
   skipped: Record<string, number>
 }
 
-const DEFAULT_SERIES = ['KXNBAGAME', 'KXNFLGAME', 'KXNCAAFGAME', 'KXNCAAMBGAME', 'KXNHLGAME', 'KXWNBAGAME', 'KXMLBGAME']
+const DEFAULT_SERIES = ['KXNBAGAME', 'KXNFLGAME', 'KXNCAAFGAME', 'KXNCAAMBGAME', 'KXNCAAWBGAME', 'KXNHLGAME', 'KXWNBAGAME', 'KXMLBGAME']
 
 /** Kalshi's taker fee for `contracts` at `price`, rounded up to the cent. */
 export function kalshiFee(contracts: number, price: number): number {
@@ -167,9 +171,17 @@ export async function backtestGames(db: Database, options: BacktestOptions): Pro
     rows.push(...await db.prepare<MarketDatabaseRow & { result: string }>(`
       SELECT id, venue, external_id, question, outcome_label, category, last_price, liquidity, result
       FROM prediction_markets
-      WHERE venue = 'kalshi' AND external_id LIKE ? AND result IN ('yes', 'no')
+      WHERE venue = 'kalshi' AND external_id LIKE ?
       ORDER BY external_id
     `).all(`${prefix}-${yymmdd}%`))
+  }
+
+  // Ingestion does not always record the settlement, so the venue's own
+  // result is the source of truth; a market it has not settled is left out.
+  const settled = await kalshiMarkets(rows.map(row => row.external_id), 600_000).catch(() => new Map())
+  for (const row of rows as Array<MarketDatabaseRow & { result: string }>) {
+    const result = settled.get(row.external_id)?.result
+    row.result = result === 'yes' || result === 'no' ? result : (row.result === 'yes' || row.result === 'no' ? row.result : '')
   }
 
   // One market per event: the alphabetically first outcome.
@@ -182,6 +194,10 @@ export async function backtestGames(db: Database, options: BacktestOptions): Pro
     }
     if (/-TIE$/i.test(row.external_id) || byEvent.has(ref.eventTicker))
       continue
+    if (row.result !== 'yes' && row.result !== 'no') {
+      skip('not settled')
+      continue
+    }
     byEvent.set(ref.eventTicker, row)
   }
   const events = [...byEvent.values()].slice(0, options.maxEvents ?? 400)
@@ -249,12 +265,19 @@ export async function backtestGames(db: Database, options: BacktestOptions): Pro
           return
         const won = side === 'yes' ? outcome === 1 : outcome === 0
         const { fee, pnl } = settleBet(stake, price, won)
-        bets.push({ strategy, ticker: row.external_id, label: row.outcome_label || row.question, checkpoint, at: ts, side, price: Math.round(price * 1000) / 1000, stake, fee, won, pnl })
+        bets.push({ strategy, ticker: row.external_id, label: row.outcome_label || row.question, checkpoint, at: ts, side, price: Math.round(price * 1000) / 1000, stake, fee, won, pnl, mid: Math.round(point.mid * 1000) / 1000, fair: candidate ? Math.round(modelYes * 1000) / 1000 : null })
       }
 
       // The model, only where it disagrees with the market by enough.
-      if (candidate && Math.abs(modelYes - point.mid) >= minEdge)
-        place('model', modelYes > point.mid ? 'yes' : 'no')
+      // Split by phase and by size of disagreement, to see where it helps.
+      const edge = Math.abs(modelYes - point.mid)
+      if (candidate && edge >= minEdge) {
+        const side = modelYes > point.mid ? 'yes' : 'no'
+        place('model', side)
+        place(checkpoint === 'pre-game' ? 'model-pre' : 'model-live', side)
+        if (edge >= 0.08)
+          place('model-8pt', side)
+      }
 
       // Plain baselines, to tell skill from luck.
       place('favorite', point.mid >= 0.5 ? 'yes' : 'no')
@@ -272,7 +295,27 @@ export async function backtestGames(db: Database, options: BacktestOptions): Pro
     }
   }
 
-  const strategies = [...new Set(bets.map(bet => bet.strategy))].map((strategy): StrategyResult => {
+  const strategies = summarizeBets(bets, bankroll)
+
+  const mean = (values: number[]) => values.length ? Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10000) / 10000 : null
+  return {
+    date: options.date,
+    events: events.length,
+    checkpoints,
+    brier: { market: mean(brierMarket), model: mean(brierModel), modelViews },
+    strategies,
+    bets,
+    skipped,
+  }
+}
+
+/**
+ * Score each strategy's bets: totals, plus a bankroll that starts at
+ * `bankroll` and takes every bet in time order until it can no longer
+ * cover a stake.
+ */
+export function summarizeBets(bets: BacktestBet[], bankroll: number): StrategyResult[] {
+  return [...new Set(bets.map(bet => bet.strategy))].map((strategy): StrategyResult => {
     const mine = bets.filter(bet => bet.strategy === strategy).sort((a, b) => a.at - b.at)
     let bank = bankroll
     for (const bet of mine) {
@@ -293,15 +336,4 @@ export async function backtestGames(db: Database, options: BacktestOptions): Pro
       endingBankroll: Math.round(bank * 100) / 100,
     }
   }).sort((a, b) => b.pnl - a.pnl)
-
-  const mean = (values: number[]) => values.length ? Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10000) / 10000 : null
-  return {
-    date: options.date,
-    events: events.length,
-    checkpoints,
-    brier: { market: mean(brierMarket), model: mean(brierModel), modelViews },
-    strategies,
-    bets,
-    skipped,
-  }
 }

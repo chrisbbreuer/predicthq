@@ -3,7 +3,8 @@ import process from 'node:process'
 import { log } from '@stacksjs/cli'
 import { ExitCode } from '@stacksjs/types'
 import { Database } from '../Support/db'
-import { backtestGames } from '../Services/trading/backtest'
+import type { BacktestReport } from '../Services/trading/backtest'
+import { backtestGames, summarizeBets } from '../Services/trading/backtest'
 import { haltState, setHalt } from '../Services/trading/halt'
 
 /**
@@ -109,30 +110,55 @@ export default function (cli: CLI) {
     .option('--stake <stake>', 'Dollars per bet', { default: '1' })
     .option('--bankroll <bankroll>', 'Starting bankroll for the sequential simulation', { default: '10' })
     .option('--min-edge <edge>', 'Minimum model edge in probability points', { default: '0.03' })
-    .option('--max-events <n>', 'Cap on games replayed', { default: '400' })
+    .option('--days <n>', 'Replay this many days ending on --date and combine them', { default: '1' })
+    .option('--max-events <n>', 'Cap on games replayed per day', { default: '400' })
     .option('--json <path>', 'Also write the full report, every bet included, to this file', { default: '' })
-    .action(async (options: { date?: string, stake?: string, bankroll?: string, minEdge?: string, maxEvents?: string, json?: string }) => {
+    .action(async (options: { date?: string, days?: string, stake?: string, bankroll?: string, minEdge?: string, maxEvents?: string, json?: string }) => {
       const db = new Database()
       try {
         const date = options.date || yesterdayEastern()
         if (!/^\d{8}$/.test(date))
           throw new Error('--date must be YYYYMMDD')
-        const report = await backtestGames(db, {
-          date,
-          stake: Number(options.stake) || 1,
-          bankroll: Number(options.bankroll) || 10,
-          minEdge: Number(options.minEdge) || 0.03,
-          maxEvents: Number(options.maxEvents) || 400,
-        })
-        log.info(`Backtest ${report.date}: ${report.events} games, ${report.checkpoints} checkpoints`)
-        log.info(`Brier (lower is better): market ${report.brier.market ?? '-'}, model ${report.brier.model ?? '-'} (model had a view at ${report.brier.modelViews})`)
-        for (const result of report.strategies) {
-          const roi = result.roi === null ? '-' : `${(result.roi * 100).toFixed(1)}%`
-          const pnl = `${result.pnl >= 0 ? '+' : ''}${result.pnl.toFixed(2)}`
-          log.info(`  ${result.strategy.padEnd(9)} ${String(result.bets).padStart(4)} bets ${String(result.wins).padStart(4)} won  staked ${result.staked.toFixed(2)}  fees ${result.fees.toFixed(2)}  P&L ${pnl}  ROI ${roi}  bankroll ends ${result.endingBankroll.toFixed(2)}`)
+        const bankroll = Number(options.bankroll) || 10
+        const days = Math.max(1, Math.min(30, Number(options.days) || 1))
+        const reports: BacktestReport[] = []
+        for (let back = days - 1; back >= 0; back--) {
+          const day = shiftDate(date, -back)
+          const report = await backtestGames(db, {
+            date: day,
+            stake: Number(options.stake) || 1,
+            bankroll,
+            minEdge: Number(options.minEdge) || 0.03,
+            maxEvents: Number(options.maxEvents) || 400,
+          })
+          reports.push(report)
+          printBacktest(report)
         }
-        if (Object.keys(report.skipped).length)
-          log.info(`Skipped: ${Object.entries(report.skipped).map(([reason, count]) => `${reason} ${count}`).join(', ')}`)
+        if (reports.length > 1) {
+          const bets = reports.flatMap(report => report.bets)
+          const views = reports.reduce((sum, report) => sum + report.brier.modelViews, 0)
+          const weigh = (key: 'market' | 'model') => {
+            let total = 0
+            let count = 0
+            for (const report of reports) {
+              if (report.brier[key] !== null) {
+                total += report.brier[key]! * report.checkpoints
+                count += report.checkpoints
+              }
+            }
+            return count ? Math.round((total / count) * 10000) / 10000 : null
+          }
+          printBacktest({
+            date: `${reports[0]!.date}-${reports.at(-1)!.date}`,
+            events: reports.reduce((sum, report) => sum + report.events, 0),
+            checkpoints: reports.reduce((sum, report) => sum + report.checkpoints, 0),
+            brier: { market: weigh('market'), model: weigh('model'), modelViews: views },
+            strategies: summarizeBets(bets, bankroll),
+            bets,
+            skipped: {},
+          })
+        }
+        const report = reports.length === 1 ? reports[0] : reports
         if (options.json)
           await Bun.write(options.json, JSON.stringify(report, null, 2))
       }
@@ -153,4 +179,21 @@ function yesterdayEastern(): string {
     .formatToParts(new Date(Date.now() - 86_400_000))
   const get = (type: string) => parts.find(part => part.type === type)?.value ?? ''
   return `${get('year')}${get('month')}${get('day')}`
+}
+
+function shiftDate(yyyymmdd: string, days: number): string {
+  const date = new Date(Date.UTC(Number(yyyymmdd.slice(0, 4)), Number(yyyymmdd.slice(4, 6)) - 1, Number(yyyymmdd.slice(6, 8)) + days))
+  return date.toISOString().slice(0, 10).replaceAll('-', '')
+}
+
+function printBacktest(report: BacktestReport): void {
+  log.info(`Backtest ${report.date}: ${report.events} games, ${report.checkpoints} checkpoints`)
+  log.info(`  Brier (lower is better): market ${report.brier.market ?? '-'}, model ${report.brier.model ?? '-'} (model had a view at ${report.brier.modelViews})`)
+  for (const result of report.strategies) {
+    const roi = result.roi === null ? '-' : `${(result.roi * 100).toFixed(1)}%`
+    const pnl = `${result.pnl >= 0 ? '+' : ''}${result.pnl.toFixed(2)}`
+    log.info(`  ${result.strategy.padEnd(10)} ${String(result.bets).padStart(4)} bets ${String(result.wins).padStart(4)} won  staked ${result.staked.toFixed(2)}  fees ${result.fees.toFixed(2)}  P&L ${pnl}  ROI ${roi}  bankroll ends ${result.endingBankroll.toFixed(2)}`)
+  }
+  if (Object.keys(report.skipped).length)
+    log.info(`  Skipped: ${Object.entries(report.skipped).map(([reason, count]) => `${reason} ${count}`).join(', ')}`)
 }
