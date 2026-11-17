@@ -29,7 +29,8 @@ route.group({ middleware: ['auth', 'throttle:30,1'] }, () => {
 // Our odds feed. The REST side (`/api/feed/books`, `events`, `markets`,
 // `selections`, `odds`, `history`) is generated from the models by
 // `useApi`; the live stream is the one endpoint written by hand.
-route.group({ middleware: ['auth', 'throttle:30,1'] }, () => {
+// Behind the account's API key, like the REST side.
+route.group({ middleware: ['throttle:30,1', 'apikey:required'] }, () => {
   route.get('/feed/stream', 'Actions/Feed/StreamOdds')
 })
 

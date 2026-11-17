@@ -152,9 +152,16 @@ export async function ingestOdds(db: Database, provider?: OddsProvider): Promise
         const homeTeamId = await resolveTeam(transaction, sport.id, event.homeTeam)
         const awayTeamId = await resolveTeam(transaction, sport.id, event.awayTeam)
 
+        // Link the event under the book that reported it when there is one
+        // book. The matcher never attaches a second record from the same
+        // provider to an event, so filing every native book under one
+        // shared name meant the second book to see a game created a
+        // duplicate of it instead of joining it.
+        const linkProvider = event.books.length === 1 ? event.books[0]!.key.toLowerCase() : active.name
+
         const { eventId } = await resolveEvent(transaction, {
         sportId: sport.id,
-        provider: active.name,
+        provider: linkProvider,
         externalId: event.externalId,
         title: `${event.awayTeam} at ${event.homeTeam}`,
         commenceAt: event.commenceAt,

@@ -132,7 +132,9 @@ function toGameStates(markets: KalshiRawMarket[], sportSlug: string, gamesByDate
     const state: GameState = {
       eventTicker,
       sportSlug,
-      commenceAt: game.startsAt,
+      // ESPN writes `2026-11-18T01:00Z`; the full form is what the rest of
+      // the table stores and what the event matcher compares against.
+      commenceAt: new Date(game.startsAt).toISOString(),
       homeTeam: game.home.name,
       awayTeam: game.away.name,
       outcomes: new Map(),
