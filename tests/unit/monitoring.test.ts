@@ -10,10 +10,11 @@ import type { Database } from 'bun:sqlite'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import process from 'node:process'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { matches } from '../../app/Services/alerts'
 import { checkHealth } from '../../app/Services/health'
-import { findStalls } from '../../app/Services/watchdog'
+import { findStalls, operatorId } from '../../app/Services/watchdog'
 import { schemaFor } from '../support/schema'
 
 const NOW = new Date('2026-08-06T12:00:00.000Z')
@@ -87,6 +88,42 @@ describe('the watchdog', () => {
 
     expect(stall!.ageMinutes).toBeNull()
     expect(stall!.reason).toContain('never')
+  })
+})
+
+describe('the watchdog\'s recipient', () => {
+  let users: Database
+
+  beforeEach(() => {
+    users = schemaFor(join(dir, 'users.sqlite'), ['users'])
+  })
+
+  afterEach(() => {
+    users.close()
+    delete process.env.WATCHDOG_NOTIFY_EMAIL
+  })
+
+  function user(email: string): void {
+    users.prepare('INSERT INTO users (name, email, password) VALUES (?, ?, ?)').run(email, email, 'x')
+  }
+
+  it('is nobody when there are no accounts, rather than a user id the foreign key refuses', async () => {
+    expect(await operatorId(users as any)).toBeNull()
+  })
+
+  it('is the first account by default', async () => {
+    user('owner@example.com')
+    user('second@example.com')
+
+    expect(await operatorId(users as any)).toBe(1)
+  })
+
+  it('is the account WATCHDOG_NOTIFY_EMAIL names', async () => {
+    user('owner@example.com')
+    user('ops@example.com')
+    process.env.WATCHDOG_NOTIFY_EMAIL = 'ops@example.com'
+
+    expect(await operatorId(users as any)).toBe(2)
   })
 })
 

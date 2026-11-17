@@ -30,6 +30,8 @@ export default defineModel({
     // rows both were full scans; the smart-money page took ~27s to render.
     { name: 'notional', columns: ['notional'] },
     { name: 'market_traded_at', columns: ['predictionMarketId', 'tradedAt'] },
+    // Settlement scoring finds the markets that still have unscored fills.
+    { name: 'winner_market', columns: ['isWinner', 'predictionMarketId'] },
   ],
 
   attributes: {

@@ -65,7 +65,7 @@ export async function runWatchdog(db: Database, now: Date = new Date()): Promise
     if (await alertedRecently(db, stall, now))
       continue
 
-    await announce(stall)
+    await announce(db, stall)
     alerted++
   }
 
@@ -160,14 +160,18 @@ async function alertedRecently(db: Database, stall: Stall, now: Date): Promise<b
  * running in every environment — but a stall that fails to notify and
  * leaves nothing behind is the failure this whole file exists to end.
  */
-async function announce(stall: Stall): Promise<void> {
+async function announce(db: Database, stall: Stall): Promise<void> {
   const loop = `${stall.provider}/${stall.kind}`
   log.error(`[watchdog] ${loop} ${stall.reason}`)
 
   const payload = { loop, provider: stall.provider, kind: stall.kind, status: stall.status, ageMinutes: stall.ageMinutes, reason: stall.reason }
 
   try {
-    await useDatabase().send({ userId: 0, type: 'ingest_stalled', data: payload })
+    const userId = await operatorId(db)
+    if (userId === null)
+      log.warn('[watchdog] no account to notify of the stall; set WATCHDOG_NOTIFY_EMAIL or create a user')
+    else
+      await useDatabase().send({ userId, type: 'ingest_stalled', data: payload })
   }
   catch (error) {
     log.warn(`[watchdog] could not record the stall notification: ${message(error)}`)
@@ -179,6 +183,24 @@ async function announce(stall: Stall): Promise<void> {
   catch (error) {
     log.warn(`[watchdog] could not broadcast the stall: ${message(error)}`)
   }
+}
+
+/**
+ * The account a stall notification belongs to.
+ *
+ * `notifications.user_id` references `users`, so the row needs a real
+ * account; the old `0` was refused by the foreign key on every stall, and
+ * with no row written the cooldown above never engaged either. The site
+ * has no admin role, so the owner is the first account created, unless
+ * `WATCHDOG_NOTIFY_EMAIL` names another.
+ */
+export async function operatorId(db: Database): Promise<number | null> {
+  const email = process.env.WATCHDOG_NOTIFY_EMAIL?.trim()
+  const row = email
+    ? await db.query<{ id: number }>('SELECT id FROM users WHERE email = ? LIMIT 1').get(email)
+    : await db.query<{ id: number }>('SELECT id FROM users ORDER BY id LIMIT 1').get()
+
+  return row ? Number(row.id) : null
 }
 
 async function countLoops(db: Database): Promise<number> {

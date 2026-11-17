@@ -30,17 +30,64 @@ export interface AnalyticsSummary {
   whales: number
 }
 
+/** Settled markets whose unscored fills one pass picks up. */
+const SETTLEMENT_MARKETS = 200
+
+interface PendingFill {
+  id: number
+  market_trader_id: number | null
+  side: string
+  result: string
+}
+
+/**
+ * Unscored fills on markets that have settled, in two indexed steps.
+ *
+ * A single join, filtered on market status and ordered by fill id, made
+ * MySQL scan every market and read every fill on each settled one before
+ * sorting them. At seven million fills that ran past Vitess's 30-second
+ * statement limit, so the job failed every pass and the backlog grew.
+ *
+ * Starting from the markets avoids that. The distinct markets that still
+ * have unscored fills come from `market_trades_winner_market` without
+ * touching a row, and the fills for a bounded set of those markets come
+ * from the same index. The order of scoring does not matter: whatever this
+ * pass leaves is still unscored for the next one.
+ */
+async function unscoredSettledFills(db: Database): Promise<PendingFill[]> {
+  const markets = await db.query<{ id: number, result: string }>(`
+    SELECT pm.id, pm.result
+    FROM (SELECT DISTINCT prediction_market_id AS id FROM market_trades WHERE is_winner = -1) pending
+    JOIN prediction_markets pm ON pm.id = pending.id
+    WHERE pm.status = 'settled' AND pm.result != ''
+    LIMIT ?
+  `).all(SETTLEMENT_MARKETS)
+
+  if (markets.length === 0)
+    return []
+
+  const results = new Map(markets.map(market => [Number(market.id), market.result]))
+  const ids = [...results.keys()]
+
+  const fills = await db.query<{ id: number, market_trader_id: number | null, side: string, prediction_market_id: number }>(`
+    SELECT id, market_trader_id, side, prediction_market_id
+    FROM market_trades
+    WHERE is_winner = -1 AND prediction_market_id IN (${ids.map(() => '?').join(', ')})
+    LIMIT ?
+  `).all(...ids, ANALYTICS_BATCH)
+
+  return fills.map(fill => ({
+    id: fill.id,
+    market_trader_id: fill.market_trader_id,
+    side: fill.side,
+    result: results.get(Number(fill.prediction_market_id)) ?? '',
+  }))
+}
+
 export async function runAnalytics(db: Database, touchedTraderIds?: readonly number[]): Promise<AnalyticsSummary> {
   const now = new Date().toISOString()
 
-  const pending = await db.query<{ id: number, market_trader_id: number | null, side: string, result: string }>(`
-    SELECT t.id, t.market_trader_id, t.side, pm.result
-    FROM market_trades t
-    JOIN prediction_markets pm ON pm.id = t.prediction_market_id
-    WHERE t.is_winner = -1 AND pm.status = 'settled' AND pm.result != ''
-    ORDER BY t.id
-    LIMIT ?
-  `).all(ANALYTICS_BATCH)
+  const pending = await unscoredSettledFills(db)
 
   // Pass 2 — recompute aggregates for every attributable trader. The smart
   // score shrinks the raw win rate toward 0.5 with PRIOR_WEIGHT pseudo-trades
