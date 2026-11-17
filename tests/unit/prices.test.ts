@@ -98,6 +98,20 @@ describe('writePrices', () => {
     expect(countSnapshots(db)).toBe(afterFirst)
   })
 
+  it('compares prices at the two decimals the columns store', async () => {
+    const db = freshDb()
+
+    // An exchange quotes 1 / 0.62 = 1.6129. Production stores 1.61, so a
+    // finer comparison called every pass a move and snapshotted it.
+    await writePrices(db as any, [{ selectionId: 1, bookmakerId: 1, price: 1.6129 }])
+    await tick()
+    const again = await writePrices(db as any, [{ selectionId: 1, bookmakerId: 1, price: 1.6122, point: null }])
+
+    expect(again.changed).toBe(0)
+    expect(countSnapshots(db)).toBe(1)
+    expect((db.query('SELECT price FROM odds').get() as { price: number }).price).toBeCloseTo(1.61, 5)
+  })
+
   it('appends history when the price moves', async () => {
     const db = freshDb()
 

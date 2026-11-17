@@ -557,8 +557,10 @@ export const polymarket: BookAdapter = {
       ctx.tracker.fail(`polymarket: ${sport.slug} events unavailable`)
       return []
     }
+    // The same near-term window the stream carries. Games days out barely
+    // move, and listing all of them makes every pass a heavy write.
     const now = new Date()
-    return states.flatMap((state) => {
+    return states.filter(state => streamable(state.commenceAt, now.getTime())).flatMap((state) => {
       const event = toFeedEvent(state, now)
       return event ? [event] : []
     })

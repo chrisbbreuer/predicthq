@@ -478,8 +478,10 @@ export const kalshi: BookAdapter = {
       ctx.tracker.fail(`kalshi: ${sport.slug} markets unavailable`)
       return []
     }
+    // The same near-term window the stream carries. Games days out barely
+    // move, and listing all of them makes every pass a heavy write.
     const now = new Date()
-    return states.flatMap((state) => {
+    return states.filter(state => streamable(state.commenceAt, now.getTime())).flatMap((state) => {
       const event = toFeedEvent(state, now)
       return event ? [event] : []
     })

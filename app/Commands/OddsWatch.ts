@@ -47,6 +47,9 @@ async function loadScheduledEvents(db: Database): Promise<ScheduledEvent[]> {
   `).all(horizon)
 }
 
+/** Games written per transaction when flushing streamed prices. */
+const STREAM_BATCH = 8
+
 export default function (cli: CLI) {
   cli
     .command('odds:watch', 'Run the realtime odds loop')
@@ -84,10 +87,17 @@ export default function (cli: CLI) {
       // Streamed prices, coalesced per game and written every two seconds
       // through the same writer polling uses, so a pushed price and a
       // polled one are stored, de-duplicated and snapshotted identically.
+      //
+      // A few games per transaction: Vitess aborts any transaction open past
+      // thirty seconds, and a flush right after startup, before any id is
+      // remembered, can carry every game on the slate.
       const pushes = new PushBuffer(async (events) => {
-        const result = await ingestOdds(db, { name: 'stream', fetchEvents: async () => events })
-        if (result.pricesChanged > 0)
-          log.debug(`[odds] stream: ${result.pricesChanged} price${result.pricesChanged === 1 ? '' : 's'} moved across ${events.length} game${events.length === 1 ? '' : 's'}`)
+        for (let i = 0; i < events.length; i += STREAM_BATCH) {
+          const batch = events.slice(i, i + STREAM_BATCH)
+          const result = await ingestOdds(db, { name: 'stream', fetchEvents: async () => batch })
+          if (result.pricesChanged > 0)
+            log.debug(`[odds] stream: ${result.pricesChanged} price${result.pricesChanged === 1 ? '' : 's'} moved across ${batch.length} game${batch.length === 1 ? '' : 's'}`)
+        }
       })
 
       const engine = new OddsEngine({

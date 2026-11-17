@@ -125,6 +125,11 @@ const ODDS_MERGE_COLUMNS = [
  * what the realtime engine asks for. The work is identical; it now travels
  * in three statements per chunk instead of four per row.
  */
+/** A number at the two decimals the price columns store. */
+function toCents(value: number): number {
+  return Math.round(value * 100) / 100
+}
+
 export async function writePrices(db: Database, writes: PriceWrite[]): Promise<PriceWriteResult> {
   const now = nowIso()
 
@@ -134,9 +139,15 @@ export async function writePrices(db: Database, writes: PriceWrite[]): Promise<P
   // while Postgres and SQLite reject the whole statement.
   const latest = new Map<string, PriceWrite>()
   for (const w of writes) {
-    if (!Number.isFinite(w.price) || w.price <= 1)
+    if (!Number.isFinite(w.price))
       continue
-    latest.set(priceKey(w.selectionId, w.bookmakerId), w)
+    // `odds.price` and `point` hold two decimals. Comparing a stored 1.61
+    // with an incoming 1.6129 would call every pass a move and write a
+    // snapshot each time, so prices are put at the stored precision first.
+    const price = toCents(w.price)
+    if (price <= 1)
+      continue
+    latest.set(priceKey(w.selectionId, w.bookmakerId), { ...w, price, point: w.point === null || w.point === undefined ? w.point : toCents(w.point) })
   }
 
   const pending = [...latest.values()]
