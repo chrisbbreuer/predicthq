@@ -53,6 +53,19 @@ import { positionScorecards, scorecardKey } from '../../Services/trading/positio
  */
 const MIN_REFRESH_SECONDS = 20
 
+/**
+ * How long a decision waits for a person before it stops being offered.
+ * A decision is a price and a reason from one moment; a day later the
+ * market has moved or closed, and a "Place" button on it invites an order
+ * the engine would never make now.
+ */
+const PENDING_MAX_AGE_HOURS = 24
+
+/** UTC `YYYY-MM-DD HH:MM:SS`, the zone-less shape timestamps are stored in. */
+function databaseTime(ms: number): string {
+  return new Date(ms).toISOString().slice(0, 19).replace('T', ' ')
+}
+
 interface AccountRow {
   id: number
   venue: string
@@ -501,10 +514,10 @@ function pendingDecisions(db: Db, userId: number): Promise<DecisionRow[]> {
     FROM trade_decisions d
     JOIN trading_strategies s ON s.id = d.trading_strategy_id
     LEFT JOIN prediction_markets m ON m.id = d.prediction_market_id
-    WHERE s.user_id = ? AND d.status IN ('approved', 'review')
+    WHERE s.user_id = ? AND d.status IN ('approved', 'review') AND d.created_at >= ?
     ORDER BY d.updated_at DESC, d.id DESC
     LIMIT 25
-  `).all(userId)
+  `).all(userId, databaseTime(Date.now() - PENDING_MAX_AGE_HOURS * 3600_000))
 }
 
 /** The last positions to resolve, and what they returned. */

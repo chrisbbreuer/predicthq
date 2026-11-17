@@ -13,6 +13,9 @@ import { executeStrategy, type Strategy } from '../../Services/trading/execute'
  * risk checks apply identically — the difference between the two paths
  * is who initiated it, and nothing else.
  */
+/** Beyond this a queued decision can be skipped but not placed. */
+const APPROVAL_MAX_AGE_HOURS = 6
+
 export default {
   name: 'ReviewDecision',
   description: 'Approve a queued decision (placing its order) or reject it.',
@@ -34,8 +37,8 @@ export default {
     const db = new Database()
 
     try {
-      const decision = await db.prepare<{ id: number, status: string, trading_strategy_id: number, user_id: number }>(`
-        SELECT d.id, d.status, d.trading_strategy_id, s.user_id
+      const decision = await db.prepare<{ id: number, status: string, trading_strategy_id: number, user_id: number, created_at: string }>(`
+        SELECT d.id, d.status, d.trading_strategy_id, s.user_id, d.created_at
         FROM trade_decisions d
         JOIN trading_strategies s ON s.id = d.trading_strategy_id
         WHERE d.id = ?
@@ -58,6 +61,13 @@ export default {
 
         return { id: decisionId, status: 'rejected' }
       }
+
+      // A decision carries the price and evidence of the moment it was made.
+      // Hours later that moment is gone, so approving it would place an
+      // order on reasoning that no longer holds. Refuse, and say why.
+      const madeAt = Date.parse(`${String(decision.created_at).replace(' ', 'T').replace(/Z?$/, 'Z')}`)
+      if (Number.isFinite(madeAt) && Date.now() - madeAt > APPROVAL_MAX_AGE_HOURS * 3600_000)
+        return response.error('This decision is too old to place: the price and evidence behind it have moved on. Skip it and let the strategy decide again.', 409)
 
       const strategy = await loadStrategyForReview(db, decision.trading_strategy_id)
 
