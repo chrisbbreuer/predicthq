@@ -114,7 +114,6 @@ export default function (cli: CLI) {
     .option('--max-events <n>', 'Cap on games replayed per day', { default: '400' })
     .option('--json <path>', 'Also write the full report, every bet included, to this file', { default: '' })
     .action(async (options: { date?: string, days?: string, stake?: string, bankroll?: string, minEdge?: string, maxEvents?: string, json?: string }) => {
-      const db = new Database()
       try {
         const date = options.date || yesterdayEastern()
         if (!/^\d{8}$/.test(date))
@@ -124,7 +123,7 @@ export default function (cli: CLI) {
         const reports: BacktestReport[] = []
         for (let back = days - 1; back >= 0; back--) {
           const day = shiftDate(date, -back)
-          const report = await backtestGames(db, {
+          const report = await backtestGames({
             date: day,
             stake: Number(options.stake) || 1,
             bankroll,
@@ -155,6 +154,7 @@ export default function (cli: CLI) {
             brier: { market: weigh('market'), model: weigh('model'), modelViews: views },
             strategies: summarizeBets(bets, bankroll),
             bets,
+            views: reports.flatMap(report => report.views),
             skipped: {},
           })
         }
@@ -165,9 +165,6 @@ export default function (cli: CLI) {
       catch (error) {
         log.error(`Backtest failed: ${error instanceof Error ? error.message : String(error)}`)
         process.exit(ExitCode.FatalError)
-      }
-      finally {
-        db.close()
       }
     })
 

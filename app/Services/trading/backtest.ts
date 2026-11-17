@@ -1,8 +1,9 @@
-import type { Database } from '../../Support/db'
-import type { KalshiCandle } from '../prediction-markets/kalshi-public'
+import type { KalshiCandle, KalshiTrade } from '../prediction-markets/kalshi-public'
 import type { Candidate, MarketDatabaseRow } from './evidence'
 import type { LiveGame } from './live-games'
-import { kalshiCandles, kalshiMarkets } from '../prediction-markets/kalshi-public'
+import { Database as Sqlite } from 'bun:sqlite'
+import { Database } from '../../Support/db'
+import { kalshiCandles, kalshiSettledMarkets, kalshiTrades } from '../prediction-markets/kalshi-public'
 import { evaluateMarketAt } from './evidence'
 import { liveGameFor, parseGameTicker } from './live-games'
 
@@ -17,7 +18,9 @@ import { liveGameFor, parseGameTicker } from './live-games'
  *
  *   - the market's own price is the baseline forecast;
  *   - the evidence engine is replayed with `asOf` set to that moment, so it
- *     reads only trades from before it;
+ *     reads only trades from before it. The trades come from Kalshi's public
+ *     tape, loaded into a throwaway in-memory database, so a replay never
+ *     depends on what our own ingestion happened to capture;
  *   - a handful of plain strategies decide whether to bet.
  *
  * Bets are filled at the quote that was resting then (the ask for the side
@@ -26,7 +29,7 @@ import { liveGameFor, parseGameTicker } from './live-games'
  *
  * Two-team events list one market per team, mirror images of each other;
  * only one market per event is scored so a single game is never counted
- * twice. Nothing here writes to the database or contacts an account.
+ * twice. Nothing here writes to our database or contacts an account.
  */
 
 export interface BacktestOptions {
@@ -64,6 +67,20 @@ export interface BacktestBet {
   fair: number | null
 }
 
+/** What the model thought at one checkpoint, bet or not, for signal analysis. */
+export interface ModelView {
+  ticker: string
+  checkpoint: string
+  inPlay: boolean
+  mid: number
+  /** The model's YES probability. */
+  fair: number
+  confidence: number
+  outcome: 0 | 1
+  /** Each signal's contribution, signed towards YES. */
+  signals: Record<string, number>
+}
+
 export interface StrategyResult {
   strategy: string
   bets: number
@@ -84,6 +101,7 @@ export interface BacktestReport {
   brier: { market: number | null, model: number | null, modelViews: number }
   strategies: StrategyResult[]
   bets: BacktestBet[]
+  views: ModelView[]
   skipped: Record<string, number>
 }
 
@@ -157,7 +175,7 @@ function gameAt(game: LiveGame | null, ts: number, startsAt: number): LiveGame |
   return { ...game, state: ts < startsAt ? 'pre' : 'in', status: '', home: { ...game.home, score: null }, away: { ...game.away, score: null } }
 }
 
-export async function backtestGames(db: Database, options: BacktestOptions): Promise<BacktestReport> {
+export async function backtestGames(options: BacktestOptions): Promise<BacktestReport> {
   const stake = options.stake ?? 1
   const bankroll = options.bankroll ?? 10
   const minEdge = options.minEdge ?? 0.03
@@ -166,27 +184,32 @@ export async function backtestGames(db: Database, options: BacktestOptions): Pro
   const skip = (reason: string) => { skipped[reason] = (skipped[reason] ?? 0) + 1 }
 
   const yymmdd = `${options.date.slice(2, 4)}${['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'][Number(options.date.slice(4, 6)) - 1]}${options.date.slice(6, 8)}`
-  const rows: MarketDatabaseRow[] = []
+  // A day's games close between that morning and two days later at most.
+  const dayStart = Date.UTC(Number(options.date.slice(0, 4)), Number(options.date.slice(4, 6)) - 1, Number(options.date.slice(6, 8))) / 1000
+  const rows: Array<MarketDatabaseRow & { result: string }> = []
   for (const prefix of series) {
-    rows.push(...await db.prepare<MarketDatabaseRow & { result: string }>(`
-      SELECT id, venue, external_id, question, outcome_label, category, last_price, liquidity, result
-      FROM prediction_markets
-      WHERE venue = 'kalshi' AND external_id LIKE ?
-      ORDER BY external_id
-    `).all(`${prefix}-${yymmdd}%`))
+    const markets = await kalshiSettledMarkets(prefix, dayStart, dayStart + 2 * 86_400).catch(() => [])
+    for (const market of markets) {
+      if (!market.ticker.startsWith(`${prefix}-${yymmdd}`))
+        continue
+      rows.push({
+        id: rows.length + 1,
+        venue: 'kalshi',
+        external_id: market.ticker,
+        question: market.title,
+        outcome_label: market.yesSubTitle,
+        category: 'sports',
+        last_price: market.lastPrice ?? 0,
+        liquidity: 0,
+        result: market.result,
+      })
+    }
   }
-
-  // Ingestion does not always record the settlement, so the venue's own
-  // result is the source of truth; a market it has not settled is left out.
-  const settled = await kalshiMarkets(rows.map(row => row.external_id), 600_000).catch(() => new Map())
-  for (const row of rows as Array<MarketDatabaseRow & { result: string }>) {
-    const result = settled.get(row.external_id)?.result
-    row.result = result === 'yes' || result === 'no' ? result : (row.result === 'yes' || row.result === 'no' ? row.result : '')
-  }
+  rows.sort((a, b) => a.external_id.localeCompare(b.external_id))
 
   // One market per event: the alphabetically first outcome.
   const byEvent = new Map<string, MarketDatabaseRow & { result: string }>()
-  for (const row of rows as Array<MarketDatabaseRow & { result: string }>) {
+  for (const row of rows) {
     const ref = parseGameTicker(row.external_id)
     if (!ref?.winner) {
       skip('not a winner market')
@@ -203,6 +226,7 @@ export async function backtestGames(db: Database, options: BacktestOptions): Pro
   const events = [...byEvent.values()].slice(0, options.maxEvents ?? 400)
 
   const bets: BacktestBet[] = []
+  const views: ModelView[] = []
   const brierMarket: number[] = []
   const brierModel: number[] = []
   let modelViews = 0
@@ -230,6 +254,14 @@ export async function backtestGames(db: Database, options: BacktestOptions): Pro
       continue
     }
 
+    // The engine's window reaches a day back from the earliest checkpoint.
+    const trades = await kalshiTrades(row.external_id, startsAt - 30 * 60 - 25 * 3600, decided).catch(() => null)
+    if (!trades) {
+      skip('no trade tape')
+      continue
+    }
+    const tape = tapeDatabase(Number(row.id), trades)
+
     const span = decided - startsAt
     const marks: Array<[string, number]> = [
       ['pre-game', startsAt - 30 * 60],
@@ -249,14 +281,26 @@ export async function backtestGames(db: Database, options: BacktestOptions): Pro
 
       let candidate: Candidate | null = null
       try {
-        candidate = await evaluateMarketAt(db, row, { asOf: ts * 1000, yesPriceAt: point.mid, game: gameAt(game, ts, startsAt) })
+        candidate = await evaluateMarketAt(tape.db, row, { asOf: ts * 1000, yesPriceAt: point.mid, game: gameAt(game, ts, startsAt) })
       }
       catch {
         candidate = null
       }
       const modelYes = candidate ? (candidate.side === 'yes' ? candidate.fairValue : 1 - candidate.fairValue) : point.mid
-      if (candidate)
+      if (candidate) {
         modelViews++
+        const towardsYes = candidate.side === 'yes' ? 1 : -1
+        views.push({
+          ticker: row.external_id,
+          checkpoint,
+          inPlay: checkpoint !== 'pre-game',
+          mid: Math.round(point.mid * 1000) / 1000,
+          fair: Math.round(modelYes * 1000) / 1000,
+          confidence: candidate.confidence,
+          outcome,
+          signals: Object.fromEntries(candidate.evidence.map(item => [item.kind, Math.round(item.contribution * towardsYes * 10000) / 10000])),
+        })
+      }
       brierModel.push((modelYes - outcome) ** 2)
 
       const place = (strategy: string, side: 'yes' | 'no') => {
@@ -293,6 +337,7 @@ export async function backtestGames(db: Database, options: BacktestOptions): Pro
         }
       }
     }
+    tape.close()
   }
 
   const strategies = summarizeBets(bets, bankroll)
@@ -305,6 +350,7 @@ export async function backtestGames(db: Database, options: BacktestOptions): Pro
     brier: { market: mean(brierMarket), model: mean(brierModel), modelViews },
     strategies,
     bets,
+    views,
     skipped,
   }
 }
@@ -336,4 +382,35 @@ export function summarizeBets(bets: BacktestBet[], bankroll: number): StrategyRe
       endingBankroll: Math.round(bank * 100) / 100,
     }
   }).sort((a, b) => b.pnl - a.pnl)
+}
+
+/** SQLite's form of a timestamp, matching how the app stores and binds them. */
+function sqlTime(iso: string): string {
+  return new Date(iso).toISOString().slice(0, 19).replace('T', ' ')
+}
+
+/**
+ * A throwaway in-memory database holding one market's tape, shaped like
+ * the tables the evidence engine reads, so the replay runs the very same
+ * queries production does.
+ */
+export function tapeDatabase(marketId: number, trades: KalshiTrade[]): { db: Database, close: () => void } {
+  const sqlite = new Sqlite(':memory:')
+  sqlite.run(`CREATE TABLE market_traders (id INTEGER PRIMARY KEY, smart_score REAL)`)
+  sqlite.run(`CREATE TABLE market_trades (
+    id INTEGER PRIMARY KEY, prediction_market_id INTEGER, market_trader_id INTEGER, side TEXT,
+    price REAL, size REAL, notional REAL, is_winner INTEGER, traded_at TEXT
+  )`)
+  sqlite.run(`CREATE INDEX market_trades_market_traded_at ON market_trades (prediction_market_id, traded_at)`)
+  const insert = sqlite.prepare(`INSERT INTO market_trades (prediction_market_id, market_trader_id, side, price, size, notional, is_winner, traded_at) VALUES (?, NULL, ?, ?, ?, ?, -1, ?)`)
+  sqlite.transaction(() => {
+    for (const trade of trades)
+      insert.run(marketId, trade.side, trade.price, trade.size, Math.round(trade.size * trade.price * 100) / 100, sqlTime(trade.at))
+  })()
+  const executor = {
+    unsafe: (query: string, params: unknown[] = []) => ({
+      execute: async () => sqlite.query(query).all(...(params as Array<string | number | null>)),
+    }),
+  }
+  return { db: new Database(executor), close: () => sqlite.close() }
 }

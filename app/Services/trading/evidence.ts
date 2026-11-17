@@ -213,7 +213,9 @@ export async function buildCandidates(db: Database, options: EvidenceOptions = {
 async function evaluateMarket(db: Database, market: MarketRow, context: MarketContext = {}): Promise<Candidate | null> {
   const replay = typeof context.asOf === 'number'
   const now = replay ? context.asOf! : Date.now()
-  const until = new Date(now).toISOString()
+  // Live reads have no upper bound: an open-ended `<` would only add a way
+  // for a timestamp's format to drop the newest trades.
+  const until = replay ? new Date(now).toISOString() : '9999-12-31T23:59:59.000Z'
   const game = context.game ?? null
   const inPlay = game?.state === 'in'
   const tipOff = inPlay ? Date.parse(game!.startsAt) : Number.NaN

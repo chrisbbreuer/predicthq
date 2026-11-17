@@ -246,3 +246,74 @@ export function kalshiCandles(
     })).filter(candle => candle.ts > 0)
   })
 }
+
+export interface KalshiTrade {
+  id: string
+  /** The taker's side. */
+  side: 'yes' | 'no'
+  /** Price paid for that side. */
+  price: number
+  size: number
+  /** ISO time of the fill. */
+  at: string
+}
+
+/** A GET that waits out a rate limit a few times before giving up. */
+async function getPatiently<T>(path: string): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await get<T>(path)
+    }
+    catch (error) {
+      if (!(error instanceof KalshiPublicError) || error.status !== 429 || attempt >= 4)
+        throw error
+      await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)))
+    }
+  }
+}
+
+/**
+ * Every fill on one market between two moments (unix seconds), oldest
+ * first. Kalshi's tape is public and goes back past what we have ingested,
+ * which is what lets a backtest see the flow before a game we were not
+ * watching.
+ */
+export function kalshiTrades(ticker: string, minTs: number, maxTs: number, maxPages = 40): Promise<KalshiTrade[]> {
+  return cached(`trades:${ticker}:${minTs}:${maxTs}`, 600_000, async () => {
+    const out: KalshiTrade[] = []
+    let cursor = ''
+    for (let page = 0; page < maxPages; page++) {
+      const query = `ticker=${encodeURIComponent(ticker)}&min_ts=${Math.floor(minTs)}&max_ts=${Math.floor(maxTs)}&limit=1000${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`
+      const data = await getPatiently<{ trades?: any[], cursor?: string }>(`/markets/trades?${query}`)
+      for (const trade of data.trades ?? []) {
+        const side = trade?.taker_side === 'no' ? 'no' : 'yes'
+        const paid = price(side === 'yes' ? trade?.yes_price_dollars : trade?.no_price_dollars)
+        const size = Number.parseFloat(String(trade?.count_fp ?? ''))
+        if (paid === null || !Number.isFinite(size) || !trade?.created_time)
+          continue
+        out.push({ id: String(trade.trade_id ?? ''), side, price: paid, size, at: String(trade.created_time) })
+      }
+      cursor = data.cursor ?? ''
+      if (!cursor || !(data.trades?.length))
+        break
+    }
+    return out.reverse()
+  })
+}
+
+/** Settled markets in a series whose trading closed between two moments (unix seconds). */
+export function kalshiSettledMarkets(series: string, minCloseTs: number, maxCloseTs: number, maxPages = 10): Promise<KalshiMarketInfo[]> {
+  return cached(`settled:${series}:${minCloseTs}:${maxCloseTs}`, 600_000, async () => {
+    const out: KalshiMarketInfo[] = []
+    let cursor = ''
+    for (let page = 0; page < maxPages; page++) {
+      const query = `series_ticker=${encodeURIComponent(series)}&status=settled&min_close_ts=${Math.floor(minCloseTs)}&max_close_ts=${Math.floor(maxCloseTs)}&limit=1000${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`
+      const data = await getPatiently<{ markets?: unknown[], cursor?: string }>(`/markets?${query}`)
+      out.push(...(data.markets ?? []).map(toMarketInfo))
+      cursor = data.cursor ?? ''
+      if (!cursor || !(data.markets?.length))
+        break
+    }
+    return out
+  })
+}

@@ -67,7 +67,9 @@ export class KalshiProvider implements PredictionMarketProvider {
           price,
           size,
           notional: Math.round(size * price * 100) / 100,
-          tradedAt: t.created_time,
+          // Kalshi sends microseconds, or none at all. Normalizing here means
+          // every trade is stored in the one format the window queries bind.
+          tradedAt: new Date(t.created_time).toISOString(),
         })
       }
       cursor = page.cursor

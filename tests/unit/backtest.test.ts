@@ -18,3 +18,17 @@ describe('backtest settlement', () => {
     expect(settleBet(1, 0.5, false)).toEqual({ fee: 0.04, pnl: -1.04 })
   })
 })
+
+describe('backtest tape', () => {
+  it('answers window queries the way the app binds timestamps', async () => {
+    const { tapeDatabase } = await import('../../app/Services/trading/backtest')
+    const tape = tapeDatabase(7, [
+      { id: 'a', side: 'yes', price: 0.4, size: 10, at: '2026-11-16T23:00:00.123456Z' },
+      { id: 'b', side: 'no', price: 0.6, size: 5, at: '2026-11-17T01:00:00Z' },
+    ])
+    const row = await tape.db.prepare<{ n: number }>('SELECT COUNT(*) AS n FROM market_trades WHERE prediction_market_id = ? AND traded_at >= ? AND traded_at < ?')
+      .get(7, '2026-11-16T22:00:00.000Z', '2026-11-17T00:30:00.000Z')
+    expect(Number(row?.n)).toBe(1)
+    tape.close()
+  })
+})
