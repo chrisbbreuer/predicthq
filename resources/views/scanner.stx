@@ -197,30 +197,30 @@ onMount(async () => {
     <div class="app">
       @include('nav')
 
-      <main class="mx-auto px-4 pt-8 pb-8 sm:px-6 max-w-6xl">
+      <main class="mx-auto pb-8 pt-8 px-4 sm:px-6 max-w-6xl">
         <div class="flex flex-wrap gap-4 items-end justify-between">
           <div>
-            <div class="flex gap-2 items-center text-sm font-semibold muted"><span class="live-pulse"></span>Live scanner</div>
-            <h1 class="mt-2 display text-5xl">Where the markets are moving</h1>
+            <div class="flex gap-2 items-center font-semibold text-sm muted"><span class="live-pulse"></span>Live scanner</div>
+            <h1 class="mt-2 text-5xl display">Where the markets are moving</h1>
             <p class="mt-2 max-w-2xl muted">Every live and upcoming game on Kalshi: the price, how far it has moved in the last 5, 15, and 60 minutes, whether trading is surging, and the model's game-aware read. Refreshes every {{ POLL_SECONDS }} seconds.</p>
           </div>
           <span class="text-xs faint num" x-text="loading() ? 'Loading…' : (stamp() ? 'Updated ' + stamp() : '')"></span>
         </div>
 
-        <p x-show="failed()" x-cloak class="px-4 py-3 mt-5 text-sm rounded-xl card"><span class="neg font-bold">Not updating</span> <span class="muted" x-text="'— ' + failed()"></span></p>
+        <p x-show="failed()" x-cloak class="mt-5 px-4 py-3 text-sm rounded-xl card"><span class="font-bold neg">Not updating</span> <span class="muted" x-text="'— ' + failed()"></span></p>
 
         {{-- Biggest movers in the last fifteen minutes. --}}
         <section x-show="movers().length > 0" x-cloak class="mt-8">
           <h2 class="font-bold text-lg">Biggest 15-minute moves</h2>
-          <div class="flex gap-3 mt-3 overflow-x-auto pb-1">
+          <div class="flex overflow-x-auto gap-3 mt-3 pb-1">
             <template :for="mover in movers">
-              <a :href="mover.href" data-no-router class="mover card shrink-0">
+              <a :href="mover.href" data-no-router class="shrink-0 card mover">
                 <div class="flex gap-3 items-baseline justify-between">
                   <span class="font-semibold truncate" x-text="mover.label"></span>
                   <span class="font-bold num" :class="mover.tone" x-text="mover.move"></span>
                 </div>
-                <div class="mt-1 figure-xl text-3xl" x-text="mover.price"></div>
-                <div class="mt-1 text-xs faint truncate" x-text="mover.context"></div>
+                <div class="mt-1 text-3xl figure-xl" x-text="mover.price"></div>
+                <div class="mt-1 text-xs truncate faint" x-text="mover.context"></div>
               </a>
             </template>
           </div>
@@ -244,16 +244,16 @@ onMount(async () => {
 
         <section class="grid gap-4 mt-5">
           <template :for="event in events">
-            <article class="event card">
+            <article class="card event">
               <div class="flex flex-wrap gap-2 items-center justify-between">
                 <div class="flex gap-2 items-center min-w-0">
-                  <span class="text-xs font-bold tracking-wide uppercase faint" x-text="event.leagueLabel"></span>
-                  <span x-show="event.live" class="pill live"><span class="live-pulse"></span><span x-text="event.status"></span></span>
+                  <span class="font-bold text-xs tracking-wide uppercase faint" x-text="event.leagueLabel"></span>
+                  <span x-show="event.live" class="live pill"><span class="live-pulse"></span><span x-text="event.status"></span></span>
                   <span x-show="!event.live" class="pill" x-text="event.status"></span>
                 </div>
                 <div class="flex gap-3 items-center">
                   <span class="text-xs faint num" x-text="event.volume"></span>
-                  <a x-show="event.hasGame" :href="event.gameHref" data-no-router class="inline-flex gap-1 items-center text-xs font-semibold muted hover:opacity-70">Game <i class="h-3.5 w-3.5 i-hugeicons-arrow-right-01"></i></a>
+                  <a x-show="event.hasGame" :href="event.gameHref" data-no-router class="inline-flex gap-1 items-center font-semibold text-xs hover:opacity-70 muted">Game <i class="h-3.5 w-3.5 i-hugeicons-arrow-right-01"></i></a>
                 </div>
               </div>
               <div class="flex flex-wrap gap-3 items-baseline justify-between mt-2">
@@ -276,13 +276,13 @@ onMount(async () => {
                       </div>
                       <div x-show="outcome.hasModel" class="mt-1 text-[11px] muted num" x-text="outcome.model"></div>
                     </div>
-                    <span class="figure-xl text-2xl text-right" x-text="outcome.price"></span>
+                    <span class="text-2xl text-right figure-xl" x-text="outcome.price"></span>
                     <div class="spark wide" x-html="outcome.spark"></div>
                     <span class="cell" :class="outcome.c5Tone" x-text="outcome.c5"></span>
                     <span class="cell" :class="outcome.c15Tone" x-text="outcome.c15"></span>
                     <span class="cell wide" :class="outcome.c60Tone" x-text="outcome.c60"></span>
                     <span class="cell wide" :class="outcome.c24Tone" x-text="outcome.c24"></span>
-                    <span class="cell wide faint" x-text="outcome.surge"></span>
+                    <span class="cell faint wide" x-text="outcome.surge"></span>
                   </a>
                 </template>
               </div>
@@ -292,7 +292,7 @@ onMount(async () => {
 
         <p x-show="!loading() && events().length === 0" x-cloak class="mt-10 text-center muted">No games match these filters right now.</p>
 
-        <p class="mt-10 max-w-3xl text-xs leading-relaxed faint">
+        <p class="mt-10 max-w-3xl leading-relaxed text-xs faint">
           Moves are in percentage points of the quote midpoint. Surge compares the last 15 minutes of contracts traded with the hour's 15-minute average. Fair value is the model's estimate from trade flow and venue evidence; in play it counts only flow since the game began and ignores pre-game priors, and outcomes of one game are made to agree. None of this is a recommendation. Prediction markets carry risk; trade only what you can afford to lose.
         </p>
       </main>

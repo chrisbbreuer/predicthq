@@ -57,7 +57,7 @@ const beatsCoinFlip = record.sampleSize > 0 && record.brierScore < COIN_FLIP_BRI
       @include('nav')
 
       <main class="mx-auto px-4 py-14 sm:px-6 max-w-5xl">
-        <h1 class="display font-black text-3xl tracking-tight sm:text-4xl">Pipeline</h1>
+        <h1 class="font-black text-3xl tracking-tight sm:text-4xl display">Pipeline</h1>
         <p class="mt-3 max-w-2xl leading-relaxed text-lg muted">
           Where the numbers come from, and what they have been worth so far.
         </p>
@@ -87,7 +87,7 @@ const beatsCoinFlip = record.sampleSize > 0 && record.brierScore < COIN_FLIP_BRI
               @endif
             </div>
 
-            <div class="text-right shrink-0">
+            <div class="shrink-0 text-right">
               <div class="font-black text-2xl num">{{ relativeAge(feed.lastRunAt) }}</div>
               <div class="mt-0.5 font-semibold text-xs tracking-wide uppercase muted">Last price run</div>
             </div>
@@ -96,13 +96,13 @@ const beatsCoinFlip = record.sampleSize > 0 && record.brierScore < COIN_FLIP_BRI
 
         <!-- track record -->
         <section class="mt-9">
-          <h2 class="display font-black text-2xl tracking-tight">Track record</h2>
+          <h2 class="font-black text-2xl tracking-tight display">Track record</h2>
 
           @if (record.sampleSize)
             <p class="mt-2 max-w-2xl leading-relaxed muted">
               Scored over {{ record.sampleSize.toLocaleString() }} settled predictions, rebuilt {{ relativeAge(record.computedAt) }}.
             </p>
-            <div class="grid gap-3 grid-cols-2 mt-6 sm:grid-cols-4">
+            <div class="grid gap-3 grid-cols-2 sm:grid-cols-4 mt-6">
               <div class="p-4 rounded-2xl card">
                 <div class="font-black text-2xl num {{ beatsCoinFlip ? 'pos' : 'neg' }}">{{ record.brierScore.toFixed(4) }}</div>
                 <div class="mt-0.5 font-semibold text-xs tracking-wide uppercase muted">Brier score</div>
@@ -130,7 +130,7 @@ const beatsCoinFlip = record.sampleSize > 0 && record.brierScore < COIN_FLIP_BRI
               and it is very different from a bad one. Say which, and say
               when it stops being empty.
             --}}
-            <div class="p-7 mt-6 rounded-2xl card">
+            <div class="mt-6 p-7 rounded-2xl card">
               <p class="font-bold text-lg">Nothing has settled yet.</p>
               <p class="mt-2 max-w-2xl leading-relaxed muted">
                 The model has priced {{ record.pendingPredictions.toLocaleString() }} {{ record.pendingPredictions === 1 ? 'event' : 'events' }} that have not finished. Until one does there is no Brier score, no CLV, and no basis for believing any edge on this site.
@@ -152,12 +152,12 @@ const beatsCoinFlip = record.sampleSize > 0 && record.brierScore < COIN_FLIP_BRI
           say anything independent about.
         --}}
         <section class="mt-12">
-          <h2 class="display font-black text-2xl tracking-tight">Independent evidence</h2>
+          <h2 class="font-black text-2xl tracking-tight display">Independent evidence</h2>
           <p class="mt-2 max-w-2xl leading-relaxed muted">
             Everything else here is derived from bookmaker prices, so it can only ever agree with them. These are the reads that can disagree.
           </p>
 
-          <div class="grid gap-3 grid-cols-2 mt-6 sm:grid-cols-4">
+          <div class="grid gap-3 grid-cols-2 sm:grid-cols-4 mt-6">
             <div class="p-4 rounded-2xl card">
               <div class="font-black text-2xl num {{ coveragePct > 0 ? 'pos' : '' }}">{{ coveragePct }}%</div>
               <div class="mt-0.5 font-semibold text-xs tracking-wide uppercase muted">Teams with form</div>
@@ -188,7 +188,7 @@ const beatsCoinFlip = record.sampleSize > 0 && record.brierScore < COIN_FLIP_BRI
           neutral one, it is one nobody has checked.
         --}}
         <section class="mt-12">
-          <h2 class="display font-black text-2xl tracking-tight">Signal scorecard</h2>
+          <h2 class="font-black text-2xl tracking-tight display">Signal scorecard</h2>
           <p class="mt-2 max-w-2xl leading-relaxed muted">
             Each signal against the closing line. Beating the close is the fastest evidence that an estimate carried real information, long before a win rate says anything.
           </p>
@@ -219,7 +219,7 @@ const beatsCoinFlip = record.sampleSize > 0 && record.brierScore < COIN_FLIP_BRI
               </div>
             </div>
           @else
-            <div class="p-7 mt-6 rounded-2xl card">
+            <div class="mt-6 p-7 rounded-2xl card">
               <p class="font-bold text-lg">No signal has been scored yet.</p>
               <p class="mt-2 max-w-2xl leading-relaxed muted">
                 A signal is scored once a market it argued about has closed. Until then every weight in the model is an assertion, including the ones that look most reasonable. {{ MIN_MEANINGFUL_SAMPLES }} scored decisions is roughly where a hit rate stops being a coin flip.
@@ -230,7 +230,7 @@ const beatsCoinFlip = record.sampleSize > 0 && record.brierScore < COIN_FLIP_BRI
 
         <!-- providers -->
         <section class="mt-12">
-          <h2 class="display font-black text-2xl tracking-tight">Sources</h2>
+          <h2 class="font-black text-2xl tracking-tight display">Sources</h2>
           @if (runs.length)
             <div class="overflow-hidden mt-6 rounded-2xl card">
               <div class="divide-y bd">
@@ -258,9 +258,9 @@ const beatsCoinFlip = record.sampleSize > 0 && record.brierScore < COIN_FLIP_BRI
               </div>
             </div>
           @else
-            <div class="px-6 py-10 mt-6 text-center rounded-2xl card">
+            <div class="mt-6 px-6 py-10 text-center rounded-2xl card">
               <p class="font-bold">The pipeline has never run.</p>
-              <p class="mt-2 text-sm leading-relaxed muted">Start the scheduler and the first run lands within five minutes.</p>
+              <p class="mt-2 leading-relaxed text-sm muted">Start the scheduler and the first run lands within five minutes.</p>
             </div>
           @endif
         </section>

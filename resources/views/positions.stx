@@ -669,15 +669,15 @@ onMount(start)
         @include('nav')
       </div>
 
-      <main class="mx-auto px-4 pt-8 pb-4 sm:px-6 max-w-6xl">
+      <main class="mx-auto pb-4 pt-8 px-4 sm:px-6 max-w-6xl">
         {{-- Portfolio headline: one big number, the way an exchange opens. --}}
         <div class="flex flex-wrap gap-4 items-end justify-between">
           <div>
-            <div class="flex gap-2 items-center text-sm font-semibold muted">
+            <div class="flex gap-2 items-center font-semibold text-sm muted">
               <span class="status-dot" :class="live() ? 'on' : ''"></span>
               <span>Portfolio</span>
             </div>
-            <div class="mt-2 figure-xl text-6xl sm:text-7xl" x-text="signedIn() ? totals().portfolio : '—'"></div>
+            <div class="mt-2 text-6xl sm:text-7xl figure-xl" x-text="signedIn() ? totals().portfolio : '—'"></div>
             <div x-show="signedIn()" x-cloak class="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-sm">
               <span><span class="font-semibold num" :class="totals().unrealizedTone" x-text="totals().unrealized"></span> <span class="muted">open P&amp;L</span></span>
               <span><span class="font-semibold num" :class="totals().realizedTodayTone" x-text="totals().realizedToday"></span> <span class="muted">today</span></span>
@@ -693,15 +693,15 @@ onMount(start)
           </div>
         </div>
 
-        <p x-show="error()" x-cloak class="px-4 py-3 mt-5 text-sm rounded-xl card" role="status">
-          <span class="neg font-bold">Not updating</span>
+        <p x-show="error()" x-cloak class="mt-5 px-4 py-3 text-sm rounded-xl card" role="status">
+          <span class="font-bold neg">Not updating</span>
           <span class="muted" x-text="'— ' + error() + '. These are the last figures received.'"></span>
         </p>
-        <p x-show="note()" x-cloak class="px-4 py-3 mt-5 text-sm rounded-xl card" role="status" x-text="note()"></p>
+        <p x-show="note()" x-cloak class="mt-5 px-4 py-3 text-sm rounded-xl card" role="status" x-text="note()"></p>
 
         {{-- Not signed in. Nothing here is public, so this is the whole page. --}}
-        <section x-show="!loading() && !signedIn()" x-cloak class="p-10 mt-8 text-center card">
-          <h2 class="display text-3xl">Sign in to follow your bets</h2>
+        <section x-show="!loading() && !signedIn()" x-cloak class="mt-8 p-10 text-center card">
+          <h2 class="text-3xl display">Sign in to follow your bets</h2>
           <p class="mt-2 mx-auto max-w-md leading-relaxed muted">Positions, live games, and P&amp;L are private to the account that holds them. Sign in, connect Kalshi, and this page fills itself.</p>
           <div class="flex flex-wrap gap-3 justify-center mt-6">
             <a href="/login" data-no-router class="px-6 py-2.5 font-bold text-sm rounded-full btn btn-primary">Log in</a>
@@ -727,19 +727,19 @@ onMount(start)
                balance that looks live is how somebody trades on a number
                that is hours old. --}}
           <template :for="account in broken">
-            <p class="px-4 py-3 mt-3 text-sm rounded-xl card">
+            <p class="mt-3 px-4 py-3 text-sm rounded-xl card">
               <strong class="neg" x-text="account.venueLabel + ' · ' + account.fault"></strong>
               <span class="muted" x-text="account.error ? '— ' + account.error : '— reconnect it from your account page.'"></span>
             </p>
           </template>
 
           {{-- No venue connected: the one thing to do, said once. --}}
-          <section x-show="!loading() && accounts().length === 0" class="p-10 mt-6 text-center card">
-            <h2 class="display text-3xl">Connect Kalshi to see your bets</h2>
+          <section x-show="!loading() && accounts().length === 0" class="mt-6 p-10 text-center card">
+            <h2 class="text-3xl display">Connect Kalshi to see your bets</h2>
             <p class="mt-2 mx-auto max-w-lg leading-relaxed muted">
               Add a Kalshi API key and this page shows everything that account holds — including bets you placed in Kalshi's own app — with live scores and odds charts.
             </p>
-            <a href="/account" data-no-router class="inline-flex items-center px-6 py-2.5 mt-6 font-bold text-sm rounded-full btn btn-primary">Connect a venue</a>
+            <a href="/account" data-no-router class="inline-flex items-center mt-6 px-6 py-2.5 font-bold text-sm rounded-full btn btn-primary">Connect a venue</a>
           </section>
 
           {{-- Filters. --}}
@@ -752,8 +752,8 @@ onMount(start)
           </nav>
 
           {{-- Nothing riding. Not an error, and it should not look like one. --}}
-          <section x-show="!loading() && accounts().length > 0 && empty()" class="p-10 mt-6 text-center card">
-            <h2 class="display text-3xl">No open bets</h2>
+          <section x-show="!loading() && accounts().length > 0 && empty()" class="mt-6 p-10 text-center card">
+            <h2 class="text-3xl display">No open bets</h2>
             <p class="mt-2 mx-auto max-w-lg leading-relaxed muted">Your connected venues report no positions and no resting orders. Anything you place appears here within {{ POLL_SECONDS }} seconds.</p>
             <div class="flex flex-wrap gap-3 justify-center mt-6">
               <a href="/" data-no-router class="px-6 py-2.5 font-bold text-sm rounded-full btn btn-primary">Browse markets</a>
@@ -769,12 +769,12 @@ onMount(start)
             </div>
             <div class="game-grid">
               <template :for="position in liveGames">
-                <div class="game-card card">
+                <div class="card game-card">
                   <a :href="position.gameHref" data-no-router class="block game-link" aria-label="Open the game: score, box score, and stats">
                   <div class="flex gap-2 items-center justify-between">
                     <div class="flex gap-2 items-center min-w-0">
-                      <span class="text-xs font-bold tracking-wide uppercase faint" x-text="position.game.league"></span>
-                      <span class="pill live"><span class="live-pulse"></span><span x-text="position.game.clock"></span></span>
+                      <span class="font-bold text-xs tracking-wide uppercase faint" x-text="position.game.league"></span>
+                      <span class="live pill"><span class="live-pulse"></span><span x-text="position.game.clock"></span></span>
                     </div>
                     <span x-show="position.game.showStanding" class="pill" :class="position.game.standingClass" x-text="position.game.standing"></span>
                   </div>
@@ -790,7 +790,7 @@ onMount(start)
                         </div>
                         <div class="text-xs faint" x-text="position.game.away.record"></div>
                       </div>
-                      <span class="team-score figure-xl" :class="position.game.away.lead ? '' : 'trail'" x-text="position.game.away.score"></span>
+                      <span class="figure-xl team-score" :class="position.game.away.lead ? '' : 'trail'" x-text="position.game.away.score"></span>
                     </div>
                     <div class="team-row">
                       <img x-show="position.game.home.hasLogo" :src="position.game.home.logo" alt="" class="team-logo" loading="lazy">
@@ -802,12 +802,12 @@ onMount(start)
                         </div>
                         <div class="text-xs faint" x-text="position.game.home.record"></div>
                       </div>
-                      <span class="team-score figure-xl" :class="position.game.home.lead ? '' : 'trail'" x-text="position.game.home.score"></span>
+                      <span class="figure-xl team-score" :class="position.game.home.lead ? '' : 'trail'" x-text="position.game.home.score"></span>
                     </div>
                   </div>
 
                   <p x-show="position.game.lastPlay" class="mt-2 last-play" x-text="position.game.lastPlay"></p>
-                  <span class="inline-flex gap-1 items-center mt-2 text-xs font-semibold muted">Box score &amp; stats <i class="h-3.5 w-3.5 i-hugeicons-arrow-right-01"></i></span>
+                  <span class="inline-flex gap-1 items-center mt-2 font-semibold text-xs muted">Box score &amp; stats <i class="h-3.5 w-3.5 i-hugeicons-arrow-right-01"></i></span>
                   </a>
 
                   <a :href="position.href" data-no-router class="block">
@@ -823,18 +823,18 @@ onMount(start)
                         <div x-show="position.progress.showBar" class="mt-1.5 w-40 progress"><span :style="'width:' + position.progress.width"></span></div>
                       </div>
                     </div>
-                    <div class="text-right shrink-0">
-                      <div class="figure-xl text-4xl" :style="'color:' + position.chartColor" x-text="position.chance"></div>
-                      <div class="text-[11px] font-semibold faint">chance</div>
+                    <div class="shrink-0 text-right">
+                      <div class="text-4xl figure-xl" :style="'color:' + position.chartColor" x-text="position.chance"></div>
+                      <div class="font-semibold text-[11px] faint">chance</div>
                     </div>
                   </div>
                   <div x-show="position.hasSpark" class="mini-chart" x-html="position.chart"></div>
 
                   <div class="stat-strip">
-                    <div><span class="stat-label">Contracts</span><span class="stat-value num" x-text="position.size"></span></div>
-                    <div><span class="stat-label">Avg · Now</span><span class="stat-value num" x-text="position.paid + ' · ' + position.mark"></span></div>
-                    <div><span class="stat-label">P&amp;L</span><span class="stat-value num" :class="position.pnlTone" x-text="position.pnl"></span></div>
-                    <div><span class="stat-label">To win</span><span class="stat-value num" x-text="position.toWin"></span></div>
+                    <div><span class="stat-label">Contracts</span><span class="num stat-value" x-text="position.size"></span></div>
+                    <div><span class="stat-label">Avg · Now</span><span class="num stat-value" x-text="position.paid + ' · ' + position.mark"></span></div>
+                    <div><span class="stat-label">P&amp;L</span><span class="num stat-value" :class="position.pnlTone" x-text="position.pnl"></span></div>
+                    <div><span class="stat-label">To win</span><span class="num stat-value" x-text="position.toWin"></span></div>
                   </div>
                   </a>
                 </div>
@@ -849,10 +849,10 @@ onMount(start)
             </div>
             <div class="game-grid">
               <template :for="position in upcoming">
-                <div class="game-card card">
+                <div class="card game-card">
                   <a :href="position.gameHref" data-no-router class="block game-link" aria-label="Open the game preview">
                   <div class="flex gap-2 items-center justify-between">
-                    <span class="text-xs font-bold tracking-wide uppercase faint" x-text="position.game.league"></span>
+                    <span class="font-bold text-xs tracking-wide uppercase faint" x-text="position.game.league"></span>
                     <span class="pill" x-text="position.starts"></span>
                   </div>
                   <div class="flex gap-4 items-center justify-between mt-4">
@@ -861,7 +861,7 @@ onMount(start)
                       <span class="font-bold" x-text="position.game.away.abbr"></span>
                       <span x-show="position.game.away.rooting" class="you">YOU</span>
                     </div>
-                    <span class="text-xs font-semibold faint">at</span>
+                    <span class="font-semibold text-xs faint">at</span>
                     <div class="flex gap-3 items-center justify-end min-w-0">
                       <span x-show="position.game.home.rooting" class="you">YOU</span>
                       <span class="font-bold" x-text="position.game.home.abbr"></span>
@@ -875,17 +875,17 @@ onMount(start)
                       <span class="pill" :class="position.sideClass" x-text="position.side"></span>
                       <span class="font-semibold text-sm truncate" x-text="position.question"></span>
                     </div>
-                    <div class="text-right shrink-0">
-                      <div class="figure-xl text-3xl" x-text="position.chance"></div>
-                      <div class="text-[11px] font-semibold faint">chance</div>
+                    <div class="shrink-0 text-right">
+                      <div class="text-3xl figure-xl" x-text="position.chance"></div>
+                      <div class="font-semibold text-[11px] faint">chance</div>
                     </div>
                   </div>
                   <div x-show="position.hasSpark" class="mini-chart" style="height:64px" x-html="position.chart"></div>
                   <div class="stat-strip">
-                    <div><span class="stat-label">Contracts</span><span class="stat-value num" x-text="position.size"></span></div>
-                    <div><span class="stat-label">Avg · Now</span><span class="stat-value num" x-text="position.paid + ' · ' + position.mark"></span></div>
-                    <div><span class="stat-label">P&amp;L</span><span class="stat-value num" :class="position.pnlTone" x-text="position.pnl"></span></div>
-                    <div><span class="stat-label">To win</span><span class="stat-value num" x-text="position.toWin"></span></div>
+                    <div><span class="stat-label">Contracts</span><span class="num stat-value" x-text="position.size"></span></div>
+                    <div><span class="stat-label">Avg · Now</span><span class="num stat-value" x-text="position.paid + ' · ' + position.mark"></span></div>
+                    <div><span class="stat-label">P&amp;L</span><span class="num stat-value" :class="position.pnlTone" x-text="position.pnl"></span></div>
+                    <div><span class="stat-label">To win</span><span class="num stat-value" x-text="position.toWin"></span></div>
                   </div>
                   </a>
                 </div>
@@ -900,16 +900,16 @@ onMount(start)
             </div>
             <div class="game-grid">
               <template :for="position in parlays">
-                <div class="game-card card">
+                <div class="card game-card">
                   <a :href="position.href" data-no-router class="block">
                     <div class="flex gap-3 items-start justify-between">
                       <div class="min-w-0">
                         <div class="font-bold text-lg" x-text="position.question"></div>
                         <div class="mt-1 text-xs faint" x-text="position.parlay ? position.parlay.summary : ''"></div>
                       </div>
-                      <div class="text-right shrink-0">
-                        <div class="figure-xl text-4xl" :class="position.parlay && position.parlay.busted ? 'neg' : ''" x-text="position.parlay ? position.parlay.chance : position.chance"></div>
-                        <div class="text-[11px] font-semibold faint">chance to hit</div>
+                      <div class="shrink-0 text-right">
+                        <div class="text-4xl figure-xl" :class="position.parlay && position.parlay.busted ? 'neg' : ''" x-text="position.parlay ? position.parlay.chance : position.chance"></div>
+                        <div class="font-semibold text-[11px] faint">chance to hit</div>
                       </div>
                     </div>
                     <div x-show="position.parlay" class="mt-3 progress"><span :style="'width:' + (position.parlay ? position.parlay.progress : '0%')"></span></div>
@@ -918,32 +918,32 @@ onMount(start)
                   <div x-show="position.legs.length > 0" class="mt-3">
                     <template :for="leg in position.legs">
                       <a :href="leg.href" data-no-router class="leg">
-                        <span class="pill leg-status" :class="leg.statusClass"><span x-show="leg.isLive" class="live-pulse"></span><span x-text="leg.statusLabel"></span></span>
+                        <span class="leg-status pill" :class="leg.statusClass"><span x-show="leg.isLive" class="live-pulse"></span><span x-text="leg.statusLabel"></span></span>
                         <div class="min-w-0">
                           <div class="flex gap-1.5 items-center min-w-0">
-                            <span x-show="leg.choice === 'NO'" class="pill no">NO</span>
+                            <span x-show="leg.choice === 'NO'" class="no pill">NO</span>
                             <span class="font-semibold text-sm truncate" x-text="leg.label"></span>
                           </div>
                           <div x-show="leg.progress.has" class="flex gap-2 items-center mt-1">
-                            <span class="text-xs font-bold num" :class="leg.progress.tone" x-text="leg.progress.text"></span>
+                            <span class="font-bold text-xs num" :class="leg.progress.tone" x-text="leg.progress.text"></span>
                             <span class="text-[11px] faint num" x-text="leg.progress.target"></span>
-                            <div x-show="leg.progress.showBar" class="w-16 progress leg-bar"><span :style="'width:' + leg.progress.width"></span></div>
+                            <div x-show="leg.progress.showBar" class="w-16 leg-bar progress"><span :style="'width:' + leg.progress.width"></span></div>
                           </div>
                         </div>
                         <div class="text-right leg-game">
-                          <div x-show="leg.hasGame" class="text-xs font-semibold num" x-text="leg.gameLine"></div>
+                          <div x-show="leg.hasGame" class="font-semibold text-xs num" x-text="leg.gameLine"></div>
                           <div x-show="leg.hasGame" class="text-[11px]" :class="leg.isLive ? 'live' : 'faint'" x-text="leg.gameClock"></div>
                         </div>
-                        <span class="font-bold text-sm text-right num" :class="leg.chanceTone" x-text="leg.chance"></span>
+                        <span class="font-bold text-right text-sm num" :class="leg.chanceTone" x-text="leg.chance"></span>
                       </a>
                     </template>
                   </div>
 
                   <div class="stat-strip">
-                    <div><span class="stat-label">Contracts</span><span class="stat-value num" x-text="position.size"></span></div>
-                    <div><span class="stat-label">Cost</span><span class="stat-value num" x-text="position.cost"></span></div>
-                    <div><span class="stat-label" title="Your contracts times the product of each leg's live price. Legs in the same game move together, so this is a rough guide, not a price.">Est. value</span><span class="stat-value num" x-text="position.estValue"></span></div>
-                    <div><span class="stat-label">To win</span><span class="stat-value num" x-text="position.toWin"></span></div>
+                    <div><span class="stat-label">Contracts</span><span class="num stat-value" x-text="position.size"></span></div>
+                    <div><span class="stat-label">Cost</span><span class="num stat-value" x-text="position.cost"></span></div>
+                    <div><span class="stat-label" title="Your contracts times the product of each leg's live price. Legs in the same game move together, so this is a rough guide, not a price.">Est. value</span><span class="num stat-value" x-text="position.estValue"></span></div>
+                    <div><span class="stat-label">To win</span><span class="num stat-value" x-text="position.toWin"></span></div>
                   </div>
                 </div>
               </template>
@@ -963,12 +963,12 @@ onMount(start)
                     <div class="font-semibold truncate" x-text="position.question"></div>
                     <div class="row-meta">
                       <span class="pill" :class="position.sideClass" x-text="position.side"></span>
-                      <span class="text-xs muted truncate" x-show="position.outcome" x-text="position.outcome"></span>
+                      <span class="text-xs truncate muted" x-show="position.outcome" x-text="position.outcome"></span>
                       <span class="text-xs faint" x-text="position.size + ' @ ' + position.paid"></span>
                       <span class="text-xs faint" x-show="position.strategies" x-text="position.strategies"></span>
                     </div>
                   </div>
-                  <div class="spark hide-sm" x-html="position.spark"></div>
+                  <div class="hide-sm spark" x-html="position.spark"></div>
                   <div class="cell"><span class="cell-label">Chance</span><span class="font-bold num" x-text="position.chance"></span></div>
                   <div class="cell hide-sm"><span class="cell-label">Value</span><span class="font-bold num" x-text="position.value"></span></div>
                   <div class="cell"><span class="cell-label">P&amp;L</span><span class="font-bold num" :class="position.pnlTone" x-text="position.pnl"></span></div>
@@ -1025,7 +1025,7 @@ onMount(start)
                       <span class="text-xs muted" x-text="decision.strategy"></span>
                       <span class="text-xs faint num" x-text="decision.evidence"></span>
                     </div>
-                    <p class="mt-1.5 max-w-xl text-xs leading-relaxed muted" x-show="decision.rationale" x-text="decision.rationale"></p>
+                    <p class="mt-1.5 max-w-xl leading-relaxed text-xs muted" x-show="decision.rationale" x-text="decision.rationale"></p>
                   </div>
                   <div class="flex flex-wrap gap-3 items-center justify-end">
                     <div class="figure"><span class="cell-label">Stake</span><span class="font-bold num" x-text="decision.stake"></span></div>
@@ -1100,7 +1100,7 @@ onMount(start)
             <span x-text="totals().unpricedCount"></span> positions are awaiting quotes. Their value and P&amp;L are left out of the totals until a price is available.
           </p>
 
-          <p class="mt-10 max-w-3xl text-xs leading-relaxed faint">
+          <p class="mt-10 max-w-3xl leading-relaxed text-xs faint">
             Positions and balances are read from the venue itself, including anything you traded in its own app. Values mark against the last trade; the chance shown is the live quote midpoint, an estimate rather than a price you can sell at. A parlay's chance and estimated value multiply its legs' live prices. Scores from ESPN.
           </p>
         </div>

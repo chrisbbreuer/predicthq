@@ -1,7 +1,9 @@
+import { randomUUIDv7 } from 'bun'
 import { Action } from '@stacksjs/actions/runtime'
+import { customers } from '@stacksjs/commerce'
 import { config } from '@stacksjs/config'
 import { db } from '@stacksjs/database/runtime'
-import { response } from '@stacksjs/router'
+import { refuse } from '@stacksjs/router'
 import { sendOrderConfirmation } from '../../Mail/OrderConfirmation'
 import { readCartCookie } from '../../Storefront/CartCookie'
 import { storefrontCurrency } from '../../Storefront/StorefrontMoney'
@@ -26,11 +28,13 @@ export default new Action({
   name: 'PlaceOrderAction',
   description: 'Convert the active cart into an Order + OrderItems.',
   method: 'POST',
+  // A browser form goes to the order it placed; a script gets its id and totals.
+  next: (result: { order_id: number }) => `/orders/${result.order_id}`,
 
   async handle(request: any) {
     const token = readCartCookie(request, CART_COOKIE)
     if (!token)
-      return response.json({ error: 'Your cart is empty.' }, { status: 400 })
+      return refuse('Your cart is empty.', { status: 400 })
 
     const cart = await (db as any)
       .selectFrom('carts')
@@ -40,7 +44,7 @@ export default new Action({
       .executeTakeFirst()
 
     if (!cart)
-      return response.json({ error: 'Your cart is empty.' }, { status: 400 })
+      return refuse('Your cart is empty.', { status: 400 })
 
     const items = await (db as any)
       .selectFrom('cart_items')
@@ -49,10 +53,10 @@ export default new Action({
       .execute()
 
     if (items.length === 0)
-      return response.json({ error: 'Your cart is empty.' }, { status: 400 })
+      return refuse('Your cart is empty.', { status: 400 })
 
     if (!cart.email || !cart.shipping_name || !cart.shipping_address)
-      return response.json({ error: 'Checkout details are incomplete.' }, { status: 422 })
+      return refuse('Checkout details are incomplete. Go back and fill in your email and shipping address.')
 
     // One customer per email — repeat shoppers reuse the same row so
     // the dashboard's customer total isn't inflated by checkouts.
@@ -62,17 +66,10 @@ export default new Action({
       .selectAll()
       .executeTakeFirst()
 
-    if (!customer) {
-      await (db as any)
-        .insertInto('customers')
-        .values({ name: cart.shipping_name, email: cart.email })
-        .execute()
-      customer = await (db as any)
-        .selectFrom('customers')
-        .where('email', '=', cart.email)
-        .selectAll()
-        .executeTakeFirst()
-    }
+    // Through commerce's store, which fills what the table requires and the
+    // checkout does not ask for, such as the avatar (#3017).
+    if (!customer)
+      customer = await customers.store({ name: cart.shipping_name, email: cart.email, uuid: randomUUIDv7() } as never)
 
     // Integer minor units of the cart's currency, like every amount here.
     const currency = storefrontCurrency(cart.currency)
@@ -184,17 +181,12 @@ export default new Action({
       console.error(`[PlaceOrderAction] order receipt email failed for order #${order.id}:`, message)
     })
 
-    const wantsHtml = (request.headers?.get?.('accept') || '').includes('text/html')
-    const xhr = request.headers?.get?.('x-requested-with') === 'XMLHttpRequest'
-    if (wantsHtml && !xhr)
-      return response.redirect(`/orders/${order.id}`)
-
-    return response.json({
+    return {
       ok: true,
       order_id: order.id,
       total,
       subtotal,
       shipping,
-    })
+    }
   },
 })

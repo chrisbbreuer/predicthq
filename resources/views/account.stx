@@ -188,15 +188,15 @@ onMounted(() => void refresh())
           <p class="mt-4 leading-relaxed muted">Connect your exchanges to see balances, positions, and working orders together.</p>
         </div>
 
-        <p :if="message" class="p-4 mt-6 rounded-xl card" role="status">{{ message }}</p>
+        <p :if="message" class="mt-6 p-4 rounded-xl card" role="status">{{ message }}</p>
 
         <div class="grid gap-6 lg:grid-cols-2 mt-8">
           <section class="p-6 rounded-2xl card">
             <h2 class="font-bold text-xl">Connect an exchange</h2>
             <p class="mt-2 text-sm muted">Your API keys are encrypted. Connecting checks your balance and syncs your portfolio.</p>
 
-            <label class="block mt-5 text-sm font-bold">Venue
-              <select x-model="venue" class="px-3 mt-2 w-full h-11 rounded-lg input">
+            <label class="block mt-5 font-bold text-sm">Venue
+              <select x-model="venue" class="mt-2 px-3 h-11 w-full rounded-lg input">
                 <option value="kalshi">Kalshi</option>
                 <option value="polymarket-us">Polymarket US</option>
                 <option value="polymarket">Polymarket International</option>
@@ -206,9 +206,9 @@ onMounted(() => void refresh())
             <template :if="venue === 'kalshi'">
               <div>
                 <a href="https://kalshi.com/account/profile" target="_blank" rel="noopener noreferrer" class="inline-block mt-4 text-sm accent">Open Kalshi API settings ↗</a>
-                <label class="block mt-4 text-sm font-bold">API key ID<input x-model.trim="apiKeyId" autocomplete="off" class="px-3 mt-2 w-full h-11 rounded-lg input"></label>
-                <label class="block mt-4 text-sm font-bold">RSA private key PEM<textarea x-model.trim="privateKeyPem" autocomplete="off" rows="5" class="p-3 mt-2 w-full rounded-lg input"></textarea></label>
-                <label class="block mt-4 text-sm font-bold">Subaccount (optional)<input x-model.trim="subaccount" inputmode="numeric" class="px-3 mt-2 w-full h-11 rounded-lg input" placeholder="0–32"></label>
+                <label class="block mt-4 font-bold text-sm">API key ID<input x-model.trim="apiKeyId" autocomplete="off" class="mt-2 px-3 h-11 w-full rounded-lg input"></label>
+                <label class="block mt-4 font-bold text-sm">RSA private key PEM<textarea x-model.trim="privateKeyPem" autocomplete="off" rows="5" class="mt-2 p-3 w-full rounded-lg input"></textarea></label>
+                <label class="block mt-4 font-bold text-sm">Subaccount (optional)<input x-model.trim="subaccount" inputmode="numeric" class="mt-2 px-3 h-11 w-full rounded-lg input" placeholder="0–32"></label>
               </div>
             </template>
 
@@ -216,42 +216,42 @@ onMounted(() => void refresh())
               <div>
                 <p class="mt-4 text-sm muted">Use the keys from your Polymarket US developer account. This connection syncs your portfolio; manage trades on Polymarket US.</p>
                 <a href="https://polymarket.us/developer" target="_blank" rel="noopener noreferrer" class="inline-block mt-3 text-sm accent">Open Polymarket US API settings ↗</a>
-                <label class="block mt-4 text-sm font-bold">Key ID<input x-model.trim="usKeyId" autocomplete="off" class="px-3 mt-2 w-full h-11 rounded-lg input"></label>
-                <label class="block mt-4 text-sm font-bold">Secret key<input x-model.trim="usSecretKey" type="password" autocomplete="off" class="px-3 mt-2 w-full h-11 rounded-lg input"></label>
+                <label class="block mt-4 font-bold text-sm">Key ID<input x-model.trim="usKeyId" autocomplete="off" class="mt-2 px-3 h-11 w-full rounded-lg input"></label>
+                <label class="block mt-4 font-bold text-sm">Secret key<input x-model.trim="usSecretKey" type="password" autocomplete="off" class="mt-2 px-3 h-11 w-full rounded-lg input"></label>
               </div>
             </template>
 
             <template :if="venue === 'polymarket'">
               <div>
-                <p class="p-3 mt-4 text-sm rounded-lg soft">Polymarket blocks order placement from the United States and other restricted regions. PredictHQ checks Polymarket's geoblock endpoint before every order.</p>
-                <label class="block mt-4 text-sm font-bold">API key<input x-model.trim="apiKey" autocomplete="off" class="px-3 mt-2 w-full h-11 rounded-lg input"></label>
-                <label class="block mt-4 text-sm font-bold">API secret<input x-model.trim="apiSecret" autocomplete="off" type="password" class="px-3 mt-2 w-full h-11 rounded-lg input"></label>
-                <label class="block mt-4 text-sm font-bold">Passphrase<input x-model.trim="apiPassphrase" autocomplete="off" type="password" class="px-3 mt-2 w-full h-11 rounded-lg input"></label>
-                <label class="block mt-4 text-sm font-bold">Wallet private key<input x-model.trim="privateKey" autocomplete="off" type="password" class="px-3 mt-2 w-full h-11 rounded-lg input"></label>
-                <label class="block mt-4 text-sm font-bold">Funder address<input x-model.trim="funderAddress" autocomplete="off" class="px-3 mt-2 w-full h-11 rounded-lg input"></label>
-                <label class="block mt-4 text-sm font-bold">Signature type<select x-model="signatureType" class="px-3 mt-2 w-full h-11 rounded-lg input"><option value="0">EOA</option><option value="1">Proxy</option><option value="2">Safe</option><option value="3">EIP-1271</option></select></label>
+                <p class="mt-4 p-3 text-sm rounded-lg soft">Polymarket blocks order placement from the United States and other restricted regions. PredictHQ checks Polymarket's geoblock endpoint before every order.</p>
+                <label class="block mt-4 font-bold text-sm">API key<input x-model.trim="apiKey" autocomplete="off" class="mt-2 px-3 h-11 w-full rounded-lg input"></label>
+                <label class="block mt-4 font-bold text-sm">API secret<input x-model.trim="apiSecret" autocomplete="off" type="password" class="mt-2 px-3 h-11 w-full rounded-lg input"></label>
+                <label class="block mt-4 font-bold text-sm">Passphrase<input x-model.trim="apiPassphrase" autocomplete="off" type="password" class="mt-2 px-3 h-11 w-full rounded-lg input"></label>
+                <label class="block mt-4 font-bold text-sm">Wallet private key<input x-model.trim="privateKey" autocomplete="off" type="password" class="mt-2 px-3 h-11 w-full rounded-lg input"></label>
+                <label class="block mt-4 font-bold text-sm">Funder address<input x-model.trim="funderAddress" autocomplete="off" class="mt-2 px-3 h-11 w-full rounded-lg input"></label>
+                <label class="block mt-4 font-bold text-sm">Signature type<select x-model="signatureType" class="mt-2 px-3 h-11 w-full rounded-lg input"><option value="0">EOA</option><option value="1">Proxy</option><option value="2">Safe</option><option value="3">EIP-1271</option></select></label>
               </div>
             </template>
 
-            <label class="block mt-4 text-sm font-bold">Country / region code<input x-model.trim="jurisdiction" class="px-3 mt-2 w-full h-11 rounded-lg input" placeholder="US or CA-BC"></label>
+            <label class="block mt-4 font-bold text-sm">Country / region code<input x-model.trim="jurisdiction" class="mt-2 px-3 h-11 w-full rounded-lg input" placeholder="US or CA-BC"></label>
             <label class="flex gap-3 mt-4 text-sm"><input x-model="ageConfirmed" type="checkbox"><span>I meet the venue's age and eligibility requirements.</span></label>
             <label class="flex gap-3 mt-3 text-sm"><input x-model="riskAccepted" type="checkbox"><span>I read and accept the <a class="underline accent" href="/risk">risk disclosure</a>.</span></label>
             <label class="flex gap-3 mt-3 text-sm"><input x-model="termsAccepted" type="checkbox"><span>I accept the <a class="underline accent" href="/terms">Terms</a> and <a class="underline accent" href="/privacy">Privacy Policy</a>.</span></label>
-            <button type="button" class="px-5 mt-5 h-11 font-bold rounded-lg btn btn-primary" :disabled="busy" @click="connectAccount()">Verify and connect</button>
+            <button type="button" class="mt-5 px-5 h-11 font-bold rounded-lg btn btn-primary" :disabled="busy" @click="connectAccount()">Verify and connect</button>
           </section>
 
           <section :if="venue !== 'polymarket-us'" class="p-6 rounded-2xl card">
             <h2 class="font-bold text-xl">Practice a strategy</h2>
             <p class="mt-2 text-sm muted">Start with paper trading, then choose your limits before going live. Live exposure is capped at $20 per account.</p>
-            <label class="block mt-5 text-sm font-bold">Name<input x-model.trim="strategyName" class="px-3 mt-2 w-full h-11 rounded-lg input"></label>
-            <label class="block mt-4 text-sm font-bold">Mode<select x-model="mode" class="px-3 mt-2 w-full h-11 rounded-lg input"><option value="paper">Paper (recommended)</option><option value="live">Live</option></select></label>
-            <div class="grid grid-cols-2 gap-4 mt-4">
-              <label class="text-sm font-bold">Bankroll<input x-model.number="bankroll" type="number" min="1" max="20" class="px-3 mt-2 w-full h-11 rounded-lg input"></label>
-              <label class="text-sm font-bold">Max order<input x-model.number="maxStake" type="number" min="1" max="20" class="px-3 mt-2 w-full h-11 rounded-lg input"></label>
-              <label class="text-sm font-bold">Daily stop<input x-model.number="dailyLossLimit" type="number" min="0" max="20" class="px-3 mt-2 w-full h-11 rounded-lg input"></label>
-              <label class="text-sm font-bold">Campaign stop<input x-model.number="cumulativeLossLimit" type="number" min="0" max="20" class="px-3 mt-2 w-full h-11 rounded-lg input"></label>
+            <label class="block mt-5 font-bold text-sm">Name<input x-model.trim="strategyName" class="mt-2 px-3 h-11 w-full rounded-lg input"></label>
+            <label class="block mt-4 font-bold text-sm">Mode<select x-model="mode" class="mt-2 px-3 h-11 w-full rounded-lg input"><option value="paper">Paper (recommended)</option><option value="live">Live</option></select></label>
+            <div class="grid gap-4 grid-cols-2 mt-4">
+              <label class="font-bold text-sm">Bankroll<input x-model.number="bankroll" type="number" min="1" max="20" class="mt-2 px-3 h-11 w-full rounded-lg input"></label>
+              <label class="font-bold text-sm">Max order<input x-model.number="maxStake" type="number" min="1" max="20" class="mt-2 px-3 h-11 w-full rounded-lg input"></label>
+              <label class="font-bold text-sm">Daily stop<input x-model.number="dailyLossLimit" type="number" min="0" max="20" class="mt-2 px-3 h-11 w-full rounded-lg input"></label>
+              <label class="font-bold text-sm">Campaign stop<input x-model.number="cumulativeLossLimit" type="number" min="0" max="20" class="mt-2 px-3 h-11 w-full rounded-lg input"></label>
             </div>
-            <button type="button" class="px-5 mt-5 h-11 font-bold rounded-lg btn btn-primary" :disabled="busy" @click="saveStrategy()">Save active strategy</button>
+            <button type="button" class="mt-5 px-5 h-11 font-bold rounded-lg btn btn-primary" :disabled="busy" @click="saveStrategy()">Save active strategy</button>
           </section>
         </div>
 
@@ -260,22 +260,22 @@ onMounted(() => void refresh())
           one is what the wiring is for, and a user who has just pasted a
           key should not have to find it from the nav.
         --}}
-        <a href="/positions" class="flex flex-wrap gap-4 items-center justify-between p-6 mt-6 rounded-2xl card">
+        <a href="/positions" class="flex flex-wrap gap-4 items-center justify-between mt-6 p-6 rounded-2xl card">
           <div>
-            <h2 class="display font-black text-xl">See what you hold →</h2>
+            <h2 class="font-black text-xl display">See what you hold →</h2>
             <p class="mt-1 text-sm muted">Positions, working orders, and P&amp;L across every venue connected above — including anything you traded in the venue's own app.</p>
           </div>
-          <span class="px-5 h-11 inline-flex items-center font-bold text-sm rounded-lg btn btn-primary">Open my book</span>
+          <span class="inline-flex items-center px-5 h-11 font-bold text-sm rounded-lg btn btn-primary">Open my book</span>
         </a>
 
-        <section class="p-6 mt-6 rounded-2xl card">
+        <section class="mt-6 p-6 rounded-2xl card">
           <div class="flex gap-4 items-center justify-between">
             <div><h2 class="font-bold text-xl">Connected exchanges</h2><p class="mt-1 text-sm muted">Only you can see your balances and connections.</p></div>
             <button type="button" class="px-4 h-10 font-bold text-sm rounded-lg btn" @click="refresh()">Refresh</button>
           </div>
           <p :if="accountStatus()" class="mt-5 text-sm muted" :text="accountStatus()"></p>
           <template :for="account in connectedAccounts">
-            <div class="flex flex-wrap items-center gap-4 py-5">
+            <div class="flex flex-wrap gap-4 items-center py-5">
               <div class="flex-1"><strong :text="account.displayName"></strong><p class="mt-1 text-xs muted" :text="account.status"></p></div>
               <strong class="num" :text="account.balanceLabel"></strong>
               <button @click="disconnectAccount(account.venue)" :disabled="busy()" class="px-4 py-2 text-sm rounded-lg btn" :text="disconnectTarget() === account.venue ? 'Confirm disconnect' : 'Disconnect'"></button>

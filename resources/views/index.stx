@@ -15,41 +15,41 @@ const heading = marketLeagues.find(item => item.slug === selectedLeague)?.label 
 <html lang="en">
   <head>@include('head')</head>
   <body>
-    <div class="app min-h-[100dvh] market-home">
+    <div class="min-h-[100dvh] app market-home">
       @include('nav')
       <nav aria-label="Market categories" class="border-b bd category-strip">
-        <div class="flex items-center gap-6 overflow-x-auto mx-auto max-w-7xl px-4 sm:px-6">
+        <div class="flex overflow-x-auto gap-6 items-center mx-auto px-4 sm:px-6 max-w-7xl">
           @foreach (marketCategories as category)
-            <a href="/?category={{ category.slug }}" data-no-router class="category-link {{ selectedCategory === category.slug && !selectedLeague ? 'selected' : '' }}" {{ selectedCategory === category.slug && !selectedLeague ? 'aria-current=page' : '' }}>
+            <a href="/?category={{ category.slug }}" data-no-router class="category-link {{ selectedCategory === category.slug && !selectedLeague ? 'selected' : '' }}" aria-current="{{ selectedCategory === category.slug && !selectedLeague ? 'page' : 'false' }}">
               @if (category.image)<img src="/assets/images/markets/{{ category.image }}.png" alt="" width="22" height="22" class="object-contain">@endif
               {{ category.label }}
             </a>
           @endforeach
         </div>
       </nav>
-      <main class="mx-auto max-w-7xl px-4 py-7 sm:px-6">
+      <main class="mx-auto px-4 py-7 sm:px-6 max-w-7xl">
         <div class="grid gap-8 lg:grid-cols-[minmax(0,1fr)_280px]">
           <div class="min-w-0">
             @if (selectedCategory === 'all' && !selectedLeague && !discovery.query && featured)
-              <section class="feature-market p-6 sm:p-8 rounded-2xl mb-7">
-                <div class="flex items-center gap-2 text-sm muted">@if (featured.image)<img src="{{ featured.image }}" alt="" width="24" height="24" class="object-contain">@else<i class="h-6 w-6 accent i-hugeicons-chart-increase"></i>@endif<span>{{ featured.categoryLabel }}</span><span aria-hidden="true">·</span><span>{{ featured.venueLabel }}</span></div>
-                <div class="grid gap-7 sm:grid-cols-[minmax(0,1fr)_150px] mt-5 items-center">
-                  <div><h1 class="font-bold tracking-tight text-2xl sm:text-3xl leading-snug line-clamp-3">{{ featured.question }}</h1><p class="mt-3 text-sm muted">{{ featured.outcome_label || 'Market probability' }}</p><a href="{{ featured.href }}" data-no-router class="inline-flex mt-6 px-4 py-2.5 rounded-lg text-sm font-semibold btn btn-primary">Explore market <i class="ml-2 h-4 w-4 i-hugeicons-arrow-right-01"></i></a></div>
-                  <div class="sm:text-right"><p class="text-5xl sm:text-6xl font-semibold tracking-tight accent num">{{ featured.yes }}</p><p class="mt-2 text-sm muted">chance of Yes</p><p class="mt-5 text-xs faint">{{ featured.volumeLabel }} volume</p></div>
+              <section class="mb-7 p-6 sm:p-8 rounded-2xl feature-market">
+                <div class="flex gap-2 items-center text-sm muted">@if (featured.image)<img src="{{ featured.image }}" alt="" width="24" height="24" class="object-contain">@else<i class="h-6 w-6 accent i-hugeicons-chart-increase"></i>@endif<span>{{ featured.categoryLabel }}</span><span aria-hidden="true">·</span><span>{{ featured.venueLabel }}</span></div>
+                <div class="grid gap-7 items-center sm:grid-cols-[minmax(0,1fr)_150px] mt-5">
+                  <div><h1 class="font-bold leading-snug line-clamp-3 text-2xl tracking-tight sm:text-3xl">{{ featured.question }}</h1><p class="mt-3 text-sm muted">{{ featured.outcome_label || 'Market probability' }}</p><a href="{{ featured.href }}" data-no-router class="inline-flex mt-6 px-4 py-2.5 font-semibold text-sm rounded-lg btn btn-primary">Explore market <i class="ml-2 h-4 w-4 i-hugeicons-arrow-right-01"></i></a></div>
+                  <div class="sm:text-right"><p class="font-semibold text-5xl tracking-tight sm:text-6xl accent num">{{ featured.yes }}</p><p class="mt-2 text-sm muted">chance of Yes</p><p class="mt-5 text-xs faint">{{ featured.volumeLabel }} volume</p></div>
                 </div>
               </section>
             @endif
-            <div class="flex flex-wrap items-center justify-between gap-4 mb-5">
+            <div class="flex flex-wrap gap-4 items-center justify-between mb-5">
               <h2 class="font-bold text-xl">{{ discovery.query ? 'Search results' : heading === 'Home' ? 'Trending markets' : heading }}</h2>
-              <form action="/" method="get" class="flex items-center gap-2 px-3 h-10 rounded-lg input market-search">
+              <form action="/" method="get" class="flex gap-2 items-center px-3 h-10 rounded-lg input market-search">
                 <i class="h-4 w-4 faint i-hugeicons-search-01"></i>
                 <input type="hidden" name="category" value="{{ selectedCategory }}">
                 <input type="hidden" name="league" value="{{ selectedLeague }}">
-                <input name="q" type="search" value="{{ discovery.query }}" maxlength="120" placeholder="Search markets" aria-label="Search markets" class="min-w-0 w-40 sm:w-48 bg-transparent text-sm outline-none">
-                <button type="submit" class="text-sm font-semibold accent">Search</button>
+                <input name="q" type="search" value="{{ discovery.query }}" maxlength="120" placeholder="Search markets" aria-label="Search markets" class="min-w-0 w-40 sm:w-48 text-sm bg-transparent outline-none">
+                <button type="submit" class="font-semibold text-sm accent">Search</button>
               </form>
             </div>
-            <div class="flex gap-2 overflow-x-auto mb-5 pb-1" aria-label="Popular leagues">
+            <div class="flex overflow-x-auto gap-2 mb-5 pb-1" aria-label="Popular leagues">
               @foreach (marketLeagues.slice(0, 8) as league)
                 <a href="/?category=sports&league={{ league.slug }}" data-no-router class="flex shrink-0 gap-2 items-center px-3 py-2 rounded-lg text-xs font-semibold league-chip {{ selectedLeague === league.slug ? 'active' : '' }}"><img src="/assets/images/markets/{{ league.image }}.png" alt="" width="20" height="20" class="object-contain">{{ league.label }}</a>
               @endforeach
@@ -57,18 +57,18 @@ const heading = marketLeagues.find(item => item.slug === selectedLeague)?.label 
             @if (cards.length > 0)
               <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 @foreach (cards as market)
-                  <article class="market-card p-4 rounded-xl flex flex-col">
-                    <div class="flex items-start gap-3">@if (market.image)<img src="{{ market.image }}" alt="" width="40" height="40" loading="lazy" class="h-10 w-10 object-contain shrink-0">@else<i class="h-10 w-10 shrink-0 accent i-hugeicons-chart-increase"></i>@endif<h3 class="font-semibold text-sm leading-snug line-clamp-3"><a href="{{ market.href }}" data-no-router>{{ market.question }}</a></h3></div>
-                    <p class="text-xs mt-4 mb-4 muted line-clamp-1">{{ market.outcome_label || market.categoryLabel }}</p>
-                    <div class="grid grid-cols-2 gap-2 mt-auto"><a href="{{ market.href }}" data-no-router class="probability-yes rounded-lg py-2.5 px-3 text-xs font-semibold flex justify-between"><span>Yes</span><span class="num">{{ market.yes }}</span></a><a href="{{ market.href }}" data-no-router class="probability-no rounded-lg py-2.5 px-3 text-xs font-semibold flex justify-between"><span>No</span><span class="num">{{ market.no }}</span></a></div>
-                    <div class="flex justify-between items-center mt-4 text-xs faint"><span>{{ market.volumeLabel }} vol.</span><span>{{ market.venueLabel }}</span></div>
+                  <article class="flex flex-col p-4 rounded-xl market-card">
+                    <div class="flex gap-3 items-start">@if (market.image)<img src="{{ market.image }}" alt="" width="40" height="40" loading="lazy" class="object-contain shrink-0 h-10 w-10">@else<i class="shrink-0 h-10 w-10 accent i-hugeicons-chart-increase"></i>@endif<h3 class="font-semibold leading-snug line-clamp-3 text-sm"><a href="{{ market.href }}" data-no-router>{{ market.question }}</a></h3></div>
+                    <p class="mb-4 mt-4 line-clamp-1 text-xs muted">{{ market.outcome_label || market.categoryLabel }}</p>
+                    <div class="grid gap-2 grid-cols-2 mt-auto"><a href="{{ market.href }}" data-no-router class="flex justify-between px-3 py-2.5 font-semibold text-xs rounded-lg probability-yes"><span>Yes</span><span class="num">{{ market.yes }}</span></a><a href="{{ market.href }}" data-no-router class="flex justify-between px-3 py-2.5 font-semibold text-xs rounded-lg probability-no"><span>No</span><span class="num">{{ market.no }}</span></a></div>
+                    <div class="flex items-center justify-between mt-4 text-xs faint"><span>{{ market.volumeLabel }} vol.</span><span>{{ market.venueLabel }}</span></div>
                   </article>
                 @endforeach
               </div>
             @else
               <section class="p-8 sm:p-12 rounded-xl card">
-                <i class="h-8 w-8 muted i-hugeicons-search-01"></i>
-                <h2 class="mt-4 text-xl font-bold">{{ discovery.unavailable ? 'Markets are temporarily unavailable.' : 'No matching markets right now.' }}</h2>
+                <i class="h-8 w-8 i-hugeicons-search-01 muted"></i>
+                <h2 class="mt-4 font-bold text-xl">{{ discovery.unavailable ? 'Markets are temporarily unavailable.' : 'No matching markets right now.' }}</h2>
                 <p class="mt-3 text-sm muted">{{ discovery.unavailable ? 'We could not load the market feed. Please try again shortly.' : 'Try another category or search, or explore the odds board for more coverage.' }}</p>
                 <div class="flex gap-3 mt-5"><a href="/" class="px-4 py-2 rounded-lg btn btn-primary">All markets</a><a href="/odds" class="px-4 py-2 rounded-lg btn">Odds board</a></div>
               </section>
@@ -78,17 +78,17 @@ const heading = marketLeagues.find(item => item.slug === selectedLeague)?.label 
           <aside class="min-w-0">
             <section class="p-6 rounded-2xl circle-callout">
               <i class="h-8 w-8 i-hugeicons-user-group"></i>
-              <h2 class="mt-5 text-2xl font-bold leading-tight">Your people.<br>Your predictions.</h2>
+              <h2 class="mt-5 font-bold leading-tight text-2xl">Your people.<br>Your predictions.</h2>
               <p class="mt-3 text-sm">Build a private group and bring your friends into the conversation.</p>
-              <a href="/groups" data-no-router class="inline-flex mt-5 items-center gap-2 px-4 py-2.5 text-sm rounded-lg font-semibold group-cta">Create a group <i class="h-4 w-4 i-hugeicons-arrow-right-01"></i></a>
+              <a href="/groups" data-no-router class="inline-flex gap-2 items-center mt-5 px-4 py-2.5 font-semibold text-sm rounded-lg group-cta">Create a group <i class="h-4 w-4 i-hugeicons-arrow-right-01"></i></a>
             </section>
             <section class="mt-7">
-              <h2 class="text-sm font-semibold muted mb-3">Popular leagues</h2>
+              <h2 class="mb-3 font-semibold text-sm muted">Popular leagues</h2>
               @foreach (marketLeagues as league)
-                <a href="/?category=sports&league={{ league.slug }}" data-no-router class="flex items-center gap-3 py-3 hover:opacity-70"><img src="/assets/images/markets/{{ league.image }}.png" alt="" width="32" height="32" class="h-8 w-8 object-contain"><span class="flex-1"><small class="block text-xs faint">{{ league.sport }}</small><strong class="block mt-0.5 text-sm">{{ league.label }}</strong></span><i class="h-4 w-4 faint i-hugeicons-arrow-right-01"></i></a>
+                <a href="/?category=sports&league={{ league.slug }}" data-no-router class="flex gap-3 items-center py-3 hover:opacity-70"><img src="/assets/images/markets/{{ league.image }}.png" alt="" width="32" height="32" class="object-contain h-8 w-8"><span class="flex-1"><small class="block text-xs faint">{{ league.sport }}</small><strong class="block mt-0.5 text-sm">{{ league.label }}</strong></span><i class="h-4 w-4 faint i-hugeicons-arrow-right-01"></i></a>
               @endforeach
             </section>
-            <section class="pt-5 mt-5 border-t bd">
+            <section class="mt-5 pt-5 border-t bd">
               <h2 class="font-semibold text-sm">See the bigger picture</h2>
               <a href="/markets" data-no-router class="flex items-center justify-between py-4 text-sm muted">Follow smart money <i class="h-4 w-4 i-hugeicons-arrow-right-01"></i></a>
               <a href="/odds" data-no-router class="flex items-center justify-between py-3 text-sm muted">Compare every book <i class="h-4 w-4 i-hugeicons-arrow-right-01"></i></a>

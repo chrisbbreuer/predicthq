@@ -60,9 +60,9 @@ const entries = comparisons.map(entry => ({
     <div class="app">
       @include('nav')
 
-      <main class="mx-auto px-4 py-12 sm:px-6 max-w-6xl sm:py-16">
+      <main class="mx-auto px-4 py-12 sm:px-6 sm:py-16 max-w-6xl">
         <div class="max-w-2xl">
-          <h1 class="display font-black leading-[1.08] text-3xl tracking-tight sm:text-5xl">
+          <h1 class="font-black leading-[1.08] text-3xl tracking-tight sm:text-5xl display">
             How PredictHQ compares
           </h1>
           <p class="mt-4 leading-relaxed text-lg muted">
@@ -74,7 +74,7 @@ const entries = comparisons.map(entry => ({
         <div class="grid gap-5 sm:grid-cols-2 mt-10">
           @foreach (entries as entry)
             <a href="/compare/{{ entry.slug }}" class="flex flex-col p-6 rounded-2xl card compare-card">
-              <h2 class="display font-black text-xl tracking-tight">
+              <h2 class="font-black text-xl tracking-tight display">
                 PredictHQ vs {{ entry.name }}
               </h2>
 

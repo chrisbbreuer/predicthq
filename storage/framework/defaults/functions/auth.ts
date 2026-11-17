@@ -81,16 +81,23 @@ export interface AuthComposable {
   token: { value: string | null }
 }
 
+function notifyAuthSession(phase: 'changing' | 'changed'): void {
+  if (typeof globalThis.dispatchEvent === 'function') globalThis.dispatchEvent(new Event(`stacks:auth-${phase}`))
+}
+
 export function useAuth(): AuthComposable {
   function storeLogin(data: LoginResponse): void {
+    notifyAuthSession('changing')
     token.value = data.token
     user.value = data.user
     isAuthenticated.value = true
+    notifyAuthSession('changed')
   }
 
   async function fetchAuthUser(): Promise<UserData | null> {
     try {
       const response = await fetch(`${baseUrl}/me`, {
+        cache: 'no-store',
         credentials: 'same-origin',
         headers: {
           ...(token.value ? { Authorization: `Bearer ${token.value}` } : {}),
@@ -147,9 +154,11 @@ export function useAuth(): AuthComposable {
       return data
 
     if (isRegisterResponse(data)) {
+      notifyAuthSession('changing')
       token.value = data.token
       user.value = data.user
       isAuthenticated.value = true
+      notifyAuthSession('changed')
       return data
     }
 
@@ -202,6 +211,7 @@ export function useAuth(): AuthComposable {
   }
 
   async function logout() {
+    notifyAuthSession('changing')
     const currentToken = token.value
     const response = await fetch(`${baseUrl}/logout`, {
       method: 'POST',
@@ -217,6 +227,7 @@ export function useAuth(): AuthComposable {
     token.value = ''
     user.value = null
     isAuthenticated.value = false
+    notifyAuthSession('changed')
   }
 
   return {

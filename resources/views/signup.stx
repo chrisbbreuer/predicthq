@@ -38,29 +38,29 @@ const authAltLabel = 'Sign in'
     <div class="app">
       @include('nav')
 
-      <main class="mx-auto px-4 py-14 sm:px-6 max-w-6xl sm:py-20">
-        <div class="grid gap-12 items-start lg:grid-cols-[minmax(0,400px)_minmax(0,1fr)] lg:gap-20">
+      <main class="mx-auto px-4 py-14 sm:px-6 sm:py-20 max-w-6xl">
+        <div class="grid gap-12 items-start lg:gap-20 lg:grid-cols-[minmax(0,400px)_minmax(0,1fr)]">
           @include('auth-panel')
 
           {{-- pt matches the card's own top padding so the two headings share a baseline. --}}
           <section class="hidden lg:block lg:pt-8">
-            <h2 class="display font-black text-2xl tracking-tight">Free reads the whole board</h2>
+            <h2 class="font-black text-2xl tracking-tight display">Free reads the whole board</h2>
             <p class="mt-3 max-w-lg leading-relaxed muted">
               An account is not a paywall. Every price, every arb, and the evidence behind each candidate is readable without one. What the account adds is state.
             </p>
 
-            <div class="grid gap-px mt-7 overflow-hidden rounded-2xl" style="background:var(--border)">
+            <div class="grid overflow-hidden gap-px mt-7 rounded-2xl" style="background:var(--border)">
               <div class="p-5" style="background:var(--surface)">
                 <h3 class="font-bold">Sheets that outlive the tab</h3>
-                <p class="mt-1.5 text-sm leading-relaxed muted">Legs you add on the board follow you instead of living in one browser.</p>
+                <p class="mt-1.5 leading-relaxed text-sm muted">Legs you add on the board follow you instead of living in one browser.</p>
               </div>
               <div class="p-5" style="background:var(--surface)">
                 <h3 class="font-bold">Your venue accounts, connected</h3>
-                <p class="mt-1.5 text-sm leading-relaxed muted">Read Kalshi and Polymarket as one book, and let limits you set act on it.</p>
+                <p class="mt-1.5 leading-relaxed text-sm muted">Read Kalshi and Polymarket as one book, and let limits you set act on it.</p>
               </div>
               <div class="p-5" style="background:var(--surface)">
                 <h3 class="font-bold">Markets you actually follow</h3>
-                <p class="mt-1.5 text-sm leading-relaxed muted">Keep the games and questions you trade, rather than finding them again.</p>
+                <p class="mt-1.5 leading-relaxed text-sm muted">Keep the games and questions you trade, rather than finding them again.</p>
               </div>
             </div>
 

@@ -67,24 +67,24 @@ const sample = `{
     <div class="app">
       @include('nav')
 
-      <main class="mx-auto px-4 pt-14 sm:px-6 max-w-6xl sm:pt-20">
-        <a href="/features" data-no-router class="text-sm font-semibold muted hover:opacity-70">Features</a>
-        <h1 class="display mt-3 max-w-3xl font-black leading-[1.06] text-4xl tracking-tight sm:text-5xl">Every number on this site is an endpoint.</h1>
+      <main class="mx-auto pt-14 px-4 sm:pt-20 sm:px-6 max-w-6xl">
+        <a href="/features" data-no-router class="font-semibold text-sm hover:opacity-70 muted">Features</a>
+        <h1 class="mt-3 max-w-3xl font-black leading-[1.06] text-4xl tracking-tight sm:text-5xl display">Every number on this site is an endpoint.</h1>
         <p class="mt-5 max-w-2xl leading-relaxed text-lg muted">
           The pages have no privileged data source. They call the same routes you can, and the read routes need no key, which means a claim on any page can be checked against the response that produced it.
         </p>
 
         <section class="mt-16">
           <div class="flex flex-wrap gap-3 items-baseline justify-between pb-4 border-b bd">
-            <h2 class="display font-black text-2xl tracking-tight">Reads</h2>
+            <h2 class="font-black text-2xl tracking-tight display">Reads</h2>
             <p class="text-sm muted">No authentication. Safe to poll.</p>
           </div>
           <div class="divide-y bd">
             @foreach (readEndpoints as ep)
-              <div class="grid gap-2 md:grid-cols-[4rem_18rem_1fr] md:gap-6 py-4 items-baseline">
-                <span class="font-bold text-xs num accent">{{ ep.method }}</span>
+              <div class="grid gap-2 items-baseline md:gap-6 md:grid-cols-[4rem_18rem_1fr] py-4">
+                <span class="font-bold text-xs accent num">{{ ep.method }}</span>
                 <code class="text-sm num">{{ ep.path }}</code>
-                <p class="text-sm leading-relaxed muted">{{ ep.what }}</p>
+                <p class="leading-relaxed text-sm muted">{{ ep.what }}</p>
               </div>
             @endforeach
           </div>
@@ -92,31 +92,31 @@ const sample = `{
 
         <section class="mt-16">
           <div class="flex flex-wrap gap-3 items-baseline justify-between pb-4 border-b bd">
-            <h2 class="display font-black text-2xl tracking-tight">Writes</h2>
+            <h2 class="font-black text-2xl tracking-tight display">Writes</h2>
             <p class="text-sm muted">Authenticated. Plan limits are enforced per field.</p>
           </div>
           <div class="divide-y bd">
             @foreach (writeEndpoints as ep)
-              <div class="grid gap-2 md:grid-cols-[4rem_18rem_1fr] md:gap-6 py-4 items-baseline">
-                <span class="font-bold text-xs num accent">{{ ep.method }}</span>
+              <div class="grid gap-2 items-baseline md:gap-6 md:grid-cols-[4rem_18rem_1fr] py-4">
+                <span class="font-bold text-xs accent num">{{ ep.method }}</span>
                 <code class="text-sm num">{{ ep.path }}</code>
-                <p class="text-sm leading-relaxed muted">{{ ep.what }}</p>
+                <p class="leading-relaxed text-sm muted">{{ ep.what }}</p>
               </div>
             @endforeach
           </div>
         </section>
 
         <section class="mt-20">
-          <h2 class="display font-black text-2xl tracking-tight sm:text-3xl">A candidate, in full</h2>
+          <h2 class="font-black text-2xl tracking-tight sm:text-3xl display">A candidate, in full</h2>
           <p class="mt-3 max-w-2xl leading-relaxed muted">
             Trimmed to one signal for length. The real response carries every signal that fired, and quoted price plus the contributions equals fair value exactly.
           </p>
-          <pre class="overflow-x-auto p-5 mt-6 text-xs leading-relaxed rounded-2xl card num sm:p-6"><code>{{ sample }}</code></pre>
+          <pre class="overflow-x-auto mt-6 p-5 sm:p-6 leading-relaxed text-xs rounded-2xl card num"><code>{{ sample }}</code></pre>
         </section>
 
-        <section class="flex flex-col gap-5 items-start justify-between lg:flex-row lg:items-center p-8 mt-16 rounded-2xl card sm:p-10">
+        <section class="flex flex-col gap-5 items-start justify-between lg:flex-row lg:items-center mt-16 p-8 sm:p-10 rounded-2xl card">
           <div>
-            <h2 class="display font-black text-2xl tracking-tight">Try it now</h2>
+            <h2 class="font-black text-2xl tracking-tight display">Try it now</h2>
             <p class="mt-2 max-w-xl leading-relaxed muted">The candidate feed is open in a browser tab.</p>
           </div>
           <div class="flex flex-wrap gap-3 shrink-0">

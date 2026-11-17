@@ -47,6 +47,7 @@ export const routes = [
   { pattern: '/password/reset/:token', filePath: 'storage/framework/defaults/resources/views/password/reset/[token].stx', isDynamic: true, params: ["token"] },
   { pattern: '/scores/:league/:day', filePath: 'resources/views/scores/[league]/[day].stx', isDynamic: true, params: ["league","day"] },
   { pattern: '/compare/:competitor', filePath: 'resources/views/compare/[competitor].stx', isDynamic: true, params: ["competitor"] },
+  { pattern: '/feedback/:token', filePath: 'storage/framework/defaults/resources/views/feedback/[token].stx', isDynamic: true, params: ["token"] },
   { pattern: '/orders/:id', filePath: 'storage/framework/defaults/resources/views/orders/[id].stx', isDynamic: true, params: ["id"] },
 ] as const
 

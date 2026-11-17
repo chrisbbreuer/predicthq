@@ -18,10 +18,11 @@ Comprehensive AI/LLM integration with 4 provider drivers, image generation, visi
 ```
 ai/src/
 ├── drivers/
-│   ├── anthropic.ts      # Claude driver
-│   ├── openai.ts         # GPT + DALL-E + Whisper + TTS
-│   ├── ollama.ts         # Local LLM driver
+│   ├── anthropic/index.ts # Claude driver
+│   ├── openai/index.ts    # GPT + image + transcription + TTS
+│   ├── ollama/index.ts    # Local LLM driver
 │   └── bedrock/          # Amazon Bedrock, through the Converse API
+├── complete.ts           # complete()/completeStream(): inline ghost-text completions
 ├── image.ts              # Image generation & vision
 ├── speech.ts             # Provider-neutral text-to-speech & speech-to-text
 ├── search.ts             # RAG, embeddings, vector index
@@ -69,7 +70,8 @@ const result = await bedrock.chat([{ role: 'user', content: 'Hello' }], { system
 ```
 
 - Every request goes through Bedrock's Converse API, so one shape serves Nova,
-  Claude and Llama; the model is configuration. No streaming yet.
+  Claude and Llama; the model is configuration. `bedrock.streamChat()` and
+  `streamChatEvents()` stream through `converse-stream` (ts-cloud >= 0.16.44).
 - Credentials come from the AWS credential chain, never config. Region:
   `drivers.bedrock.region`, `AWS_REGION`, `AWS_DEFAULT_REGION`, us-east-1.
 - Default model `amazon.nova-lite-v1:0`: on demand, no profile, no agreement.
@@ -96,7 +98,11 @@ messages.push(assistantTurn(result), toolResultsTurn(
 - The `responseFormat` structured-output tool is internal: its JSON is
   `content`, never a tool call.
 - Ollama refuses `toolChoice: 'required'` / `{ name }`; it cannot force a call.
-- `streamChat()` streams text only.
+- Streaming takes the same `tools`. `streamChat()` yields text and returns the
+  full `AIResult` (with `toolCalls`) when it ends; `streamChatEvents()` yields
+  `{ type: 'text' }`, `{ type: 'tool_call', call }` (whole, once its arguments
+  have streamed) and a final `{ type: 'done', result }`. Every driver,
+  Bedrock included.
 
 ## Provider-Neutral Client
 
@@ -205,7 +211,7 @@ const index = await indexText(text, { chunkSize: 500 })
 const answer = await rag('What is X?', index, { model: 'claude-sonnet-4-20250514', maxTokens: 1000 })
 
 // VectorIndex class
-const idx = new VectorIndex({ dimensions: 1536 })
+const idx = new VectorIndex({ provider: 'openai', model: 'text-embedding-3-small' })
 await idx.add([{ id: '1', content: 'Hello', metadata: {} }])
 const results = await idx.search('greeting', 5)
 const results2 = await idx.searchByVector(queryEmbedding, 5)
@@ -234,9 +240,9 @@ const openaiTools = client.toOpenAITools()
 
 // Multiple servers
 const manager = new MCPManager()
-manager.addServer({ name: 'server1', transport: 'stdio', command: '...' })
-manager.addServer({ name: 'server2', transport: 'streamable-http', url: '...' })
-const allTools = await manager.getAllTools()
+await manager.addServer({ name: 'server1', transport: 'stdio', command: '...' })
+await manager.addServer({ name: 'server2', transport: 'streamable-http', url: '...' })
+const allTools = manager.getAllTools() // cached tools from connected servers
 await manager.callTool('server1/tool-name', args)
 await manager.disconnectAll()
 
@@ -336,6 +342,72 @@ const sessionId = driver.getLastSessionId()
 await driver.resumeSession(sessionId, 'Add validation')
 ```
 
+## Inline completions (ghost text)
+
+`complete()` is the continuation at the cursor, for editors that show grey text
+after the caret and accept it with Tab. It uses the app's configured default
+driver (any of the four) and that driver's fast model class, asks for ONLY the
+continuation, and cleans the answer: the echoed prefix, the model's markup,
+chatter and refusals (to `''`), everything past the first sentence or line, and
+anything that runs into the text after the cursor.
+
+```typescript
+import { complete, completeStream } from '@stacksjs/ai'
+
+const { completion } = await complete({
+  before: 'Remember to buy milk, eggs and ', // the last 2000 chars are sent
+  after: '',                                 // the first 500 chars are sent
+  kind: 'todo',                              // 'note' | 'prompt' | 'todo' | 'text' | 'code'
+  context: 'Groceries',                      // note title, library description
+  maxTokens: 48,                             // default 48
+  signal: controller.signal,                 // abort: rejects with an AbortError
+  driver: 'bedrock',                         // default: ai.completion.driver, then ai.default
+})
+
+for await (const { completion } of completeStream({ before })) paint(completion) // the whole suggestion so far
+```
+
+- `{ completion: '' }` is "no suggestion", never an error: nothing to continue,
+  `ai.completion.enabled: false`, no driver configured, or the model declined. A
+  real driver failure throws.
+- The model is, in order: `input.model`, `ai.completion.model`, a Haiku (Anthropic,
+  Bedrock) or Nova Micro/Lite found in `ai.models`, then the fast defaults in
+  `models.ts` (`DEFAULT_ANTHROPIC_FAST_MODEL`, `DEFAULT_BEDROCK_FAST_MODEL`); on
+  OpenAI and Ollama it is the driver's configured model. Bedrock Claude needs the
+  account's Anthropic use-case form submitted, otherwise list a Nova model in
+  `ai.models` (or set `ai.completion.model`) and completions use that.
+- `kind: 'code'` is its own mode, not a wording change. The instruction is for
+  code (continue the statement, close only what the code after the cursor does
+  not, use no name that is not in the code or the context), the budget is 128
+  tokens, and the cleanup keeps what prose cleanup removes: quotes, full stops,
+  a leading newline with its indentation, and up to twelve lines. Pass what the
+  model cannot see as `context`, such as model and column names.
+- A small LRU keyed on the tail of `before` (plus kind, model and the head of
+  `after`) makes retyping free; `completionCache.clear()` empties it.
+- Requests carry `maxRetries: 0` and the abort `signal` reaches the HTTP drivers
+  (Bedrock rejects at once and drops the late response), and each reports
+  `recordUsage` with `metadata: { feature: 'completion', kind }`, so `onUsage`
+  can price them separately. `ChatCompletionOptions` gained `signal`,
+  `maxRetries` and `usageMetadata` for this; Ollama now honours `maxTokens`
+  (`num_predict`) and reports usage like the other drivers.
+- `completionStatus(config)` says whether a driver can answer, without a call;
+  `postProcessCompletion(raw, { before, after, kind })` is the cleanup, reusable
+  with your own model call.
+
+`POST /ai/complete` (default `Actions/AI/CompleteAction`, in the guarded `/ai`
+route group of the dashboard bundle) takes `{ before, after?, kind?, context? }`
+and answers `{ completion }`: 401 when signed out, 422 for a bad body, a 90 per
+minute per-user rate limit (429), `''` when no driver is configured, 502 when the
+provider fails. To mount it elsewhere, one line in `routes/api.ts`:
+
+```typescript
+route.post('/complete', 'Actions/AI/CompleteAction').middleware('auth') // POST /api/complete
+```
+
+The client half is `useCompletion()` and `<AiTextarea>` in stx
+(`stacks-stx`, `stacks-composables/BROWSER.md`): `<AiTextarea kind="note" fetcher="/api/complete" v-model:value="body" />`.
+Tests: `core/ai/tests/complete.test.ts`, `defaults/app/Actions/AI/complete-request.test.ts`.
+
 ## config/ai.ts
 
 ```typescript
@@ -347,18 +419,220 @@ await driver.resumeSession(sessionId, 'Add validation')
     anthropic: { model: 'claude-sonnet-5-5' },
     bedrock: { model: 'global.anthropic.claude-sonnet-5-5' },
   },
+  completion: { enabled: true, maxTokens: 48 }, // optional: driver, model for inline completions
 }
 ```
 
 ## Gotchas
-- API keys should be in `.env` — `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`
+- API keys should be in `.env` - `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`
 - Ollama requires a local server running on port 11434
 - Image generation uses OpenAI DALL-E by default
 - Vision supports both GPT-4V and Claude models
-- VectorIndex is in-memory — not persisted between restarts
+- VectorIndex is in-memory - not persisted between restarts
 - RAG combines chunking + embedding + vector search + LLM generation
 - MCP supports stdio (subprocess), SSE, and HTTP transports
 - The buddy assistant has git integration (commit, push, apply changes)
 - Claude Agent SDK wraps the Claude Code CLI for agentic workflows
 - A Bedrock id as `default` selects the Bedrock driver; it never reaches api.anthropic.com
-- Sentiment/classification use AI models — they're not rule-based
+- Sentiment/classification use AI models - they're not rule-based
+
+
+## Usage, retries and multimodal messages
+
+The public package also exposes `onUsage/recordUsage/listUsageReporters`
+(and clearUsageReporters for teardown), `estimateTokens/estimateMessageTokens`,
+`sanitizePrompt`, `fetchWithRetry`, and
+`buildMessageWithImages/normalizeMessagesForProvider`. Use the exported
+types and their `utils/` implementations before composing a provider-neutral
+message or reporting costs. Token estimates are heuristic, usage callback data
+comes from provider results, and sanitizing a prompt is not authorization for
+executing a suggested tool.
+
+Provider capabilities differ: embeddings currently use OpenAI/Ollama; RAG supports
+Anthropic/OpenAI/Ollama; speech uses OpenAI only. The shared chat client and
+tool-turn helpers support the four chat providers but do not imply those other
+features are implemented by Bedrock. VectorIndex is memory-only; its constructor
+accepts EmbeddingOptions (provider/model), not an arbitrary vector dimensions
+setting. Runtime credentials come from env/provider configuration, never a
+browser-exported config response.
+
+Tests: `storage/framework/core/ai/tests/usage-and-tokens.test.ts`,
+`vision.test.ts`, `retry.test.ts`, `driver-retry.test.ts`,
+`tool-calls.test.ts` and `client.test.ts`. Verify chosen model/provider
+capabilities from config and registry rather than assuming a marketing model name
+is usable for every API.
+
+## Serving MCP tools
+
+Use the native server subpath so serving a tool does not load AI provider drivers:
+
+```typescript
+import { createMCPServer, mcpTextResult } from '@stacksjs/ai/mcp-server'
+import { route } from '@stacksjs/router'
+
+const server = createMCPServer({
+  name: 'example', version: '1.0.0',
+  authenticate: async request => authenticateIntegrationKey(request),
+  tools: [{
+    name: 'account', description: 'Read the connected account',
+    inputSchema: { type: 'object', additionalProperties: false },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    execute: async (args, { principal }) => mcpTextResult({ id: principal.id }),
+  }],
+})
+route.post('/mcp', server.handle).parseBody(false).skipCsrf()
+route.get('/mcp', server.handle)
+route.delete('/mcp', server.handle).skipCsrf()
+```
+
+`authenticateIntegrationKey` is application-owned: return a principal or an HTTP
+401/403 `Response`. Authenticate every request, enforce scopes and quotas, and
+never accept ambient login cookies as integration credentials. Tool `available`
+filters discovery and execution; domain operations must still check authorization.
+`@stacksjs/api/operation` supplies `defineApiOperation({ authorize, handle })` for
+sharing that check across HTTP, MCP and background invocations.
+
+This transport is stateless Streamable HTTP with JSON replies. It supports
+2025-11-25, 2025-06-18 and 2025-03-26; GET/DELETE return 405. Clients send both
+application/json and text/event-stream in Accept. It implements tools, static
+resources, prompts and discovery pagination; it does not claim SSE subscriptions,
+tasks, server requests, session ids, stdio or JSON-RPC batch support. `parseBody(false)`
+is essential: the protocol owns its bounded read and error envelope. The router
+keeps middleware, CSRF policy, CORS, security and request-id headers. JSON-RPC
+error bodies keep their envelope instead of receiving a top-level request_id.
+
+Schemas use an explicitly bounded vocabulary: type, enum, const, properties,
+required, additionalProperties (boolean), items, minimum/maximum, min/maxLength,
+min/maxItems and pattern, plus descriptive metadata. Unsupported keywords fail
+registration; put additional domain validation in the authorized operation.
+Use object schemas for input and optional structured output. `mcpTextResult`
+serializes the same data in both text and structuredContent. Tool exceptions are
+redacted, with server-side `onError` diagnostics. Expected domain failures may
+return `mcpTextResult(data, true)`. Do not advertise idempotency for a write unless
+the underlying operation guarantees it. `responseHeaders(principal)` can expose
+per-key rate limits. Browser requests require exact configured allowedOrigins. Requests without an Origin header
+remain eligible for bearer authentication. The request Host is never an origin allowlist.
+
+Tests: `core/ai/tests/mcp-server.test.ts`, `core/router/tests/body.test.ts`,
+`core/router/tests/protocol-body.test.ts` and `core/api/tests/operation.test.ts`.
+
+
+For OAuth-backed MCP hosts, set `resourceMetadataUrl` to the canonical RFC 9728
+metadata URL; authentication failures keep their HTTP status and advertise it in
+the Bearer challenge. Use native Stacks auth for registration, consent, PKCE,
+audience checks, token exchange and revocation. Per-tool `securitySchemes` and
+`_meta` are supported for host authentication metadata; they describe policy and
+do not replace runtime authorization. Tool result `_meta` can carry protocol
+extensions such as authentication challenges.
+
+The server snapshots registered tools, schemas, prompt arguments, origins and
+callbacks. Later changes to the supplied objects cannot relax an active server's
+policy. Invalid schema types and bounds fail at registration; enum/const accept
+JSON primitives only. String bounds count Unicode code points. Diagnostics and
+response-metadata callback failures cannot reject the protocol handler.
+
+
+## Local CPU transcription
+
+`@stacksjs/ai/local-speech` exports `createLocalSpeechHandler` and
+`whisperTranscriber`. Bind the handler to loopback with Bun.serve, supply a
+private bearer token (at least 24 characters), and provide the installed
+whisper.cpp executable and a checksum-pinned model path. The handler accepts
+decoded WAV multipart files at `/v1/audio/transcriptions` and returns `{ text }`,
+so `speechToText` uses the normal OpenAI-compatible driver with a custom base URL.
+
+Set the server's `maxRequestBodySize` to the configured audio limit plus 65536.
+The handler also bounds its own streamed read, caps concurrent inference, aborts
+timed-out work, rejects invalid audio, and removes temporary recordings and
+transcripts after every outcome. Its health route is authenticated too. The
+engine gets no application/provider credentials in its child environment. A
+custom local transcriber must honor the supplied AbortSignal.
+
+`SpeechRequestError` preserves HTTP `status` and `retryAfter` for speech failures.
+Use these fields for a busy/retry message instead of treating service failures as
+invalid audio. A successful mocked test is not proof of real recognition; verify
+the installed native engine with an actual recording on the deployment host.
+
+## Local CPU speech model installation
+
+Use `ensureLocalSpeechModel` from `@stacksjs/ai/local-speech-model` for the pinned
+multilingual Whisper base model. Pass `{ directory }`; its returned path is the
+`modelPath` for `createLocalSpeechHandler`. It verifies the exact length and
+SHA-256 before atomic publication, resumes interrupted responses with validated
+HTTP ranges, safely restarts when Range is ignored, and honors caller aborts.
+It defaults to four attempts with a 180,000 ms timeout per transfer. Keep model
+download handling in this package rather than copying a shell downloader into
+an application. The Whisper executable remains a managed Pantry dependency.
+
+## Realtime audio transport
+
+`connectRealtime` from `@stacksjs/ai/realtime` opens a server-only GA Realtime
+audio session with Bun's WebSocket client. Supply `apiKey`, an explicitly chosen
+`model`, bounded `instructions`, and `onEvent`. The default audio format is
+`audio/pcmu` for phone media; PCM uses mono 24 kHz. The API key travels only in
+server handshake headers. No connection is opened on import.
+
+Wait for the returned session before appending audio. The transport refuses
+oversized or invalid base64, bounds socket backpressure, and never reconnects
+or retries automatically. Set a maximum call duration and enforce wallet
+reservations outside the transport. `interrupt(itemId, playedMilliseconds)`
+cancels generation and truncates history to the audio actually played.
+
+Only declared completed tool calls are emitted, once per call ID. The caller
+authorizes and executes tools, then submits the result. No tool executes inside
+the transport. Deduplicate response usage by response ID and reconcile incomplete
+calls against provider billing. A closed socket is not proof of final usage.
+
+Retained tests: `core/ai/tests/realtime.test.ts`, including a real local Bun
+WebSocket handshake. Live OpenAI audio quality, account access, media bridging
+and production latency require separate provider qualification. Protocol sources:
+<https://developers.openai.com/api/docs/guides/voice-websockets> and
+<https://developers.openai.com/api/docs/guides/realtime-conversations>.
+
+## Durable SQL retrieval
+
+Use `createDurableRetrievalStore` from `@stacksjs/ai/durable-retrieval` when
+knowledge must survive process restarts. `VectorIndex` above remains memory only.
+The adapter takes the native application's parameterized SQL executor and its
+model-generated source/index/chunk table names. It performs exact pgvector cosine
+ranking on PostgreSQL. Explicit mode: 'lexical' uses native PostgreSQL
+`to_tsvector` / `plainto_tsquery` ranking, while SQLite uses bounded substring
+matching; it does not create tables,
+install extensions, maintain an ANN index, or authorize a caller for you.
+
+The source schema names workspace_id, project_id, source_key, language, audience,
+publication, permission_granted, deleted_at, current_revision and active_index_id.
+Indexes carry source_id, workspace_id, project_id, revision, status,
+embedding_model and dimensions. Chunks carry source_id, index_id, workspace_id,
+project_id, revision, content and embedding (JSON text). Keep these as app models.
+Declare `databaseExtensions: ['vector']` on the embedding-owning model: native
+migration generation emits `CREATE EXTENSION IF NOT EXISTS vector` only in the
+PostgreSQL corpus. Provision the pgvector server extension before migrating;
+missing server binaries or migration privileges fail explicitly. SQLite emits no
+PostgreSQL prerequisite and retains lexical retrieval.
+
+Every search requires a scope with numeric string workspaceId/projectId,
+language, audience ('public' or 'internal') and allowedSourceIds. Authorize these
+source ids through the application's live membership/source ACL before calling.
+An empty list denies all. The list is bounded to 10,000 ids. The SQL intersects
+that grant with ownership, audience, publication, permission state, deletion and
+active revision before ranking; PostgreSQL uses a materialized permitted relation
+so a vector expression cannot run on unauthorized rows. Applications must still
+invalidate sources atomically when their authoritative content or permissions
+change, and swap active_index_id only when a complete new revision is ready.
+
+`createConfiguredEmbeddingClient` from `@stacksjs/ai/embedding-client` consumes
+server AI driver config and an optional explicit OpenAI/Ollama provider, model and
+dimensions. `embed(texts, { signal })` makes a bounded provider HTTP request and
+validates batch indexes, finite nonzero vectors and consistent dimensions. Requests
+refuse redirects and combine a server deadline (at most 60 seconds) with caller
+cancellation. Endpoint URLs reject userinfo, query strings and fragments; OpenAI
+requires HTTPS except on loopback. An explicitly configured private Ollama host
+may use HTTP because it is a server-owned endpoint without provider credentials. It
+honors configured provider endpoints and never silently routes a chat-only
+provider's documents to another service. Provider secrets stay server-side.
+
+Evidence: `ai/tests/durable-retrieval.test.ts`,
+`ai/tests/durable-retrieval-postgres.test.ts` (set STACKS_TEST_PGVECTOR_URL to a
+local server with pgvector; the fixture owns its temporary database) and
+`database/tests/model-extensions.test.ts`.

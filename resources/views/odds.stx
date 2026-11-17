@@ -262,9 +262,9 @@ const navActive = 'board'
 
     <main class="mx-auto px-4 sm:px-6 max-w-7xl">
       <!-- hero -->
-      <section class="grid gap-10 items-center lg:grid-cols-[1.05fr_0.95fr] lg:gap-16 py-10 lg:py-14">
+      <section class="grid gap-10 items-center lg:gap-16 lg:grid-cols-[1.05fr_0.95fr] py-10 lg:py-14">
         <div>
-          <h1 class="display max-w-2xl font-black leading-[1.05] text-4xl tracking-tight sm:text-5xl">
+          <h1 class="max-w-2xl font-black leading-[1.05] text-4xl tracking-tight sm:text-5xl display">
             Every account, every call,<br><span class="accent">one place.</span>
           </h1>
           <p class="mt-5 max-w-xl leading-relaxed text-lg muted">
@@ -289,7 +289,7 @@ const navActive = 'board'
           proof of the same claim: this is what we are reading right now.
         --}}
         @if (summary.eventCount)
-          <div class="p-6 rounded-2xl card sm:p-7">
+          <div class="p-6 sm:p-7 rounded-2xl card">
             <div class="flex flex-wrap gap-2 items-center justify-between pb-5 border-b bd">
               <div class="flex gap-2 items-center">
                 <span class="h-2 w-2 rounded-full" style="background:{{ feed.live ? 'var(--pos)' : 'var(--neg)' }}" aria-hidden="true"></span>
@@ -307,7 +307,7 @@ const navActive = 'board'
                 </a>
               @endif
             </div>
-            <div class="grid gap-y-6 grid-cols-2 gap-x-8 pt-5">
+            <div class="grid gap-x-8 gap-y-6 grid-cols-2 pt-5">
               <div>
                 <div class="font-black text-3xl num">{{ summary.eventCount.toLocaleString() }}</div>
                 <div class="mt-1 font-semibold text-xs tracking-wide uppercase muted">Games priced</div>
@@ -333,7 +333,7 @@ const navActive = 'board'
             <p class="mt-2 leading-relaxed muted">
               No odds have been ingested yet, so there is nothing to compare. Prices appear here as soon as the first pull lands.
             </p>
-            <a href="/features/odds" data-no-router class="inline-flex items-center px-4 mt-5 h-10 font-bold text-sm rounded-lg btn">How the board works</a>
+            <a href="/features/odds" data-no-router class="inline-flex items-center mt-5 px-4 h-10 font-bold text-sm rounded-lg btn">How the board works</a>
           </div>
         @endif
       </section>
@@ -348,7 +348,7 @@ const navActive = 'board'
 
       <!-- evidence: one real candidate, with the numbers behind it -->
       <section id="evidence" class="py-14 border-t scroll-mt-20 bd">
-        <h2 class="display max-w-2xl font-black text-2xl tracking-tight sm:text-3xl">The reasoning is a row in the database, not a paragraph</h2>
+        <h2 class="max-w-2xl font-black text-2xl tracking-tight sm:text-3xl display">The reasoning is a row in the database, not a paragraph</h2>
         <p class="mt-3 max-w-2xl leading-relaxed muted">
           Fair value starts at the venue's own price. Each signal below moved it by a measured amount, and every one records the sample it stood on. The model reviewing this can decline it or lower its confidence. It cannot raise it.
         </p>
@@ -381,10 +381,10 @@ const navActive = 'board'
 
         @if (candidate)
           <div class="overflow-hidden mt-7 rounded-2xl card">
-            <div class="flex flex-col gap-4 items-start justify-between md:flex-row md:items-center px-5 py-5 border-b bd sm:px-6">
+            <div class="flex flex-col gap-4 items-start justify-between md:flex-row md:items-center px-5 py-5 sm:px-6 border-b bd">
               <div class="min-w-0">
                 <div class="font-bold text-xs tracking-wide uppercase faint">{{ candidate.venue }}</div>
-                <div class="mt-1 font-bold text-lg leading-snug">{{ candidate.question }}</div>
+                <div class="mt-1 font-bold leading-snug text-lg">{{ candidate.question }}</div>
               </div>
               <div class="flex gap-7 shrink-0">
                 <div>
@@ -404,7 +404,7 @@ const navActive = 'board'
 
             <div class="divide-y bd">
               @foreach (candidate.evidence as item)
-                <div class="flex flex-col gap-1 items-start justify-between sm:flex-row sm:items-center sm:gap-6 px-5 py-4 sm:px-6">
+                <div class="flex flex-col gap-1 items-start justify-between sm:flex-row sm:gap-6 sm:items-center px-5 py-4 sm:px-6">
                   <div class="min-w-0">
                     <span class="font-bold text-sm">{{ item.label }}</span>
                     <span class="ml-2 text-sm muted">{{ item.summary }}</span>
@@ -417,13 +417,13 @@ const navActive = 'board'
               @endforeach
             </div>
 
-            <div class="flex flex-wrap gap-2 items-center justify-between px-5 py-4 text-sm border-t bd sm:px-6" style="background:var(--surface-2)">
+            <div class="flex flex-wrap gap-2 items-center justify-between px-5 py-4 sm:px-6 text-sm border-t bd" style="background:var(--surface-2)">
               <span class="muted">Buying <span class="font-bold" style="color:var(--text)">{{ candidate.side }}</span> at or below fair value</span>
               <span class="muted">Confidence <span class="font-bold num" style="color:var(--text)">{{ candidate.confidencePct }}</span></span>
             </div>
           </div>
         @else
-          <div class="px-6 py-12 mt-7 text-center rounded-2xl card">
+          <div class="mt-7 px-6 py-12 text-center rounded-2xl card">
             <p class="font-bold">No candidate right now.</p>
             <p class="mt-2 text-sm muted">Nothing in the last 24 hours of tape carries enough flow to price against. That is the honest answer, and it is the one the engine gives itself.</p>
           </div>
@@ -528,7 +528,7 @@ const navActive = 'board'
                         </td>
                         @foreach (s.cells as cell)
                           <td class="px-2 py-3 text-center">
-                            <div class="num mx-auto w-16 rounded-lg px-2 py-1.5 font-bold {{ cell.isBest ? 'best-cell' : 'cell' }}" :class="flashClass({{ s.id }}, {{ cell.bookmakerId }})" {{ cell.price === null ? 'style=opacity:0.4' : '' }} x-text="px({{ s.id }}, {{ cell.bookmakerId }}, {{ cell.price === null ? 'null' : cell.price }})">{{ cell.decimalLabel }}</div>
+                            <div class="num mx-auto w-16 rounded-lg px-2 py-1.5 font-bold {{ cell.isBest ? 'best-cell' : 'cell' }}" :class="flashClass({{ s.id }}, {{ cell.bookmakerId }})" style="{{ cell.price === null ? 'opacity:0.4' : '' }}" x-text="px({{ s.id }}, {{ cell.bookmakerId }}, {{ cell.price === null ? 'null' : cell.price }})">{{ cell.decimalLabel }}</div>
                           </td>
                         @endforeach
                       </tr>
@@ -545,7 +545,7 @@ const navActive = 'board'
       <section id="arbitrage" class="py-12 border-t scroll-mt-20 bd">
         <div class="flex flex-wrap gap-3 items-end justify-between">
           <div>
-            <h2 class="display font-black text-2xl tracking-tight sm:text-3xl">Arbitrage radar</h2>
+            <h2 class="font-black text-2xl tracking-tight sm:text-3xl display">Arbitrage radar</h2>
             <p class="mt-1 max-w-2xl muted">When the best prices across books imply under 100% total, back every outcome at a different book and lock in profit. Set a total stake to see the split.</p>
           </div>
           <label class="flex gap-2 items-center font-semibold text-sm muted">Total stake $
@@ -598,31 +598,31 @@ const navActive = 'board'
       <!-- how it works: staged rows, so each step gets room for the
            thing that makes it different rather than an equal third -->
       <section id="how" class="py-14 border-t scroll-mt-20 bd">
-        <h2 class="display max-w-2xl font-black text-2xl tracking-tight sm:text-3xl">Four stages, and the last one is the only one that spends money</h2>
+        <h2 class="max-w-2xl font-black text-2xl tracking-tight sm:text-3xl display">Four stages, and the last one is the only one that spends money</h2>
 
         <div class="mt-8 divide-y bd">
-          <div class="grid gap-2 md:grid-cols-[14rem_1fr] md:gap-10 py-6">
+          <div class="grid gap-2 md:gap-10 md:grid-cols-[14rem_1fr] py-6">
             <h3 class="font-bold">Read the tape</h3>
             <p class="max-w-2xl leading-relaxed muted">
               We continuously pull the public trade feed and market metadata from both venues, with a one-minute safety floor and immediate in-app broadcast after each completed pass. Polymarket fills carry a wallet, so per-account accuracy is real there. Kalshi's feed is anonymous, so its signal is flow rather than identity, and it is scored as such.
             </p>
           </div>
 
-          <div class="grid gap-2 md:grid-cols-[14rem_1fr] md:gap-10 py-6">
+          <div class="grid gap-2 md:gap-10 md:grid-cols-[14rem_1fr] py-6">
             <h3 class="font-bold">Price it</h3>
             <p class="max-w-2xl leading-relaxed muted">
               Six signals move fair value off the venue's quote, each one clamped so none can run away with the estimate, and each recording its sample size. A market without enough recent flow to price gets no opinion at all.
             </p>
           </div>
 
-          <div class="grid gap-2 md:grid-cols-[14rem_1fr] md:gap-10 py-6">
+          <div class="grid gap-2 md:gap-10 md:grid-cols-[14rem_1fr] py-6">
             <h3 class="font-bold">Review it</h3>
             <p class="max-w-2xl leading-relaxed muted">
               A model reads the question and the evidence, and catches what the arithmetic misses: flow that is one account rather than a consensus, or a question that resolves on something a trade tape cannot see. It can decline. It cannot invent a market, a side, or more confidence than the data carries.
             </p>
           </div>
 
-          <div class="grid gap-2 md:grid-cols-[14rem_1fr] md:gap-10 py-6">
+          <div class="grid gap-2 md:gap-10 md:grid-cols-[14rem_1fr] py-6">
             <h3 class="font-bold">Size and place it</h3>
             <p class="max-w-2xl leading-relaxed muted">
               Quarter-Kelly on your bankroll, scaled by confidence, capped by your per-trade limit. Bankroll, position count, and a daily loss limit are re-checked before the order leaves. Every refusal is recorded with its reason, so a quiet strategy is never a mystery.
@@ -655,7 +655,7 @@ const navActive = 'board'
     >
       <div class="flex items-center justify-between px-5 py-4 border-b bd">
         <div>
-          <h2 class="display font-black text-lg">Betting sheet</h2>
+          <h2 class="font-black text-lg display">Betting sheet</h2>
           <p class="text-xs muted"><span x-text="sheet.length"></span> pick(s) · parlay builder</p>
         </div>
         <button class="grid place-items-center h-9 w-9 rounded-lg icon-btn" @click="sheetOpen = false" aria-label="Close">✕</button>

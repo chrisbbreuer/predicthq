@@ -156,52 +156,52 @@ void initialize()
 <html lang="en">
   <head>@include('head')</head>
   <body>
-    <div class="app min-h-[100dvh]">
+    <div class="min-h-[100dvh] app">
       @include('nav')
-      <main class="mx-auto max-w-7xl px-4 py-10 sm:px-6">
-        <div class="flex items-center gap-3 mb-3"><i class="h-7 w-7 accent i-hugeicons-user-group"></i><p class="font-semibold muted">Your circle</p></div>
-        <h1 class="text-3xl sm:text-4xl font-bold tracking-tight">Better calls start with good company.</h1>
+      <main class="mx-auto px-4 py-10 sm:px-6 max-w-7xl">
+        <div class="flex gap-3 items-center mb-3"><i class="h-7 w-7 accent i-hugeicons-user-group"></i><p class="font-semibold muted">Your circle</p></div>
+        <h1 class="font-bold text-3xl tracking-tight sm:text-4xl">Better calls start with good company.</h1>
         <p class="mt-3 max-w-2xl muted">Bring your friends into a private group. Build your circle across the markets you follow.</p>
         <p :if="loading()" role="status" class="mt-8 muted">Loading your groups...</p>
         <p :if="error()" role="alert" class="mt-5 neg" :text="error()"></p>
         <p :if="notice()" role="status" class="mt-5 pos" :text="notice()"></p>
-        <section :if="!loading() && !signedIn()" class="mt-8 p-6 card rounded-xl max-w-xl">
-          <h2 class="text-xl font-bold">Sign in to join your people.</h2>
+        <section :if="!loading() && !signedIn()" class="mt-8 p-6 max-w-xl rounded-xl card">
+          <h2 class="font-bold text-xl">Sign in to join your people.</h2>
           <p class="mt-2 muted">Groups and invitations are private to your PredictHQ account.</p>
-          <a href="{{ signInPath }}" data-no-router class="mt-5 inline-flex px-5 py-3 rounded-lg btn btn-primary">Sign in</a>
+          <a href="{{ signInPath }}" data-no-router class="inline-flex mt-5 px-5 py-3 rounded-lg btn btn-primary">Sign in</a>
         </section>
-        <section :if="signedIn() && pendingInvite()" class="flex flex-wrap items-center justify-between gap-4 mt-8 p-5 card rounded-xl">
-          <div><h2 class="font-bold text-lg">You've been invited.</h2><p class="muted text-sm mt-1">Join this group with your current account.</p></div>
+        <section :if="signedIn() && pendingInvite()" class="flex flex-wrap gap-4 items-center justify-between mt-8 p-5 rounded-xl card">
+          <div><h2 class="font-bold text-lg">You've been invited.</h2><p class="mt-1 text-sm muted">Join this group with your current account.</p></div>
           <button @click="acceptInvite()" :disabled="busy()" class="px-5 py-3 rounded-lg btn btn-primary">Accept invitation</button>
         </section>
-        <div :if="signedIn()" class="grid gap-8 mt-8 lg:grid-cols-[300px_minmax(0,1fr)]">
+        <div :if="signedIn()" class="grid gap-8 lg:grid-cols-[300px_minmax(0,1fr)] mt-8">
           <aside>
-            <h2 class="text-lg font-bold mb-4">Your groups</h2>
-            <p :if="groups().length === 0" class="text-sm muted mb-5">Your circle starts here. Create your first group or accept a friend's invitation.</p>
+            <h2 class="mb-4 font-bold text-lg">Your groups</h2>
+            <p :if="groups().length === 0" class="mb-5 text-sm muted">Your circle starts here. Create your first group or accept a friend's invitation.</p>
             <div class="grid gap-2">
               <template :for="group in groups">
-                <button @click="openGroup(group.id)" :disabled="busy()" :aria-pressed="selected() === group.id" class="flex items-center justify-between gap-3 w-full p-4 text-left card rounded-xl hover:opacity-80">
-                  <span><strong :text="group.name"></strong><span class="block text-xs muted mt-1"><span :text="group.member_count"></span> members</span></span>
+                <button @click="openGroup(group.id)" :disabled="busy()" :aria-pressed="selected() === group.id" class="flex gap-3 items-center justify-between p-4 w-full text-left rounded-xl hover:opacity-80 card">
+                  <span><strong :text="group.name"></strong><span class="block mt-1 text-xs muted"><span :text="group.member_count"></span> members</span></span>
                   <i class="h-4 w-4 i-hugeicons-arrow-right-01"></i>
                 </button>
               </template>
             </div>
-            <form @submit.prevent="createGroup()" class="mt-6 p-5 card rounded-xl">
+            <form @submit.prevent="createGroup()" class="mt-6 p-5 rounded-xl card">
               <h3 class="font-bold">Create a group</h3>
               <label for="group-name" class="block mt-4 text-sm muted">Group name</label>
-              <input id="group-name" x-model.trim="name" required minlength="2" maxlength="80" placeholder="Sunday football crew" class="w-full mt-2 px-3 py-2.5 input rounded-lg">
+              <input id="group-name" x-model.trim="name" required minlength="2" maxlength="80" placeholder="Sunday football crew" class="mt-2 px-3 py-2.5 w-full rounded-lg input">
               <label for="group-description" class="block mt-4 text-sm muted">Description</label>
-              <textarea id="group-description" x-model.trim="description" maxlength="500" rows="3" placeholder="What brings your group together?" class="w-full mt-2 px-3 py-2 input rounded-lg"></textarea>
-              <button :disabled="busy()" class="w-full mt-4 py-2.5 rounded-lg btn btn-primary">Create group</button>
+              <textarea id="group-description" x-model.trim="description" maxlength="500" rows="3" placeholder="What brings your group together?" class="mt-2 px-3 py-2 w-full rounded-lg input"></textarea>
+              <button :disabled="busy()" class="mt-4 py-2.5 w-full rounded-lg btn btn-primary">Create group</button>
             </form>
           </aside>
           <div>
-            <section :if="selected()" class="p-6 card rounded-xl">
-              <div class="flex items-center justify-between gap-4"><h2 class="text-2xl font-bold" :text="selectedName()"></h2><span class="text-xs muted">Private group</span></div>
-              <h3 class="mt-7 text-sm font-semibold muted">Members</h3>
+            <section :if="selected()" class="p-6 rounded-xl card">
+              <div class="flex gap-4 items-center justify-between"><h2 class="font-bold text-2xl" :text="selectedName()"></h2><span class="text-xs muted">Private group</span></div>
+              <h3 class="mt-7 font-semibold text-sm muted">Members</h3>
               <template :for="member in members">
-                <div class="flex items-center gap-3 py-4">
-                  <span class="h-9 w-9 grid place-items-center rounded-full soft"><i class="h-5 w-5 i-hugeicons-user"></i></span>
+                <div class="flex gap-3 items-center py-4">
+                  <span class="grid place-items-center h-9 w-9 rounded-full soft"><i class="h-5 w-5 i-hugeicons-user"></i></span>
                   <span class="flex-1 font-semibold" :text="member.name"></span>
                   <span class="text-xs muted" :text="member.role"></span>
                   <button :if="member.role !== 'owner' && (owner() || member.user_id === currentUser())" @click="removeMember(member.user_id)" :disabled="busy()" class="px-3 py-2 text-xs rounded-lg btn"><span :text="member.user_id === currentUser() ? 'Leave group' : 'Remove'"></span></button>
@@ -210,27 +210,27 @@ void initialize()
               <form :if="owner()" @submit.prevent="createInvite()" class="mt-5 pt-5 border-t bd">
                 <h3 class="font-bold">Invite a friend</h3>
                 <label for="invite-email" class="block mt-3 text-sm muted">Email restriction (optional)</label>
-                <div class="flex flex-wrap gap-3 mt-2"><input id="invite-email" x-model.trim="email" type="email" maxlength="254" placeholder="friend@example.com" class="min-w-0 flex-1 px-3 py-2.5 input rounded-lg"><button :disabled="busy()" class="px-4 py-2.5 btn btn-primary rounded-lg">Create invite link</button></div>
+                <div class="flex flex-wrap gap-3 mt-2"><input id="invite-email" x-model.trim="email" type="email" maxlength="254" placeholder="friend@example.com" class="flex-1 px-3 py-2.5 min-w-0 rounded-lg input"><button :disabled="busy()" class="px-4 py-2.5 rounded-lg btn btn-primary">Create invite link</button></div>
                 <p class="mt-2 text-xs faint">An email restricts who can accept. Share the link yourself; no email is sent.</p>
                 <a :if="inviteLink()" :href="inviteLink()" :text="inviteLink()" class="block mt-4 break-all text-sm accent" data-no-router></a>
               </form>
               <div :if="owner() && invitations().length > 0" class="mt-6">
-                <h3 class="text-sm font-bold muted">Invitations</h3>
+                <h3 class="font-bold text-sm muted">Invitations</h3>
                 <template :for="invite in invitations">
-                  <div class="flex items-center gap-3 py-3 text-sm"><span class="flex-1" :text="invite.email || 'Share link'"></span><span class="text-xs muted" :text="invite.active ? 'Pending' : invite.status"></span><button :if="invite.active" @click="revokeInvite(invite.id)" :disabled="busy()" class="px-3 py-2 btn rounded-lg text-xs">Revoke</button></div>
+                  <div class="flex gap-3 items-center py-3 text-sm"><span class="flex-1" :text="invite.email || 'Share link'"></span><span class="text-xs muted" :text="invite.active ? 'Pending' : invite.status"></span><button :if="invite.active" @click="revokeInvite(invite.id)" :disabled="busy()" class="px-3 py-2 text-xs rounded-lg btn">Revoke</button></div>
                 </template>
               </div>
             </section>
-            <section :if="!selected()" class="p-8 sm:p-12 card rounded-xl">
+            <section :if="!selected()" class="p-8 sm:p-12 rounded-xl card">
               <i class="h-10 w-10 accent i-hugeicons-user-multiple-02"></i>
-              <h2 class="mt-5 text-2xl font-bold">A place for your market crew.</h2>
+              <h2 class="mt-5 font-bold text-2xl">A place for your market crew.</h2>
               <p class="mt-3 max-w-lg muted">Choose a group to see who's in it, invite someone new, or manage your membership.</p>
             </section>
-            <section class="mt-6 p-6 card rounded-xl">
-              <div class="flex items-center gap-3"><i class="h-6 w-6 accent i-hugeicons-gift"></i><h2 class="text-xl font-bold">Bring a friend to PredictHQ</h2></div>
+            <section class="mt-6 p-6 rounded-xl card">
+              <div class="flex gap-3 items-center"><i class="h-6 w-6 accent i-hugeicons-gift"></i><h2 class="font-bold text-xl">Bring a friend to PredictHQ</h2></div>
               <p class="mt-3 text-sm muted">Share your personal referral link. Follow new signups and see when a friend connects their first exchange account.</p>
               <div class="flex gap-8 mt-5"><div><strong class="block text-2xl num" :text="referred()"></strong><span class="text-sm muted">Friends joined</span></div><div><strong class="block text-2xl num" :text="qualified()"></strong><span class="text-sm muted">Exchange connected</span></div></div>
-              <a :if="referralLink()" :href="referralLink()" :text="referralLink()" data-no-router class="block mt-5 break-all accent text-sm"></a>
+              <a :if="referralLink()" :href="referralLink()" :text="referralLink()" data-no-router class="block mt-5 break-all text-sm accent"></a>
               <button :if="!referralLink()" @click="createReferral()" :disabled="busy()" class="mt-5 px-4 py-2.5 rounded-lg btn">Get my referral link</button>
             </section>
           </div>

@@ -24,13 +24,6 @@ declare global {
   const chartSvg: typeof autoImports.chartSvg
   const chartTop: typeof autoImports.chartTop
   const axisLabels: typeof autoImports.axisLabels
-  const increment: typeof autoImports.increment
-  const decrement: typeof autoImports.decrement
-  const reset: typeof autoImports.reset
-  const count: typeof autoImports.count
-  const toggleDark: typeof autoImports.toggleDark
-  const isDark: typeof autoImports.isDark
-  const preferredDark: typeof autoImports.preferredDark
 }
 
 export {}

@@ -139,7 +139,7 @@ const navActive = 'live'
         <div>
           <div class="flex gap-2 items-center">
             <span class="live-dot" :class="connected ? 'on' : ''"></span>
-            <h1 class="display font-black text-3xl tracking-tight sm:text-4xl">Live action</h1>
+            <h1 class="font-black text-3xl tracking-tight sm:text-4xl display">Live action</h1>
           </div>
           <p class="mt-1 muted">Line moves and arbitrage across {{ summary.bookmakerCount }} books, streaming in real time.</p>
         </div>
@@ -186,7 +186,7 @@ const navActive = 'live'
         </section>
 
         <!-- arbs + stats -->
-        <aside class="min-w-0 space-y-5">
+        <aside class="space-y-5 min-w-0">
           <section class="rounded-2xl card">
             <div class="px-4 py-3 font-bold border-b bd">Live arbitrage</div>
             @if (arbs.length === 0)

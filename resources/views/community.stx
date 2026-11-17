@@ -64,14 +64,14 @@ const totalNotes = threads.reduce((n, t) => n + t.noteCount, 0)
     <div class="app">
       @include('nav')
 
-      <main class="mx-auto px-4 pt-14 sm:px-6 max-w-6xl sm:pt-20">
-        <h1 class="display max-w-3xl font-black leading-[1.06] text-4xl tracking-tight sm:text-5xl">Talk the calls through.</h1>
+      <main class="mx-auto pt-14 px-4 sm:pt-20 sm:px-6 max-w-6xl">
+        <h1 class="max-w-3xl font-black leading-[1.06] text-4xl tracking-tight sm:text-5xl display">Talk the calls through.</h1>
         <p class="mt-5 max-w-2xl leading-relaxed text-lg muted">
           A thread per market, for the people trading it. Take a side, say why, and see who disagreed before the market settled.
         </p>
 
         @if (threads.length > 0)
-          <p class="mt-6 text-sm num faint">{{ totalNotes.toLocaleString() }} {{ totalNotes === 1 ? "note" : "notes" }} across {{ threads.length }} {{ threads.length === 1 ? "thread" : "threads" }}</p>
+          <p class="mt-6 text-sm faint num">{{ totalNotes.toLocaleString() }} {{ totalNotes === 1 ? "note" : "notes" }} across {{ threads.length }} {{ threads.length === 1 ? "thread" : "threads" }}</p>
 
           <section class="flex flex-col gap-4 mt-10">
             @foreach (threads as t)
@@ -79,12 +79,12 @@ const totalNotes = threads.reduce((n, t) => n + t.noteCount, 0)
                 <div class="flex flex-wrap gap-4 items-start justify-between px-5 py-5 sm:px-6">
                   <div class="min-w-0">
                     <div class="font-bold text-xs tracking-wide uppercase faint">{{ t.venue }}</div>
-                    <h2 class="display mt-1 font-bold text-lg leading-snug">{{ t.question }}</h2>
+                    <h2 class="mt-1 font-bold leading-snug text-lg display">{{ t.question }}</h2>
                   </div>
                   <div class="flex gap-5 shrink-0 text-sm">
                     <span class="num pos">{{ t.yes }} yes</span>
-                    <span class="num neg">{{ t.no }} no</span>
-                    <span class="num muted">{{ t.watching }} watching</span>
+                    <span class="neg num">{{ t.no }} no</span>
+                    <span class="muted num">{{ t.watching }} watching</span>
                   </div>
                 </div>
 
@@ -93,14 +93,14 @@ const totalNotes = threads.reduce((n, t) => n + t.noteCount, 0)
                     <div class="px-5 py-4 sm:px-6">
                       <div class="flex gap-2 items-baseline">
                         <span class="font-semibold text-sm">{{ note.authorName }}</span>
-                        <span class="text-xs num faint">{{ note.stance }}</span>
+                        <span class="text-xs faint num">{{ note.stance }}</span>
                       </div>
                       <p class="mt-1 leading-relaxed text-sm muted">{{ note.body }}</p>
                     </div>
                   @endforeach
                 </div>
 
-                <div class="px-5 py-4 border-t bd sm:px-6" style="background:var(--surface-2)">
+                <div class="px-5 py-4 sm:px-6 border-t bd" style="background:var(--surface-2)">
                   <button class="font-bold text-sm accent" @click="open({{ t.marketId }})">
                     <span x-show="openId !== {{ t.marketId }}">Add a note</span>
                     <span x-show="openId === {{ t.marketId }}" style="display:none">Close</span>
@@ -112,18 +112,18 @@ const totalNotes = threads.reduce((n, t) => n + t.noteCount, 0)
                       :id="'body-{{ t.marketId }}'"
                       x-model="draft"
                       rows="3"
-                      class="px-3 py-2 mt-2 w-full text-sm rounded-lg input"
+                      class="mt-2 px-3 py-2 w-full text-sm rounded-lg input"
                       placeholder="What are you seeing that the price is not?"
                     ></textarea>
 
                     <div class="flex flex-wrap gap-3 items-end mt-3">
                       <div>
                         <label class="block font-semibold text-xs tracking-wide uppercase muted" :for="'name-{{ t.marketId }}'">Name</label>
-                        <input :id="'name-{{ t.marketId }}'" x-model="name" class="px-3 py-2 mt-1.5 text-sm rounded-lg input" placeholder="Optional">
+                        <input :id="'name-{{ t.marketId }}'" x-model="name" class="mt-1.5 px-3 py-2 text-sm rounded-lg input" placeholder="Optional">
                       </div>
                       <div>
                         <label class="block font-semibold text-xs tracking-wide uppercase muted" :for="'stance-{{ t.marketId }}'">Stance</label>
-                        <select :id="'stance-{{ t.marketId }}'" x-model="stance" class="px-3 py-2 mt-1.5 text-sm rounded-lg input">
+                        <select :id="'stance-{{ t.marketId }}'" x-model="stance" class="mt-1.5 px-3 py-2 text-sm rounded-lg input">
                           <option value="watching">Watching</option>
                           <option value="yes">Yes</option>
                           <option value="no">No</option>
@@ -142,21 +142,21 @@ const totalNotes = threads.reduce((n, t) => n + t.noteCount, 0)
             @endforeach
           </section>
         @else
-          <section class="p-8 mt-10 rounded-2xl card sm:p-10">
-            <h2 class="display font-black text-2xl tracking-tight">No threads open yet.</h2>
+          <section class="mt-10 p-8 sm:p-10 rounded-2xl card">
+            <h2 class="font-black text-2xl tracking-tight display">No threads open yet.</h2>
             <p class="mt-2 max-w-xl leading-relaxed muted">
               Nobody has said anything yet, so there is nothing to show you. These are markets currently being tracked. Opening one starts its thread.
             </p>
 
             @if (seeds.length > 0)
-              <div class="flex flex-col gap-px mt-7 rounded-xl overflow-hidden" style="background:var(--border)">
+              <div class="flex overflow-hidden flex-col gap-px mt-7 rounded-xl" style="background:var(--border)">
                 @foreach (seeds as m)
                   <div class="flex flex-wrap gap-3 items-center justify-between px-5 py-4" style="background:var(--surface)">
                     <div class="min-w-0">
                       <div class="font-bold text-xs tracking-wide uppercase faint">{{ m.venue }}</div>
                       <div class="mt-0.5 font-semibold">{{ m.question }}</div>
                     </div>
-                    <button class="px-4 py-2 font-bold text-sm rounded-lg shrink-0 btn" @click="open({{ m.id }})">Start the thread</button>
+                    <button class="shrink-0 px-4 py-2 font-bold text-sm rounded-lg btn" @click="open({{ m.id }})">Start the thread</button>
                   </div>
 
                   <div x-show="openId === {{ m.id }}" x-cloak class="px-5 py-4" style="background:var(--surface-2)">

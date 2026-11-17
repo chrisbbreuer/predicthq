@@ -254,9 +254,9 @@ onMount(async () => {
     <div class="app">
       @include('nav')
 
-      <main class="mx-auto px-4 pt-8 pb-16 sm:px-6 max-w-4xl">
+      <main class="mx-auto pb-16 pt-8 px-4 sm:px-6 max-w-4xl">
         <div class="flex flex-wrap gap-3 items-center justify-between">
-          <a href="/scores/{{ league.key }}/today" data-no-router class="inline-flex gap-2 items-center text-sm font-semibold muted hover:opacity-70"><i class="h-4 w-4 {{ leagueIcon }}" aria-hidden="true"></i>{{ leagueLabel }} scores</a>
+          <a href="/scores/{{ league.key }}/today" data-no-router class="inline-flex gap-2 items-center font-semibold text-sm hover:opacity-70 muted"><i class="h-4 w-4 {{ leagueIcon }}" aria-hidden="true"></i>{{ leagueLabel }} scores</a>
           <div class="flex gap-2">
             <a href="/positions" data-no-router class="inline-flex items-center px-4 h-9 font-semibold text-sm rounded-full btn">My bets</a>
             <a x-show="betHref()" :href="betHref()" data-no-router class="inline-flex gap-1.5 items-center px-4 h-9 font-semibold text-sm rounded-full btn btn-primary">Odds &amp; bet view <i class="h-4 w-4 i-hugeicons-arrow-right-01"></i></a>
@@ -264,16 +264,16 @@ onMount(async () => {
         </div>
 
         <p x-show="loading()" class="mt-16 text-center muted">Loading game…</p>
-        <section x-show="!loading() && failed() && !view()" x-cloak class="px-6 py-16 mt-6 text-center card">
-          <p class="display text-3xl">Game not found</p>
+        <section x-show="!loading() && failed() && !view()" x-cloak class="mt-6 px-6 py-16 text-center card">
+          <p class="text-3xl display">Game not found</p>
           <p class="mt-2 text-sm muted" x-text="failed()"></p>
         </section>
 
         <div x-show="view()" x-cloak>
           {{-- The matchup. --}}
-          <section class="p-6 mt-5 card sm:p-8">
-            <p class="text-xs font-bold tracking-[0.14em] text-center uppercase faint">{{ leagueLabel }}</p>
-            <h1 class="mt-1 display text-3xl text-center sm:text-4xl" x-text="view() ? view().title : ''"></h1>
+          <section class="mt-5 p-6 sm:p-8 card">
+            <p class="font-bold text-center text-xs tracking-[0.14em] uppercase faint">{{ leagueLabel }}</p>
+            <h1 class="mt-1 text-3xl text-center sm:text-4xl display" x-text="view() ? view().title : ''"></h1>
             <div class="mt-6 matchup">
               <div class="flex gap-4 items-center justify-start">
                 <div class="text-center">
@@ -281,7 +281,7 @@ onMount(async () => {
                   <div class="mt-1 font-bold" x-text="view() ? view().away.abbr : ''"></div>
                   <div class="text-xs faint num" x-text="view() ? view().away.record : ''"></div>
                 </div>
-                <span class="score figure-xl" :class="view() && view().away.dim ? 'dim' : ''" x-text="view() ? view().away.score : ''"></span>
+                <span class="figure-xl score" :class="view() && view().away.dim ? 'dim' : ''" x-text="view() ? view().away.score : ''"></span>
               </div>
               <div class="text-center">
                 <div x-show="view() && view().isLive" class="inline-flex gap-1.5 items-center font-extrabold text-sm tracking-[0.12em] live"><span class="live-pulse"></span>LIVE</div>
@@ -289,7 +289,7 @@ onMount(async () => {
                 <div class="mt-1 font-semibold num" x-text="view() ? view().status : ''"></div>
               </div>
               <div class="flex gap-4 items-center justify-end">
-                <span class="score figure-xl" :class="view() && view().home.dim ? 'dim' : ''" x-text="view() ? view().home.score : ''"></span>
+                <span class="figure-xl score" :class="view() && view().home.dim ? 'dim' : ''" x-text="view() ? view().home.score : ''"></span>
                 <div class="text-center">
                   <img x-show="view() && view().home.hasLogo" :src="view() ? view().home.logo : ''" alt="" class="logo">
                   <div class="mt-1 font-bold" x-text="view() ? view().home.abbr : ''"></div>
@@ -297,11 +297,11 @@ onMount(async () => {
                 </div>
               </div>
             </div>
-            <p x-show="view() && view().lastPlay" class="mt-5 text-sm text-center muted" x-text="view() ? view().lastPlay : ''"></p>
+            <p x-show="view() && view().lastPlay" class="mt-5 text-center text-sm muted" x-text="view() ? view().lastPlay : ''"></p>
           </section>
 
           {{-- How the market saw it. --}}
-          <section x-show="view() && view().hasKalshi" class="p-5 mt-5 card sm:p-6">
+          <section x-show="view() && view().hasKalshi" class="mt-5 p-5 sm:p-6 card">
             <div class="flex flex-wrap gap-3 items-center justify-between">
               <h2 class="font-bold text-lg">Win probability</h2>
               <div class="flex gap-1">
@@ -316,7 +316,7 @@ onMount(async () => {
                 <template :for="label in labels">
                   <div class="chart-label" :style="'top:' + label.top">
                     <div class="font-bold text-xs truncate" :style="'color:' + label.color" x-text="label.label"></div>
-                    <div class="figure-xl text-3xl sm:text-4xl" :style="'color:' + label.color" x-text="label.value"></div>
+                    <div class="text-3xl sm:text-4xl figure-xl" :style="'color:' + label.color" x-text="label.value"></div>
                   </div>
                 </template>
               </div>
@@ -332,20 +332,20 @@ onMount(async () => {
             <table class="w-full text-sm">
               <thead>
                 <tr class="border-b bd">
-                  <th class="px-5 py-3 font-bold text-xs tracking-wide text-left uppercase muted">Team</th>
-                  <template :for="period in periods"><th class="px-2 py-3 w-9 font-bold text-xs text-center uppercase muted" x-text="period.label"></th></template>
-                  <th class="px-5 py-3 font-bold text-xs text-right uppercase muted">T</th>
+                  <th class="px-5 py-3 font-bold text-left text-xs tracking-wide uppercase muted">Team</th>
+                  <template :for="period in periods"><th class="px-2 py-3 w-9 font-bold text-center text-xs uppercase muted" x-text="period.label"></th></template>
+                  <th class="px-5 py-3 font-bold text-right text-xs uppercase muted">T</th>
                 </tr>
               </thead>
               <tbody>
                 <tr class="border-b bd">
                   <td class="px-5 py-3 font-semibold" x-text="view() ? view().away.abbr : ''"></td>
-                  <template :for="cell in awayLine"><td class="px-2 py-3 text-center num muted" x-text="cell.value"></td></template>
+                  <template :for="cell in awayLine"><td class="px-2 py-3 text-center muted num" x-text="cell.value"></td></template>
                   <td class="px-5 py-3 font-black text-right num" x-text="view() ? view().away.score : ''"></td>
                 </tr>
                 <tr>
                   <td class="px-5 py-3 font-semibold" x-text="view() ? view().home.abbr : ''"></td>
-                  <template :for="cell in homeLine"><td class="px-2 py-3 text-center num muted" x-text="cell.value"></td></template>
+                  <template :for="cell in homeLine"><td class="px-2 py-3 text-center muted num" x-text="cell.value"></td></template>
                   <td class="px-5 py-3 font-black text-right num" x-text="view() ? view().home.score : ''"></td>
                 </tr>
               </tbody>
@@ -354,7 +354,7 @@ onMount(async () => {
 
           {{-- Player box scores. --}}
           <section x-show="view() && view().hasBox" class="mt-5 card">
-            <div class="flex flex-wrap gap-3 items-center justify-between px-5 pt-5">
+            <div class="flex flex-wrap gap-3 items-center justify-between pt-5 px-5">
               <h2 class="font-bold text-lg">Box score</h2>
               <div class="tabs" role="tablist" aria-label="Team">
                 <button type="button" class="tab" :class="boxSide() === 'away' ? 'on' : ''" @click="showBox('away')" x-text="view() ? view().away.abbr : ''"></button>
@@ -388,7 +388,7 @@ onMount(async () => {
           </section>
 
           {{-- Team stats. --}}
-          <section x-show="stats().length > 0" class="p-5 mt-5 card sm:p-6">
+          <section x-show="stats().length > 0" class="mt-5 p-5 sm:p-6 card">
             <div class="flex items-center justify-between">
               <span class="font-bold" x-text="view() ? view().away.abbr : ''"></span>
               <h2 class="font-bold text-lg">Team stats</h2>
@@ -404,7 +404,7 @@ onMount(async () => {
                   </div>
                   <div class="flex gap-1 mt-2 h-1.5">
                     <span class="rounded-full" :style="'width:' + stat.awayWidth + ';background:var(--text)'"></span>
-                    <span class="rounded-full grow" style="background:var(--track)"></span>
+                    <span class="grow rounded-full" style="background:var(--track)"></span>
                   </div>
                 </div>
               </template>
@@ -412,12 +412,12 @@ onMount(async () => {
           </section>
 
           {{-- The book's line. --}}
-          <section x-show="view() && view().odds" class="p-5 mt-5 card sm:p-6">
+          <section x-show="view() && view().odds" class="mt-5 p-5 sm:p-6 card">
             <div class="flex flex-wrap gap-2 items-baseline justify-between">
               <h2 class="font-bold text-lg">The line</h2>
               <span class="text-xs faint" x-text="view() && view().odds ? view().odds.provider : ''"></span>
             </div>
-            <div class="grid gap-3 mt-4 grid-cols-2 sm:grid-cols-4">
+            <div class="grid gap-3 grid-cols-2 sm:grid-cols-4 mt-4">
               <div class="p-3 rounded-xl soft"><div class="text-xs muted">Spread</div><div class="mt-1 font-bold num" x-text="view() && view().odds ? view().odds.details : ''"></div></div>
               <div class="p-3 rounded-xl soft"><div class="text-xs muted">Total</div><div class="mt-1 font-bold num" x-text="view() && view().odds ? view().odds.total : ''"></div></div>
               <div class="p-3 rounded-xl soft"><div class="text-xs muted" x-text="(view() ? view().away.abbr : '') + ' moneyline'"></div><div class="mt-1 font-bold num" x-text="view() && view().odds ? view().odds.awayMl : ''"></div></div>
@@ -426,14 +426,14 @@ onMount(async () => {
           </section>
 
           {{-- Match information. --}}
-          <section class="p-5 mt-5 card sm:p-6">
+          <section class="mt-5 p-5 sm:p-6 card">
             <h2 class="font-bold text-lg">Match information</h2>
             <div class="flex flex-col gap-2 mt-4 text-sm">
-              <div x-show="view() && view().venue" class="flex gap-3"><span class="w-24 shrink-0 muted">Venue</span><span x-text="view() ? view().venue : ''"></span></div>
-              <div x-show="view() && view().broadcast" class="flex gap-3"><span class="w-24 shrink-0 muted">TV</span><span x-text="view() ? view().broadcast : ''"></span></div>
-              <div x-show="view() && view().attendance" class="flex gap-3"><span class="w-24 shrink-0 muted">Attendance</span><span class="num" x-text="view() ? view().attendance : ''"></span></div>
-              <div x-show="view() && view().note" class="flex gap-3"><span class="w-24 shrink-0 muted">Note</span><span x-text="view() ? view().note : ''"></span></div>
-              <div class="flex gap-3"><span class="w-24 shrink-0 muted">Status</span><span x-text="view() ? view().status : ''"></span></div>
+              <div x-show="view() && view().venue" class="flex gap-3"><span class="shrink-0 w-24 muted">Venue</span><span x-text="view() ? view().venue : ''"></span></div>
+              <div x-show="view() && view().broadcast" class="flex gap-3"><span class="shrink-0 w-24 muted">TV</span><span x-text="view() ? view().broadcast : ''"></span></div>
+              <div x-show="view() && view().attendance" class="flex gap-3"><span class="shrink-0 w-24 muted">Attendance</span><span class="num" x-text="view() ? view().attendance : ''"></span></div>
+              <div x-show="view() && view().note" class="flex gap-3"><span class="shrink-0 w-24 muted">Note</span><span x-text="view() ? view().note : ''"></span></div>
+              <div class="flex gap-3"><span class="shrink-0 w-24 muted">Status</span><span x-text="view() ? view().status : ''"></span></div>
             </div>
           </section>
 

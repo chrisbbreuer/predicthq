@@ -11,21 +11,21 @@ const updated = market?.updated_at ? String(market.updated_at) : 'Unavailable'
 <html lang="en">
   <head>@include('head')</head>
   <body>
-    <div class="app min-h-[100dvh]">
+    <div class="min-h-[100dvh] app">
       @include('nav')
-      <main class="mx-auto max-w-5xl px-4 py-10 sm:px-6">
+      <main class="mx-auto px-4 py-10 sm:px-6 max-w-5xl">
         <a href="/" data-no-router class="text-sm muted">← All markets</a>
         @if (market)
-          <div class="flex items-center gap-3 mt-8">@if (market.image)<img src="{{ market.image }}" alt="" width="48" height="48" class="object-contain">@else<i class="h-12 w-12 accent i-hugeicons-chart-increase"></i>@endif<span class="text-sm muted">{{ market.categoryLabel }} · {{ market.venueLabel }}</span></div>
-          <h1 class="mt-5 text-3xl sm:text-4xl font-bold tracking-tight leading-tight">{{ market.question }}</h1>
+          <div class="flex gap-3 items-center mt-8">@if (market.image)<img src="{{ market.image }}" alt="" width="48" height="48" class="object-contain">@else<i class="h-12 w-12 accent i-hugeicons-chart-increase"></i>@endif<span class="text-sm muted">{{ market.categoryLabel }} · {{ market.venueLabel }}</span></div>
+          <h1 class="mt-5 font-bold leading-tight text-3xl tracking-tight sm:text-4xl">{{ market.question }}</h1>
           @if (market.outcome_label)<p class="mt-3 text-lg muted">{{ market.outcome_label }}</p>@endif
-          <div class="grid gap-5 mt-8 sm:grid-cols-2">
-            <section class="p-6 rounded-xl card"><h2 class="font-semibold muted">Yes</h2><p class="mt-4 text-5xl font-semibold num pos">{{ market.yes }}</p></section>
-            <section class="p-6 rounded-xl card"><h2 class="font-semibold muted">No</h2><p class="mt-4 text-5xl font-semibold num neg">{{ market.no }}</p></section>
+          <div class="grid gap-5 sm:grid-cols-2 mt-8">
+            <section class="p-6 rounded-xl card"><h2 class="font-semibold muted">Yes</h2><p class="mt-4 font-semibold text-5xl num pos">{{ market.yes }}</p></section>
+            <section class="p-6 rounded-xl card"><h2 class="font-semibold muted">No</h2><p class="mt-4 font-semibold text-5xl neg num">{{ market.no }}</p></section>
           </div>
-          <dl class="grid grid-cols-2 sm:grid-cols-3 gap-6 mt-8"><div><dt class="text-sm muted">Volume</dt><dd class="mt-2 font-semibold num">{{ market.volumeLabel }}</dd></div><div><dt class="text-sm muted">Status</dt><dd class="mt-2 font-semibold">{{ market.status }}</dd></div><div><dt class="text-sm muted">Last captured (UTC)</dt><dd class="mt-2 text-sm">{{ updated }}</dd></div></dl>
+          <dl class="grid gap-6 grid-cols-2 sm:grid-cols-3 mt-8"><div><dt class="text-sm muted">Volume</dt><dd class="mt-2 font-semibold num">{{ market.volumeLabel }}</dd></div><div><dt class="text-sm muted">Status</dt><dd class="mt-2 font-semibold">{{ market.status }}</dd></div><div><dt class="text-sm muted">Last captured (UTC)</dt><dd class="mt-2 text-sm">{{ updated }}</dd></div></dl>
           <p class="mt-8 text-sm muted">These are captured market prices, not executable quotes. Check current pricing and market rules at the exchange before trading.</p>
-          <div class="flex flex-wrap gap-3 mt-6"><a href="/positions" data-no-router class="px-5 py-3 btn btn-primary rounded-lg">My book</a><a href="/groups" data-no-router class="px-5 py-3 btn rounded-lg">Your groups</a><a href="/odds" data-no-router class="px-5 py-3 btn rounded-lg">Compare odds</a></div>
+          <div class="flex flex-wrap gap-3 mt-6"><a href="/positions" data-no-router class="px-5 py-3 rounded-lg btn btn-primary">My book</a><a href="/groups" data-no-router class="px-5 py-3 rounded-lg btn">Your groups</a><a href="/odds" data-no-router class="px-5 py-3 rounded-lg btn">Compare odds</a></div>
         @else
           <h1 class="mt-8 font-bold text-3xl">Market not found.</h1><p class="mt-3 muted">This market may have been removed. Browse the latest markets from the home page.</p>
         @endif

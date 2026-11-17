@@ -10,7 +10,7 @@ const navActive = 'privacy'
   <body><div class="app">
     @include('nav')
     <main class="mx-auto px-4 py-12 sm:px-6 max-w-4xl">
-      <p class="font-bold text-xs tracking-widest uppercase accent">Effective August 8, 2026</p><h1 class="mt-2 display font-black text-4xl tracking-tight">Privacy Policy</h1>
+      <p class="font-bold text-xs tracking-widest uppercase accent">Effective August 8, 2026</p><h1 class="mt-2 font-black text-4xl tracking-tight display">Privacy Policy</h1>
       <div class="mt-8 space-y-8 leading-relaxed muted">
         <section><h2 class="font-black text-xl" style="color:var(--text)">What we collect</h2><p class="mt-2">We collect account identity supplied by your sign-in provider, subscription and entitlement records, strategies, decisions, performance, jurisdiction attestations, service logs, and support messages. If you connect a venue, we store an encrypted credential envelope, a masked identifier, balance, and order/position records.</p></section>
         <section><h2 class="font-black text-xl" style="color:var(--text)">How we use it</h2><p class="mt-2">We use data to authenticate you, provide and secure the service, enforce risk and plan limits, send your directed venue requests, reconcile results, process subscriptions, diagnose failures, and meet legal obligations. We do not sell personal information or venue credentials.</p></section>

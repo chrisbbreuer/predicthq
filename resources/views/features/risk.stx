@@ -60,22 +60,22 @@ const checks = [
     <div class="app">
       @include('nav')
 
-      <main class="mx-auto px-4 pt-14 sm:px-6 max-w-6xl sm:pt-20">
-        <a href="/features" data-no-router class="text-sm font-semibold muted hover:opacity-70">Features</a>
-        <h1 class="display mt-3 max-w-3xl font-black leading-[1.06] text-4xl tracking-tight sm:text-5xl">A quiet strategy is never a mystery.</h1>
+      <main class="mx-auto pt-14 px-4 sm:pt-20 sm:px-6 max-w-6xl">
+        <a href="/features" data-no-router class="font-semibold text-sm hover:opacity-70 muted">Features</a>
+        <h1 class="mt-3 max-w-3xl font-black leading-[1.06] text-4xl tracking-tight sm:text-5xl display">A quiet strategy is never a mystery.</h1>
         <p class="mt-5 max-w-2xl leading-relaxed text-lg muted">
           Every limit is a ceiling, not a target, and every refusal is written to the decision that was refused. A strategy that found no edge and one that is out of bankroll look nothing alike, which is the whole point.
         </p>
 
         <section class="mt-16">
-          <h2 class="display font-black text-2xl tracking-tight sm:text-3xl">The order of the checks is the design</h2>
+          <h2 class="font-black text-2xl tracking-tight sm:text-3xl display">The order of the checks is the design</h2>
           <p class="mt-3 max-w-2xl leading-relaxed muted">
             They run cheapest first. By the time a venue is contacted, six other things have already agreed the order should exist.
           </p>
 
           <ol class="mt-8 divide-y bd">
             @foreach (checks as check)
-              <li class="grid gap-2 md:grid-cols-[5rem_11rem_1fr] md:gap-8 py-6">
+              <li class="grid gap-2 md:gap-8 md:grid-cols-[5rem_11rem_1fr] py-6">
                 <span class="font-semibold text-sm faint">{{ check.order }}</span>
                 <h3 class="font-bold">{{ check.name }}</h3>
                 <p class="max-w-2xl leading-relaxed muted">{{ check.detail }}</p>
@@ -99,8 +99,8 @@ const checks = [
           </div>
         </section>
 
-        <section class="p-8 mt-16 rounded-2xl card sm:p-10">
-          <h2 class="display font-black text-2xl tracking-tight">What PredictHQ does not claim</h2>
+        <section class="mt-16 p-8 sm:p-10 rounded-2xl card">
+          <h2 class="font-black text-2xl tracking-tight display">What PredictHQ does not claim</h2>
           <p class="mt-3 max-w-3xl leading-relaxed muted">
             A modelled edge is an estimate from a trade tape, and it can be wrong. These limits bound how much any single mistake costs; they do not make the mistakes less likely, and they cannot make a losing strategy profitable. PredictHQ does not know your circumstances and nothing it produces is financial advice.
           </p>

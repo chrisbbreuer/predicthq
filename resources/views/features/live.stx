@@ -34,17 +34,17 @@ const moves = (await loadRecentMoves(8)).map(m => ({
     <div class="app">
       @include('nav')
 
-      <main class="mx-auto px-4 pt-14 sm:px-6 max-w-6xl sm:pt-20">
-        <a href="/features" data-no-router class="text-sm font-semibold muted hover:opacity-70">Features</a>
-        <h1 class="display mt-3 max-w-3xl font-black leading-[1.06] text-4xl tracking-tight sm:text-5xl">A line that moves against you should not wait for a refresh.</h1>
+      <main class="mx-auto pt-14 px-4 sm:pt-20 sm:px-6 max-w-6xl">
+        <a href="/features" data-no-router class="font-semibold text-sm hover:opacity-70 muted">Features</a>
+        <h1 class="mt-3 max-w-3xl font-black leading-[1.06] text-4xl tracking-tight sm:text-5xl display">A line that moves against you should not wait for a refresh.</h1>
         <p class="mt-5 max-w-2xl leading-relaxed text-lg muted">
           Ingestion runs every minute and writes a snapshot with history. When a price changes, the new board is broadcast to every connected client immediately rather than sitting until someone reloads.
         </p>
 
         @if (moves.length > 0)
           <section class="overflow-hidden mt-12 rounded-2xl card">
-            <div class="px-5 py-4 border-b bd sm:px-6">
-              <h2 class="display font-bold">Most recent moves</h2>
+            <div class="px-5 py-4 sm:px-6 border-b bd">
+              <h2 class="font-bold display">Most recent moves</h2>
               <p class="mt-1 text-sm muted">Straight from the snapshot history, newest first.</p>
             </div>
             <div class="divide-y bd">
@@ -55,7 +55,7 @@ const moves = (await loadRecentMoves(8)).map(m => ({
                     <div class="mt-0.5 text-sm muted">{{ move.game }} · {{ move.book }}</div>
                   </div>
                   <div class="flex gap-4 items-center shrink-0">
-                    <span class="text-sm num faint">{{ move.from }}</span>
+                    <span class="text-sm faint num">{{ move.from }}</span>
                     <span class="text-sm faint">{{ move.up ? '↑' : '↓' }}</span>
                     <span class="font-bold num">{{ move.to }}</span>
                     <span class="font-bold text-sm num w-16 text-right {{ move.up ? 'pos' : 'neg' }}">{{ move.delta }}</span>
@@ -65,30 +65,30 @@ const moves = (await loadRecentMoves(8)).map(m => ({
             </div>
           </section>
         @else
-          <section class="px-6 py-12 mt-12 text-center rounded-2xl card">
+          <section class="mt-12 px-6 py-12 text-center rounded-2xl card">
             <p class="font-bold">The board has been steady.</p>
             <p class="mt-2 text-sm muted">No price has changed since the last few snapshots. Quiet is a real state, and it is what this page shows when it is true.</p>
           </section>
         @endif
 
         <section class="mt-20 divide-y bd">
-          <div class="grid gap-2 md:grid-cols-[13rem_1fr] md:gap-10 py-6">
+          <div class="grid gap-2 md:gap-10 md:grid-cols-[13rem_1fr] py-6">
             <h3 class="font-bold">Snapshots, not overwrites</h3>
             <p class="max-w-2xl leading-relaxed muted">Every ingest appends rather than replaces, so each price carries a trail. That trail is what draws the sparkline on the board and what the price-trend signal reads when the engine prices a market.</p>
           </div>
-          <div class="grid gap-2 md:grid-cols-[13rem_1fr] md:gap-10 py-6">
+          <div class="grid gap-2 md:gap-10 md:grid-cols-[13rem_1fr] py-6">
             <h3 class="font-bold">Broadcast, not polling</h3>
             <p class="max-w-2xl leading-relaxed muted">The ingest job publishes the refreshed board when it finishes. Clients hold a WebSocket and patch the prices they are showing, so an open tab stays current without asking repeatedly whether anything changed.</p>
           </div>
-          <div class="grid gap-2 md:grid-cols-[13rem_1fr] md:gap-10 py-6">
+          <div class="grid gap-2 md:gap-10 md:grid-cols-[13rem_1fr] py-6">
             <h3 class="font-bold">Degrades to server-rendered</h3>
             <p class="max-w-2xl leading-relaxed muted">If the realtime server is unreachable the board keeps the values it was rendered with rather than blanking or spinning. A stale price shown plainly is more useful than an empty cell.</p>
           </div>
         </section>
 
-        <section class="flex flex-col gap-5 items-start justify-between lg:flex-row lg:items-center p-8 mt-16 rounded-2xl card sm:p-10">
+        <section class="flex flex-col gap-5 items-start justify-between lg:flex-row lg:items-center mt-16 p-8 sm:p-10 rounded-2xl card">
           <div>
-            <h2 class="display font-black text-2xl tracking-tight">Watch it live</h2>
+            <h2 class="font-black text-2xl tracking-tight display">Watch it live</h2>
             <p class="mt-2 max-w-xl leading-relaxed muted">The full feed, with every book and every move as it lands.</p>
           </div>
           <div class="flex flex-wrap gap-3 shrink-0">

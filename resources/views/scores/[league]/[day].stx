@@ -91,11 +91,11 @@ const rows = games.map(g => ({
     <div class="app">
       @include('nav')
 
-      <main class="mx-auto px-4 pt-10 pb-16 sm:px-6 max-w-3xl">
+      <main class="mx-auto pb-16 pt-10 px-4 sm:px-6 max-w-3xl">
         <div class="flex flex-wrap gap-3 items-center justify-between">
           <div class="flex gap-3 items-center">
             <span class="grid place-items-center h-11 w-11 rounded-xl soft" aria-hidden="true"><i class="h-6 w-6 {{ leagueIcon }}"></i></span>
-            <h1 class="display font-black text-3xl tracking-tight sm:text-4xl">Scores</h1>
+            <h1 class="font-black text-3xl tracking-tight sm:text-4xl display">Scores</h1>
           </div>
 
           <!-- League switcher. A pill, like the sport pill in Apple Sports. -->
@@ -111,7 +111,7 @@ const rows = games.map(g => ({
         </div>
 
         <!-- Segmented day control. -->
-        <div class="grid grid-cols-3 gap-1 p-1 mt-6 rounded-xl soft" role="group" aria-label="Day">
+        <div class="grid gap-1 grid-cols-3 mt-6 p-1 rounded-xl soft" role="group" aria-label="Day">
           @foreach (days as d)
             <a
               href="/scores/{{ league.key }}/{{ d }}"
@@ -123,8 +123,8 @@ const rows = games.map(g => ({
         </div>
 
         @if (rows.length === 0)
-          <section class="px-6 py-16 mt-6 text-center rounded-2xl card">
-            <p class="display font-black text-xl">Nothing scheduled.</p>
+          <section class="mt-6 px-6 py-16 text-center rounded-2xl card">
+            <p class="font-black text-xl display">Nothing scheduled.</p>
             <p class="mt-2 text-sm muted">No {{ league.label }} games for this day. Try another league or another day.</p>
           </section>
         @else
@@ -141,31 +141,31 @@ const rows = games.map(g => ({
                 <a href="/scores/{{ g.league }}/game/{{ g.id }}" data-no-router class="block px-4 py-4 sm:px-5 hover:opacity-90">
                   <div class="flex gap-4 items-center">
                     <!-- Status rail. Fixed width so every row's teams align. -->
-                    <div class="w-20 shrink-0">
+                    <div class="shrink-0 w-20">
                       <div class="font-bold text-xs num {{ g.isLive ? 'neg' : 'faint' }}">{{ g.label }}</div>
                       @if (g.broadcast)
                         <div class="mt-0.5 text-[11px] truncate faint">{{ g.broadcast }}</div>
                       @endif
                     </div>
 
-                    <div class="flex flex-col gap-2 min-w-0 grow">
+                    <div class="flex flex-col gap-2 grow min-w-0">
                       <!-- Away first, matching how every scoreboard is read. -->
                       <div class="flex gap-3 items-center {{ g.isDone && !g.awayLeads ? 'opacity-55' : '' }}">
-                        <span class="grid place-items-center h-7 min-w-7 px-1 text-[9px] font-black rounded-lg shrink-0 soft" aria-hidden="true">{{ g.awayMark }}</span>
+                        <span class="grid place-items-center shrink-0 px-1 h-7 min-w-7 font-black text-[9px] rounded-lg soft" aria-hidden="true">{{ g.awayMark }}</span>
                         <span class="font-semibold truncate">{{ g.away.shortName || g.away.name }}</span>
                         @if (g.away.record)
-                          <span class="text-xs num faint shrink-0">{{ g.away.record }}</span>
+                          <span class="shrink-0 text-xs faint num">{{ g.away.record }}</span>
                         @endif
-                        <span class="ml-auto font-black text-lg num shrink-0">{{ g.away.score ?? '' }}</span>
+                        <span class="shrink-0 ml-auto font-black text-lg num">{{ g.away.score ?? '' }}</span>
                       </div>
 
                       <div class="flex gap-3 items-center {{ g.isDone && !g.homeLeads ? 'opacity-55' : '' }}">
-                        <span class="grid place-items-center h-7 min-w-7 px-1 text-[9px] font-black rounded-lg shrink-0 soft" aria-hidden="true">{{ g.homeMark }}</span>
+                        <span class="grid place-items-center shrink-0 px-1 h-7 min-w-7 font-black text-[9px] rounded-lg soft" aria-hidden="true">{{ g.homeMark }}</span>
                         <span class="font-semibold truncate">{{ g.home.shortName || g.home.name }}</span>
                         @if (g.home.record)
-                          <span class="text-xs num faint shrink-0">{{ g.home.record }}</span>
+                          <span class="shrink-0 text-xs faint num">{{ g.home.record }}</span>
                         @endif
-                        <span class="ml-auto font-black text-lg num shrink-0">{{ g.home.score ?? '' }}</span>
+                        <span class="shrink-0 ml-auto font-black text-lg num">{{ g.home.score ?? '' }}</span>
                       </div>
                     </div>
                   </div>

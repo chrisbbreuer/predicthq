@@ -87,6 +87,15 @@ const config: PickierOptions = {
     '**/docs/deps/**',
     // Generated scaffolds copied into pantry — out of project control
     '**/pantry/**',
+    // The managed framework scaffold and the agent skills synced from it.
+    // `buddy upgrade` rewrites both from @stacksjs/defaults, so a lint fix
+    // made here is overwritten on the next upgrade; upstream owns them.
+    '**/storage/framework/defaults/**',
+    '**/.claude/skills/**',
+    // Generated type declarations and the framework's own server build
+    // script, both rewritten by `buddy upgrade` and `buddy generate`.
+    '**/storage/framework/types/**',
+    '**/storage/framework/server/build.ts',
   ],
 }
 

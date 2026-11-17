@@ -57,7 +57,7 @@ function escape(value) {
 /** The feature matrix, as one block of markup. */
 function matrixHtml(rows, theirName) {
   const head = `<thead><tr>
-    <th class="py-3 pr-4 font-bold text-left text-sm">Feature</th>
+    <th class="pr-4 py-3 font-bold text-left text-sm">Feature</th>
     <th class="px-3 py-3 font-bold text-center text-sm" style="width:7rem">PredictHQ</th>
     <th class="px-3 py-3 font-bold text-center text-sm" style="width:9rem">${escape(theirName)}</th>
   </tr></thead>`
@@ -71,7 +71,7 @@ function matrixHtml(rows, theirName) {
       : ''
 
     return `<tr class="border-t bd">
-      <td class="py-4 pr-4 align-top">
+      <td class="pr-4 py-4 align-top">
         <span class="font-semibold text-sm">${escape(row.feature)}</span>
         ${note}
         ${evidence}
@@ -167,11 +167,11 @@ const others = othersHtml(slug)
     <div class="app">
       @include('nav')
 
-      <main class="mx-auto px-4 py-12 sm:px-6 max-w-4xl sm:py-16">
+      <main class="mx-auto px-4 py-12 sm:px-6 sm:py-16 max-w-4xl">
         @if (found)
           <a href="/compare" class="font-semibold text-sm muted">← All comparisons</a>
 
-          <h1 class="display font-black leading-[1.08] mt-4 text-3xl tracking-tight sm:text-5xl">
+          <h1 class="mt-4 font-black leading-[1.08] text-3xl tracking-tight sm:text-5xl display">
             {{ headline }}
           </h1>
 
@@ -192,18 +192,18 @@ const others = othersHtml(slug)
             </div>
           </div>
 
-          <h2 class="display font-black mt-14 text-2xl tracking-tight">What we have that they do not</h2>
+          <h2 class="mt-14 font-black text-2xl tracking-tight display">What we have that they do not</h2>
           <ul class="grid gap-2.5 sm:grid-cols-2 mt-5 text-sm">
             {!! advantagesList !!}
           </ul>
 
-          <h2 class="display font-black mt-14 text-2xl tracking-tight">Where {{ name }} is ahead</h2>
+          <h2 class="mt-14 font-black text-2xl tracking-tight display">Where {{ name }} is ahead</h2>
           <p class="mt-2 text-sm muted">Listed because you would find out anyway, and better from us.</p>
           <ul class="grid gap-2.5 sm:grid-cols-2 mt-5 text-sm">
             {!! theirList !!}
           </ul>
 
-          <h2 class="display font-black mt-14 text-2xl tracking-tight">Feature by feature</h2>
+          <h2 class="mt-14 font-black text-2xl tracking-tight display">Feature by feature</h2>
           <p class="mt-2 max-w-2xl text-sm muted">
             A tick on our side means it is shipped and the file that backs it is named.
             A dash means we do not do it.
@@ -217,7 +217,7 @@ const others = othersHtml(slug)
             </table>
           </div>
 
-          <h2 class="display font-black mt-14 text-2xl tracking-tight">Pricing</h2>
+          <h2 class="mt-14 font-black text-2xl tracking-tight display">Pricing</h2>
           <div class="grid gap-4 sm:grid-cols-2 mt-5">
             <div class="p-6 rounded-2xl soft">
               <h3 class="font-bold text-sm">{{ name }}</h3>
@@ -229,26 +229,26 @@ const others = othersHtml(slug)
             </div>
           </div>
 
-          <h2 class="display font-black mt-14 text-2xl tracking-tight">Questions</h2>
+          <h2 class="mt-14 font-black text-2xl tracking-tight display">Questions</h2>
           <div class="mt-5">
             {!! faq !!}
           </div>
 
-          <div class="flex flex-wrap gap-3 items-center p-6 mt-14 rounded-2xl card">
+          <div class="flex flex-wrap gap-3 items-center mt-14 p-6 rounded-2xl card">
             <div class="mr-auto">
-              <h2 class="display font-black text-xl tracking-tight">See it on live markets</h2>
+              <h2 class="font-black text-xl tracking-tight display">See it on live markets</h2>
               <p class="mt-1 text-sm muted">The board is public. No card, no signup to look.</p>
             </div>
             <a href="/" class="inline-flex items-center px-5 h-11 font-bold text-sm rounded-lg btn btn-primary">Open the board</a>
             <a href="/pricing" class="inline-flex items-center px-5 h-11 font-bold text-sm rounded-lg btn">See pricing</a>
           </div>
 
-          <h2 class="display font-black mt-14 text-2xl tracking-tight">Other comparisons</h2>
+          <h2 class="mt-14 font-black text-2xl tracking-tight display">Other comparisons</h2>
           <div class="flex flex-wrap gap-2.5 mt-5">
             {!! others !!}
           </div>
         @else
-          <h1 class="display font-black text-3xl tracking-tight">No such comparison</h1>
+          <h1 class="font-black text-3xl tracking-tight display">No such comparison</h1>
           <p class="mt-4 leading-relaxed muted">
             We have not written this one. Here is what we do have:
           </p>

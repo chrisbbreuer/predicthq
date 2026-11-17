@@ -11,7 +11,7 @@ const navActive = 'terms'
     @include('nav')
     <main class="mx-auto px-4 py-12 sm:px-6 max-w-4xl">
       <p class="font-bold text-xs tracking-widest uppercase accent">Effective August 8, 2026</p>
-      <h1 class="mt-2 display font-black text-4xl tracking-tight">Terms of Service</h1>
+      <h1 class="mt-2 font-black text-4xl tracking-tight display">Terms of Service</h1>
       <div class="mt-8 space-y-8 leading-relaxed muted">
         <section><h2 class="font-black text-xl" style="color:var(--text)">1. The service</h2><p class="mt-2">PredictHQ provides market data, analysis, simulated strategies, and user-directed automation for supported third-party venues. PredictHQ is not a broker, exchange, investment adviser, or fiduciary. Venue accounts, custody, eligibility, settlement, and execution remain governed by the venue's own terms.</p></section>
         <section><h2 class="font-black text-xl" style="color:var(--text)">2. Eligibility and lawful use</h2><p class="mt-2">You must be at least the minimum age required by each venue, may use the service only where prediction-market trading is lawful for you, and must provide accurate jurisdiction information. You may not evade geoblocks, sanctions, identity checks, venue limits, or other controls. We may refuse or disable automation when eligibility cannot be established.</p></section>

@@ -41,25 +41,25 @@ const authAltLabel = 'Create an account'
     <div class="app">
       @include('nav')
 
-      <main class="mx-auto px-4 py-14 sm:px-6 max-w-6xl sm:py-20">
-        <div class="grid gap-12 items-start lg:grid-cols-[minmax(0,400px)_minmax(0,1fr)] lg:gap-20">
+      <main class="mx-auto px-4 py-14 sm:px-6 sm:py-20 max-w-6xl">
+        <div class="grid gap-12 items-start lg:gap-20 lg:grid-cols-[minmax(0,400px)_minmax(0,1fr)]">
           @include('auth-panel')
 
           {{-- pt matches the card's own top padding so the two headings share a baseline. --}}
           <section class="hidden lg:block lg:pt-8">
-            <h2 class="display font-black text-2xl tracking-tight">What your account holds</h2>
-            <div class="grid gap-px mt-6 overflow-hidden rounded-2xl" style="background:var(--border)">
+            <h2 class="font-black text-2xl tracking-tight display">What your account holds</h2>
+            <div class="grid overflow-hidden gap-px mt-6 rounded-2xl" style="background:var(--border)">
               <div class="p-5" style="background:var(--surface)">
                 <h3 class="font-bold">Your sheet, across devices</h3>
-                <p class="mt-1.5 text-sm leading-relaxed muted">Legs you add on the board stop being browser storage and start following you.</p>
+                <p class="mt-1.5 leading-relaxed text-sm muted">Legs you add on the board stop being browser storage and start following you.</p>
               </div>
               <div class="p-5" style="background:var(--surface)">
                 <h3 class="font-bold">Every venue in one tape</h3>
-                <p class="mt-1.5 text-sm leading-relaxed muted">Connect Kalshi and Polymarket once, then read them as a single book.</p>
+                <p class="mt-1.5 leading-relaxed text-sm muted">Connect Kalshi and Polymarket once, then read them as a single book.</p>
               </div>
               <div class="p-5" style="background:var(--surface)">
                 <h3 class="font-bold">The evidence behind each call</h3>
-                <p class="mt-1.5 text-sm leading-relaxed muted">Every priced candidate keeps the signals and the sample sizes it stood on.</p>
+                <p class="mt-1.5 leading-relaxed text-sm muted">Every priced candidate keeps the signals and the sample sizes it stood on.</p>
               </div>
             </div>
           </section>

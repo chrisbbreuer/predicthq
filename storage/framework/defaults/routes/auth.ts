@@ -23,9 +23,10 @@
  * and user routes load first, so your handler always takes priority.
  */
 
-import { oauthAuthorizationServerMetadataPath, resolveOAuthProviderConfig } from '@stacksjs/auth'
+import { handleDynamicOAuthRegistration, oauthAuthorizationServerMetadataPath, resolveOAuthProviderConfig } from '@stacksjs/auth'
 import { config } from '@stacksjs/config'
 import { route } from '@stacksjs/router'
+import { readJsonBody, RequestBodyError } from '@stacksjs/router/body'
 
 const oauthProvider = resolveOAuthProviderConfig(config.auth.oauthProvider)
 const oauthAuthorizationPath = oauthProvider ? new URL(oauthProvider.endpoints.authorization).pathname : '/oauth/authorize'
@@ -44,7 +45,11 @@ const oauthMetadataPath = oauthProvider
 // tokens until the row TTL. Userland that overrides any of these in
 // `routes/api.ts` (user routes win) gets to pick its own limits.
 route.post('/login', 'Actions/Auth/LoginAction').rateLimit(5, 'minute')
-route.post('/register', 'Actions/Auth/RegisterAction').rateLimit(3, 'minute')
+// Registration is the one route here an anonymous visitor writes through, so
+// it carries the honeypot (a no-op for clients that send neither field) and,
+// inside the action, hourly limits per address and per email on top of this
+// burst limit.
+route.post('/register', 'Actions/Auth/RegisterAction').middleware('honeypot').rateLimit(3, 'minute')
 // OAuth authorization-server token exchange. The action remains a 404 unless
 // config.auth.oauthProvider.enabled is explicitly true. PKCE or HTTP Basic is
 // the endpoint's credential boundary, so the action opts out of browser CSRF.
@@ -54,6 +59,15 @@ route.post(oauthIntrospectionPath, 'Actions/Auth/OAuthIntrospectionAction').rate
 route.get(oauthAuthorizationPath, 'Actions/Auth/OAuthAuthorizationAction').rateLimit(60, 'minute')
 route.post(oauthAuthorizationPath, 'Actions/Auth/OAuthConsentAction').middleware('auth').rateLimit(30, 'minute')
 route.get(oauthMetadataPath, 'Actions/Auth/OAuthMetadataAction')
+if (oauthProvider?.dynamicRegistration) {
+  route.post(new URL(oauthProvider.dynamicRegistration.endpoint).pathname, async (request) => {
+    try { return await handleDynamicOAuthRegistration(oauthProvider, await readJsonBody(request, 16_384)) }
+    catch (error) {
+      if (!(error instanceof RequestBodyError)) throw error
+      return Response.json({ error: 'invalid_client_metadata' }, { status: error.status, headers: { 'Cache-Control': 'no-store' } })
+    }
+  }).parseBody(false).skipCsrf().rateLimit(10, 'minute')
+}
 // Magic links (config.auth.magicLink.enabled gates both, 404 when off).
 // The send endpoint answers a uniform 202 either way (anti-enumeration
 // lives in sendMagicLink); the consume endpoint is a POST because email
@@ -121,3 +135,12 @@ route.group({ prefix: '/password' }, () => {
   route.post('/reset', 'Actions/Password/PasswordResetAction').rateLimit(5, 'minute')
   route.post('/verify-token', 'Actions/Password/VerifyResetTokenAction').rateLimit(10, 'minute')
 })
+
+// Discoverable passkeys: canonical JSON ceremonies, independent concurrent browser attempts.
+// Public flows carry a one-use ceremony capability; enrollment and removal also require auth/CSRF.
+route.post('/auth/passkeys/authentication/options', 'Actions/Auth/PasskeyAuthenticationOptionsAction').skipCsrf().rateLimit(10, 'minute')
+route.post('/auth/passkeys/authentication', 'Actions/Auth/PasskeyAuthenticationAction').skipCsrf().rateLimit(10, 'minute')
+route.post('/auth/passkeys/registration/options', 'Actions/Auth/PasskeyRegistrationOptionsAction').middleware('auth').rateLimit(5, 'minute')
+route.post('/auth/passkeys/registration', 'Actions/Auth/PasskeyRegistrationAction').middleware('auth').rateLimit(5, 'minute')
+route.get('/auth/passkeys', 'Actions/Auth/PasskeyIndexAction').middleware('auth')
+route.delete('/auth/passkeys/{id}', 'Actions/Auth/PasskeyDestroyAction').middleware('auth').rateLimit(10, 'minute')

@@ -3,40 +3,40 @@
   style="background:color-mix(in srgb, var(--bg) 86%, transparent);backdrop-filter:saturate(1.4) blur(16px)"
   x-data="{ menu: false, toggleMenu() { this.menu = !this.menu } }"
 >
-  <div class="flex gap-4 items-center justify-between mx-auto px-4 h-16 sm:px-6 max-w-7xl">
+  <div class="flex gap-4 items-center justify-between mx-auto px-4 sm:px-6 h-16 max-w-7xl">
     <a href="/" data-no-router class="flex gap-2.5 items-center shrink-0" aria-label="PredictHQ home">
-      <span class="grid place-items-center h-9 w-9 p-2 rounded-xl brandmark">@include('logo')</span>
+      <span class="grid place-items-center p-2 h-9 w-9 rounded-xl brandmark">@include('logo')</span>
       <span class="font-extrabold text-lg tracking-tight">Predict<span class="faint">HQ</span></span>
     </a>
 
-    <nav class="hidden gap-1 items-stretch self-stretch font-semibold text-sm lg:flex muted" aria-label="Primary navigation">
-      <a href="/" data-no-router class="nav-link {{ navActive === 'home' ? 'is-active' : '' }}" {{ navActive === 'home' ? 'aria-current=page' : '' }}>Home</a>
-      <a href="/positions" data-no-router class="nav-link {{ navActive === 'positions' ? 'is-active' : '' }}" {{ navActive === 'positions' ? 'aria-current=page' : '' }}>My bets</a>
-      <a href="/odds" data-no-router class="nav-link {{ navActive === 'board' ? 'is-active' : '' }}" {{ navActive === 'board' ? 'aria-current=page' : '' }}>Odds</a>
-      <a href="/scanner" data-no-router class="nav-link {{ navActive === 'scanner' ? 'is-active' : '' }}" {{ navActive === 'scanner' ? 'aria-current=page' : '' }}>Scanner</a>
-      <a href="/live" data-no-router class="nav-link {{ navActive === 'live' ? 'is-active' : '' }}" {{ navActive === 'live' ? 'aria-current=page' : '' }}>Live</a>
-      <a href="/scores/nfl/today" data-no-router class="nav-link {{ navActive === 'scores' ? 'is-active' : '' }}" {{ navActive === 'scores' ? 'aria-current=page' : '' }}>Scores</a>
+    <nav class="hidden lg:flex gap-1 items-stretch self-stretch font-semibold text-sm muted" aria-label="Primary navigation">
+      <a href="/" data-no-router class="nav-link {{ navActive === 'home' ? 'is-active' : '' }}" aria-current="{{ navActive === 'home' ? 'page' : 'false' }}">Home</a>
+      <a href="/positions" data-no-router class="nav-link {{ navActive === 'positions' ? 'is-active' : '' }}" aria-current="{{ navActive === 'positions' ? 'page' : 'false' }}">My bets</a>
+      <a href="/odds" data-no-router class="nav-link {{ navActive === 'board' ? 'is-active' : '' }}" aria-current="{{ navActive === 'board' ? 'page' : 'false' }}">Odds</a>
+      <a href="/scanner" data-no-router class="nav-link {{ navActive === 'scanner' ? 'is-active' : '' }}" aria-current="{{ navActive === 'scanner' ? 'page' : 'false' }}">Scanner</a>
+      <a href="/live" data-no-router class="nav-link {{ navActive === 'live' ? 'is-active' : '' }}" aria-current="{{ navActive === 'live' ? 'page' : 'false' }}">Live</a>
+      <a href="/scores/nfl/today" data-no-router class="nav-link {{ navActive === 'scores' ? 'is-active' : '' }}" aria-current="{{ navActive === 'scores' ? 'page' : 'false' }}">Scores</a>
 
       <details class="relative nav-mega {{ navActive === 'features' ? 'is-active' : '' }}">
         <summary class="gap-1 nav-summary">
           Features
           <i class="h-3.5 w-3.5 i-hugeicons-arrow-down-01 nav-chevron"></i>
         </summary>
-        <div class="mega-panel mega-features">
+        <div class="mega-features mega-panel">
           <div class="grid gap-2 sm:grid-cols-2">
             <div>
               <p class="mega-kicker">Find an edge</p>
-              <a href="/features/evidence" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-ai-brain-03"></i><span><strong>Evidence engine</strong><small>See every input behind a call.</small></span></a>
-              <a href="/features/smart-money" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-chart-relationship"></i><span><strong>Smart money</strong><small>Follow proven wallets and whale flow.</small></span></a>
-              <a href="/features/odds" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-chart-line-data-02"></i><span><strong>Odds comparison</strong><small>Best prices across every connected book.</small></span></a>
-              <a href="/features/live" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-flash"></i><span><strong>Live moves</strong><small>Stream price changes while games unfold.</small></span></a>
+              <a href="/features/evidence" data-no-router class="mega-link"><i class="i-hugeicons-ai-brain-03 mega-icon"></i><span><strong>Evidence engine</strong><small>See every input behind a call.</small></span></a>
+              <a href="/features/smart-money" data-no-router class="mega-link"><i class="i-hugeicons-chart-relationship mega-icon"></i><span><strong>Smart money</strong><small>Follow proven wallets and whale flow.</small></span></a>
+              <a href="/features/odds" data-no-router class="mega-link"><i class="i-hugeicons-chart-line-data-02 mega-icon"></i><span><strong>Odds comparison</strong><small>Best prices across every connected book.</small></span></a>
+              <a href="/features/live" data-no-router class="mega-link"><i class="i-hugeicons-flash mega-icon"></i><span><strong>Live moves</strong><small>Stream price changes while games unfold.</small></span></a>
             </div>
             <div>
               <p class="mega-kicker">Act on it</p>
-              <a href="/features/automation" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-robot-01"></i><span><strong>Automation</strong><small>Execute only inside limits you set.</small></span></a>
-              <a href="/features/risk" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-shield-01"></i><span><strong>Risk controls</strong><small>Exposure, loss, and freshness guardrails.</small></span></a>
-              <a href="/features/sheets" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-note-edit"></i><span><strong>Bet sheets</strong><small>Build and save multi-leg ideas.</small></span></a>
-              <a href="/features/api" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-api"></i><span><strong>Developer API</strong><small>Bring the same signals into your tools.</small></span></a>
+              <a href="/features/automation" data-no-router class="mega-link"><i class="i-hugeicons-robot-01 mega-icon"></i><span><strong>Automation</strong><small>Execute only inside limits you set.</small></span></a>
+              <a href="/features/risk" data-no-router class="mega-link"><i class="i-hugeicons-shield-01 mega-icon"></i><span><strong>Risk controls</strong><small>Exposure, loss, and freshness guardrails.</small></span></a>
+              <a href="/features/sheets" data-no-router class="mega-link"><i class="i-hugeicons-note-edit mega-icon"></i><span><strong>Bet sheets</strong><small>Build and save multi-leg ideas.</small></span></a>
+              <a href="/features/api" data-no-router class="mega-link"><i class="i-hugeicons-api mega-icon"></i><span><strong>Developer API</strong><small>Bring the same signals into your tools.</small></span></a>
             </div>
           </div>
           <a href="/features" data-no-router class="mega-cta">Explore every feature <span aria-hidden="true">→</span></a>
@@ -48,42 +48,42 @@
           Explore
           <i class="h-3.5 w-3.5 i-hugeicons-arrow-down-01 nav-chevron"></i>
         </summary>
-        <div class="mega-panel mega-explore">
-          <a href="/markets" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-user-multiple-02"></i><span><strong>Smart-money desk</strong><small>Leaderboard, whale tape, and signal graph.</small></span></a>
-          <a href="/positions" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-briefcase-01"></i><span><strong>My bets</strong><small>Live games, positions, and probability charts.</small></span></a>
-          <a href="/community" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-bubble-chat"></i><span><strong>Community</strong><small>Talk through a market before it settles.</small></span></a>
-          <a href="/history" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-clock-01"></i><span><strong>History &amp; results</strong><small>Your trades, wins, losses, and track record.</small></span></a>
-          <a href="/groups" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-user-group"></i><span><strong>Groups &amp; referrals</strong><small>Bring your friends and build your circle.</small></span></a>
-          <a href="/compare" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-balance-scale"></i><span><strong>Compare</strong><small>See where PredictHQ fits—and where it does not.</small></span></a>
-          <a href="/pipeline" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-activity-03"></i><span><strong>Data health</strong><small>Freshness, coverage, and ingestion status.</small></span></a>
-          <a href="/account" data-no-router class="mega-link"><i class="mega-icon i-hugeicons-settings-02"></i><span><strong>Account</strong><small>Connections, strategies, and limits.</small></span></a>
+        <div class="mega-explore mega-panel">
+          <a href="/markets" data-no-router class="mega-link"><i class="i-hugeicons-user-multiple-02 mega-icon"></i><span><strong>Smart-money desk</strong><small>Leaderboard, whale tape, and signal graph.</small></span></a>
+          <a href="/positions" data-no-router class="mega-link"><i class="i-hugeicons-briefcase-01 mega-icon"></i><span><strong>My bets</strong><small>Live games, positions, and probability charts.</small></span></a>
+          <a href="/community" data-no-router class="mega-link"><i class="i-hugeicons-bubble-chat mega-icon"></i><span><strong>Community</strong><small>Talk through a market before it settles.</small></span></a>
+          <a href="/history" data-no-router class="mega-link"><i class="i-hugeicons-clock-01 mega-icon"></i><span><strong>History &amp; results</strong><small>Your trades, wins, losses, and track record.</small></span></a>
+          <a href="/groups" data-no-router class="mega-link"><i class="i-hugeicons-user-group mega-icon"></i><span><strong>Groups &amp; referrals</strong><small>Bring your friends and build your circle.</small></span></a>
+          <a href="/compare" data-no-router class="mega-link"><i class="i-hugeicons-balance-scale mega-icon"></i><span><strong>Compare</strong><small>See where PredictHQ fits—and where it does not.</small></span></a>
+          <a href="/pipeline" data-no-router class="mega-link"><i class="i-hugeicons-activity-03 mega-icon"></i><span><strong>Data health</strong><small>Freshness, coverage, and ingestion status.</small></span></a>
+          <a href="/account" data-no-router class="mega-link"><i class="i-hugeicons-settings-02 mega-icon"></i><span><strong>Account</strong><small>Connections, strategies, and limits.</small></span></a>
         </div>
       </details>
 
-      <a href="/pricing" data-no-router class="nav-link {{ navActive === 'pricing' ? 'is-active' : '' }}" {{ navActive === 'pricing' ? 'aria-current=page' : '' }}>Pricing</a>
+      <a href="/pricing" data-no-router class="nav-link {{ navActive === 'pricing' ? 'is-active' : '' }}" aria-current="{{ navActive === 'pricing' ? 'page' : 'false' }}">Pricing</a>
     </nav>
 
     <div class="flex gap-2 items-center shrink-0">
       @if (navActive === 'board')
-        <button class="hidden gap-2 items-center px-3 py-2 h-9 font-bold text-sm rounded-lg sm:inline-flex btn" @click="drawer = true" aria-label="Open my sheet">
+        <button class="hidden sm:inline-flex gap-2 items-center px-3 py-2 h-9 font-bold text-sm rounded-lg btn" @click="drawer = true" aria-label="Open my sheet">
           <i class="h-4 w-4 i-hugeicons-note-edit"></i>
           <span class="hidden xl:inline">My sheet</span>
-          <span class="grid place-items-center h-5 min-w-5 px-1 font-bold text-xs rounded-full soft num" x-text="sheet.length"></span>
+          <span class="grid place-items-center px-1 h-5 min-w-5 font-bold text-xs rounded-full num soft" x-text="sheet.length"></span>
         </button>
       @endif
-      <a href="/login" data-no-router class="auth-out hidden items-center px-3 h-9 font-semibold text-sm rounded-lg sm:inline-flex nav-login">Log in</a>
-      <a href="/signup" data-no-router class="auth-out hidden items-center px-4 h-9 font-bold text-sm rounded-lg sm:inline-flex btn btn-primary">Sign up</a>
-      <a href="/positions" data-no-router class="auth-in hidden items-center px-4 h-9 font-bold text-sm rounded-full sm:inline-flex btn btn-primary">My bets</a>
-      <a href="/account" data-no-router class="auth-in hidden place-items-center h-9 w-9 rounded-full sm:grid icon-btn" aria-label="Account"><i class="h-4 w-4 i-hugeicons-user-circle"></i></a>
-      <button class="grid place-items-center h-9 w-9 rounded-lg lg:hidden icon-btn" @click="toggleMenu()" :aria-expanded="menu ? 'true' : 'false'" aria-controls="mobile-nav" aria-label="Toggle menu">
+      <a href="/login" data-no-router class="hidden sm:inline-flex items-center px-3 h-9 font-semibold text-sm rounded-lg auth-out nav-login">Log in</a>
+      <a href="/signup" data-no-router class="hidden sm:inline-flex items-center px-4 h-9 font-bold text-sm rounded-lg auth-out btn btn-primary">Sign up</a>
+      <a href="/positions" data-no-router class="hidden sm:inline-flex items-center px-4 h-9 font-bold text-sm rounded-full auth-in btn btn-primary">My bets</a>
+      <a href="/account" data-no-router class="hidden sm:grid place-items-center h-9 w-9 rounded-full auth-in icon-btn" aria-label="Account"><i class="h-4 w-4 i-hugeicons-user-circle"></i></a>
+      <button class="grid lg:hidden place-items-center h-9 w-9 rounded-lg icon-btn" @click="toggleMenu()" :aria-expanded="menu ? 'true' : 'false'" aria-controls="mobile-nav" aria-label="Toggle menu">
         <i class="h-4 w-4 i-hugeicons-menu-01" x-show="!menu"></i>
         <i class="h-4 w-4 i-hugeicons-cancel-01" x-show="menu" style="display:none"></i>
       </button>
     </div>
   </div>
 
-  <nav id="mobile-nav" class="border-t lg:hidden bd transition-opacity duration-150" style="background:var(--surface)" x-show="menu" x-cloak aria-label="Mobile navigation">
-    <div class="grid gap-5 mx-auto px-4 py-5 sm:grid-cols-2 sm:px-6 max-w-7xl">
+  <nav id="mobile-nav" class="lg:hidden border-t duration-150 transition-opacity bd" style="background:var(--surface)" x-show="menu" x-cloak aria-label="Mobile navigation">
+    <div class="grid gap-5 sm:grid-cols-2 mx-auto px-4 py-5 sm:px-6 max-w-7xl">
       <div>
         <p class="mega-kicker">Markets</p>
         <div class="grid">
@@ -98,7 +98,7 @@
       </div>
       <div>
         <p class="mega-kicker">Discover</p>
-        <div class="grid grid-cols-2 gap-x-4">
+        <div class="grid gap-x-4 grid-cols-2">
           <a href="/features" data-no-router class="mobile-link" @click="menu = false">Features</a>
           <a href="/community" data-no-router class="mobile-link" @click="menu = false">Community</a>
           <a href="/history" data-no-router class="mobile-link" @click="menu = false">History &amp; results</a>
@@ -109,7 +109,7 @@
           <a href="/account" data-no-router class="mobile-link" @click="menu = false">Account</a>
         </div>
       </div>
-      <div class="auth-out flex gap-2 items-center sm:col-span-2 sm:hidden">
+      <div class="flex sm:hidden gap-2 items-center sm:col-span-2 auth-out">
         <a href="/login" data-no-router class="flex flex-1 items-center justify-center px-4 h-11 font-bold text-sm rounded-lg btn" @click="menu = false">Log in</a>
         <a href="/signup" data-no-router class="flex flex-1 items-center justify-center px-4 h-11 font-bold text-sm rounded-lg btn btn-primary" @click="menu = false">Sign up</a>
       </div>

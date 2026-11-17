@@ -46,6 +46,7 @@ declare module '@stacksjs/stx' {
     '/password/reset/:token': { token: string }
     '/scores/:league/:day': { league: string; day: string }
     '/compare/:competitor': { competitor: string }
+    '/feedback/:token': { token: string }
     '/orders/:id': { id: string }
   }
 }

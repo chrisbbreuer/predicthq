@@ -2,10 +2,10 @@
   <div class="grid gap-8 sm:grid-cols-2 lg:grid-cols-4 mx-auto px-4 py-12 sm:px-6 max-w-6xl">
     <div class="lg:col-span-1">
       <a href="/" data-no-router class="flex gap-2.5 items-center">
-        <span class="grid place-items-center h-8 w-8 p-1.5 rounded-lg brandmark">@include('logo')</span>
+        <span class="grid place-items-center p-1.5 h-8 w-8 rounded-lg brandmark">@include('logo')</span>
         <span class="font-extrabold tracking-tight">Predict<span class="faint">HQ</span></span>
       </a>
-      <p class="mt-3 max-w-xs text-sm leading-relaxed muted">Prediction Intel. Signals and automated positions across Kalshi and Polymarket.</p>
+      <p class="mt-3 max-w-xs leading-relaxed text-sm muted">Prediction Intel. Signals and automated positions across Kalshi and Polymarket.</p>
     </div>
 
     <div>
@@ -43,8 +43,8 @@
     </div>
   </div>
 
-  <div class="mx-auto px-4 pb-10 sm:px-6 max-w-6xl">
-    <div class="flex flex-col gap-4 items-start justify-between p-4 rounded-xl soft sm:flex-row sm:items-center">
+  <div class="mx-auto pb-10 px-4 sm:px-6 max-w-6xl">
+    <div class="flex flex-col gap-4 items-start justify-between sm:flex-row sm:items-center p-4 rounded-xl soft">
       <div>
         <div class="font-bold text-sm">Appearance</div>
         <div class="mt-0.5 text-xs muted">Switch PredictHQ between light and dark mode.</div>

@@ -68,11 +68,21 @@ const totalLabel = summary.totalLabel
 const freeShippingNote = summary.freeShippingNote
 
 const prefilledEmail = cart?.email || ''
+// After a refused submission: why, and what was typed. Empty on a first visit.
+const emailError = requestContext.error('email')
+const emailValue = requestContext.old('email', prefilledEmail)
+// Why the form this page posted was refused, when it was not about one field
+// ("Your cart is empty."). Shown once (stacksjs/stacks#3311).
+const formError = requestContext.formError()
 </script>
 
 @section('content')
   <div class="mx-auto px-6 py-12 max-w-5xl">
     <CheckoutSteps current="contact" />
+
+    @if (formError)
+      <p role="alert" class="mb-6 px-4 py-3 font-medium text-red-800 text-sm bg-red-50 border border-red-200 rounded-xl">{{ formError }}</p>
+    @endif
 
     @if (items.length === 0)
       <div class="p-12 text-center border border-dashed border-stone-300 rounded-3xl">
@@ -93,9 +103,13 @@ const prefilledEmail = cart?.email || ''
                 name="email"
                 required
                 autocomplete="email"
-                value="{{ prefilledEmail }}"
+                value="{{ emailValue }}"
+                aria-invalid="{{ emailError ? 'true' : 'false' }}"
                 class="mt-1 px-4 py-3 w-full text-sm border border-stone-300 rounded-2xl focus:border-stone-900 focus:outline-none"
               >
+              @if (emailError)
+                <p role="alert" class="mt-2 text-red-700 text-sm">{{ emailError }}</p>
+              @endif
             </div>
             <div class="flex gap-4 items-center justify-between">
               <a href="/cart" class="text-sm text-stone-500 hover:text-stone-900">← Back to cart</a>

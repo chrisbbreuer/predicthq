@@ -148,15 +148,15 @@ function billingHeaders(): Record<string, string> {
     <div class="app">
       @include('nav')
 
-      <main class="mx-auto px-4 py-12 sm:px-6 max-w-6xl sm:py-16">
+      <main class="mx-auto px-4 py-12 sm:px-6 sm:py-16 max-w-6xl">
         <div class="max-w-2xl">
-          <h1 class="display font-black leading-[1.08] text-3xl tracking-tight sm:text-5xl">Read the market, or let it trade.</h1>
+          <h1 class="font-black leading-[1.08] text-3xl tracking-tight sm:text-5xl display">Read the market, or let it trade.</h1>
           <p class="mt-4 leading-relaxed text-lg muted">
             Every plan sees the same analysis and the same evidence. What changes is whether PredictHQ places the order for you.
           </p>
         </div>
 
-        <div class="inline-flex gap-1 items-center p-1 mt-8 rounded-xl soft" role="group" aria-label="Billing cycle">
+        <div class="inline-flex gap-1 items-center mt-8 p-1 rounded-xl soft" role="group" aria-label="Billing cycle">
           <button
             class="px-4 py-2 font-bold text-sm rounded-lg"
             :style="cycle === 'monthly' ? 'background:var(--surface);box-shadow:var(--shadow-sm)' : 'color:var(--muted)'"
@@ -169,16 +169,16 @@ function billingHeaders(): Record<string, string> {
           >Yearly, two months free</button>
         </div>
 
-        <div x-show="error" x-cloak class="px-4 py-3 mt-6 max-w-2xl text-sm rounded-xl card" style="border-color:var(--neg);color:var(--neg)" x-text="error" role="alert"></div>
+        <div x-show="error" x-cloak class="mt-6 px-4 py-3 max-w-2xl text-sm rounded-xl card" style="border-color:var(--neg);color:var(--neg)" x-text="error" role="alert"></div>
 
         <div class="grid gap-5 lg:grid-cols-3 mt-8">
           @foreach (tiers as row)
             <div class="flex flex-col p-6 rounded-2xl card {{ row.tier === 'auto' ? 'featured' : '' }}">
               @if (row.tier === 'auto')
-                <span class="self-start px-2.5 py-1 mb-4 font-bold text-xs tracking-wide uppercase rounded-full" style="background:var(--accent-weak);color:var(--accent-strong)">Most chosen</span>
+                <span class="self-start mb-4 px-2.5 py-1 font-bold text-xs tracking-wide uppercase rounded-full" style="background:var(--accent-weak);color:var(--accent-strong)">Most chosen</span>
               @endif
 
-              <h2 class="display font-black text-xl tracking-tight">{{ row.name }}</h2>
+              <h2 class="font-black text-xl tracking-tight display">{{ row.name }}</h2>
               <p class="mt-2 leading-relaxed text-sm muted">{{ row.description }}</p>
 
               <div class="mt-6">
@@ -212,14 +212,14 @@ function billingHeaders(): Record<string, string> {
               <ul class="flex flex-col gap-3 mt-6 text-sm">{!! row.featuresHtml !!}</ul>
 
               @if (!row.trades)
-                <p class="pt-4 mt-6 text-xs border-t faint bd">Analysis only. This plan does not place orders.</p>
+                <p class="mt-6 pt-4 text-xs border-t bd faint">Analysis only. This plan does not place orders.</p>
               @endif
             </div>
           @endforeach
         </div>
 
-        <section class="pt-12 mt-16 border-t bd">
-          <h2 class="display font-black text-2xl tracking-tight">Before you connect an account</h2>
+        <section class="mt-16 pt-12 border-t bd">
+          <h2 class="font-black text-2xl tracking-tight display">Before you connect an account</h2>
           <div class="grid gap-x-10 gap-y-7 md:grid-cols-2 mt-6 max-w-4xl">
             <div>
               <h3 class="font-bold">Your venue keys stay yours</h3>
