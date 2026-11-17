@@ -24,7 +24,9 @@ import { fetchWithRetry, IngestRunTracker } from './run'
  * pass, and the run row records how many were skipped.
  */
 
-const SCOREBOARD = 'https://site.api.espn.com/apis/site/v2/sports'
+// `site.api.espn.com` answers Bun's TLS client with 403 from the production
+// host; `site.web.api` serves the same public payloads. See scores/espn.ts.
+const SCOREBOARD = 'https://site.web.api.espn.com/apis/site/v2/sports'
 
 interface EspnCompetitor {
   homeAway?: string

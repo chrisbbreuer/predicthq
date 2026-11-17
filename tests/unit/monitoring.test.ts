@@ -103,6 +103,15 @@ describe('health', () => {
     expect(health.checks.find(c => c.name === 'database')!.status).toBe('ok')
   })
 
+  it('counts a partial run that wrote prices as fresh ingestion', async () => {
+    // Health reads the real clock, so place the run a minute before it.
+    run('composite', 'odds', 'partial', (NOW.getTime() - Date.now()) / 60_000 + 1)
+
+    const health = await checkHealth(db as any)
+
+    expect(health.checks.find(c => c.name === 'ingest')!.status).toBe('ok')
+  })
+
   it('says so when the database answers reads but refuses writes', async () => {
     const readOnly = {
       query: (sql: string) => ({ get: async () => (sql.includes('ingest_runs') ? { last_at: new Date().toISOString() } : { 1: 1 }) }),

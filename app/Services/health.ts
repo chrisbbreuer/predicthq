@@ -142,10 +142,14 @@ async function checkCache(): Promise<Check> {
  */
 async function checkIngest(db: Database): Promise<Check> {
   try {
+    // A partial run wrote prices; only some sources failed. For "is data
+    // still arriving" that is fresh data, and counting only clean runs
+    // reported a board updating every fifteen seconds as stalled whenever
+    // one geo-blocked book refused us.
     const row = await db.query<{ last_at: string | null }>(`
       SELECT MAX(finished_at) AS last_at
       FROM ingest_runs
-      WHERE status = 'success'
+      WHERE status IN ('success', 'partial')
     `).get()
 
     if (!row?.last_at)

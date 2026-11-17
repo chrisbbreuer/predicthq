@@ -18,8 +18,10 @@ import { injurySeverity } from './severity'
  * was made, and an updating row silently rewrites that history.
  */
 
-const STANDINGS = 'https://site.api.espn.com/apis/v2/sports'
-const SCOREBOARD = 'https://site.api.espn.com/apis/site/v2/sports'
+// `site.api.espn.com` answers Bun's TLS client with 403 from the production
+// host; `site.web.api` serves the same public payloads. See scores/espn.ts.
+const STANDINGS = 'https://site.web.api.espn.com/apis/v2/sports'
+const SCOREBOARD = 'https://site.web.api.espn.com/apis/site/v2/sports'
 
 function nowIso(): string {
   return new Date().toISOString()
