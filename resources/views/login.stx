@@ -12,6 +12,8 @@
  */
 import { signupQuery } from '../../app/Support/signup-context'
 import { configuredSocialProviders, signInError } from '../../app/Support/auth'
+// Private to the signed-in user: kept out of search results and the sitemap.
+const noindex = true
 
 const navActive = 'login'
 const pageTitle = 'PredictHQ: sign in'

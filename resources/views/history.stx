@@ -1,4 +1,6 @@
 <script server>
+// Private to the signed-in user: kept out of search results and the sitemap.
+const noindex = true
 const navActive = 'history'
 const pageTitle = 'Your history | PredictHQ'
 const pageDescription = 'Your prediction history, trades, and results across every connected exchange.'

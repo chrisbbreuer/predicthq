@@ -74,7 +74,10 @@ export async function loadDiscovery(input: { category?: unknown, league?: unknow
   const db = new Database()
   try {
     // Keep the search bounded and parameterized. No user-controlled SQL fragments.
-    const conditions = ["status = 'open'"]
+    // Kalshi parlays (KXMVE…) are one-off combinations a single customer
+    // built, titled "yes Milwaukee,yes Atlanta,…". They are positions, not
+    // markets anyone browses, so discovery leaves them out.
+    const conditions = ["status = 'open'", "external_id NOT LIKE 'KXMVE%'"]
     const values: unknown[] = []
     if (query) {
       conditions.push('(LOWER(question) LIKE ? OR LOWER(outcome_label) LIKE ?)')

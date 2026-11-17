@@ -9,6 +9,7 @@
  * thread on real markets instead of showing invented conversation.
  */
 import { loadSeedMarkets, loadThreads } from '../../app/Support/community'
+const canonicalPath = '/community'
 
 const navActive = 'community'
 const pageTitle = 'PredictHQ community: talk the calls through'

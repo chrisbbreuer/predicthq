@@ -13,6 +13,8 @@ import { brandFor, iconForSport, teamFor } from '../../app/Support/branding'
 import { loadIntelSummary, loadTopCandidate } from '../../app/Support/intel'
 import { loadBoard } from '../../app/Support/odds'
 import { loadFeedState } from '../../app/Support/pipeline'
+const canonicalPath = '/odds'
+const ogImage = '/images/og/odds.png'
 
 const { bookmakers, events, summary } = await loadBoard()
 

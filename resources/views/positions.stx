@@ -23,6 +23,9 @@
  * @see app/Actions/Trading/GetPositions.ts for the payload.
  * @see app/Services/trading/book-tracking.ts for games, legs, and charts.
  */
+const ogImage = '/images/og/positions.png'
+// Private to the signed-in user: kept out of search results and the sitemap.
+const noindex = true
 const navActive = 'positions'
 const pageTitle = 'PredictHQ: my bets'
 const pageDescription = 'Every open bet across your connected venues, with live scores and how the odds moved through the game.'

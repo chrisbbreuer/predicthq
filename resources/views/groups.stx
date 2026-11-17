@@ -1,5 +1,7 @@
 <script server>
 import { config } from '@stacksjs/config'
+// Private to the signed-in user: kept out of search results and the sitemap.
+const noindex = true
 const shareOrigin = String(config.app.url || 'https://predicthq.org').replace(/\/$/, '')
 const navActive = 'groups'
 const pageTitle = 'Groups | PredictHQ'

@@ -8,6 +8,7 @@
  * tooltip, pan, and zoom interactions on top.
  */
 import { loadBigTrades, loadGraph, loadSmartMoney } from '../../app/Support/prediction-markets'
+const canonicalPath = '/markets'
 
 const W = 920
 const H = 640

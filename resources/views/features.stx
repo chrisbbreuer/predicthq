@@ -12,10 +12,11 @@
  */
 import { loadIntelSummary } from '../../app/Support/intel'
 import { loadBoard } from '../../app/Support/odds'
+const canonicalPath = '/features'
 
 const navActive = 'features'
-const pageTitle = 'PredictHQ features: your accounts, your people, your AI'
-const pageDescription = 'One place for every venue you trade, the people trading them with you, and an AI that shows its work before it acts.'
+const pageTitle = 'Features | PredictHQ'
+const pageDescription = 'Kalshi, Polymarket, and sportsbook prices in one place, live scores beside your bets, and automated orders inside limits you set.'
 
 const intel = await loadIntelSummary()
 const { summary } = await loadBoard()
@@ -38,7 +39,7 @@ const analysis = [
   {
     href: '/features/evidence',
     name: 'Evidence engine',
-    blurb: 'Six measured signals move fair value off the venue quote, each one clamped and each recording the sample it stood on.',
+    blurb: 'Signals from the trade tape, the other venue, and the schedule move fair value off the quote. Each is capped and records the sample behind it, and in play only flow since tip-off counts.',
     stat: counted(intel.recentFills, 'fills priced in the last 24h', 'Prices every fill the tape carries'),
   },
   {
@@ -46,20 +47,49 @@ const analysis = [
     name: 'Smart money',
     blurb: 'Per-account win rates on settled markets, shrunk toward a coin flip so a 2-for-2 record never outranks a 40-for-50 one.',
     stat: intel.traderCount
-      ? `${intel.traderCount.toLocaleString()} accounts scored, ${intel.whaleCount} flagged for size`
+      ? `${intel.traderCount.toLocaleString()} accounts scored${intel.whaleCount ? `, ${intel.whaleCount} flagged for size` : ''}`
       : 'Scoring begins at the first settled market',
   },
   {
     href: '/features/odds',
     name: 'Odds comparison',
     blurb: 'Sportsbook prices and prediction-market probabilities on one row, with the best available price on each outcome ringed.',
-    stat: counted(summary.bookmakerCount, `books across ${summary.eventCount} games`, 'Every book on one row'),
+    stat: summary.bookmakerCount && summary.eventCount
+      ? `${summary.bookmakerCount} books across ${summary.eventCount.toLocaleString()} games`
+      : 'Every book on one row',
   },
   {
     href: '/features/live',
     name: 'Live moves',
     blurb: 'Every price change streamed as it lands, so a line that moves against you is visible before the next page load.',
     stat: 'Broadcast over WebSocket, one-minute ingest',
+  },
+]
+
+const follow = [
+  {
+    href: '/positions',
+    name: 'My bets',
+    blurb: 'Every position on your connected Kalshi account with the live score, the clock, and how its chance has moved since the start. Player props show the stat they need, totals show the running score.',
+    stat: 'Refreshes every 10 seconds',
+  },
+  {
+    href: '/scanner',
+    name: 'Live scanner',
+    blurb: 'Every game market in play or starting soon, with its price change over 5, 15, and 60 minutes and a flag when trading surges.',
+    stat: 'NBA, NFL, college, NHL, MLB, and soccer',
+  },
+  {
+    href: '/scores/nba/today',
+    name: 'Game pages',
+    blurb: 'Score, last play, box score, team stats, and the win-probability chart from Kalshi on one page that updates while the game is on.',
+    stat: 'Scores from ESPN',
+  },
+  {
+    href: '/history',
+    name: 'History',
+    blurb: 'Your trades, settlements, and results across connected exchanges, with lifetime profit and loss.',
+    stat: 'Imported from your venues',
   },
 ]
 
@@ -104,9 +134,9 @@ const execution = [
 
       <main class="mx-auto pt-14 px-4 sm:pt-20 sm:px-6 max-w-6xl">
         <div class="max-w-3xl">
-          <h1 class="font-black leading-[1.06] text-4xl tracking-tight sm:text-5xl display">Your accounts, your people, your AI.</h1>
+          <h1 class="font-black leading-[1.06] text-4xl tracking-tight sm:text-5xl display">Read the market, follow your bets, act inside your limits.</h1>
           <p class="mt-5 max-w-2xl leading-relaxed text-lg muted">
-            Everything below runs on one ingested tape. What changes with a plan is not what PredictHQ knows, but how much of it acts for you.
+            Every plan reads the same data: Kalshi, Polymarket, and sportsbook prices, live scores, and the public trade tape. Paid plans also let PredictHQ place orders for you.
           </p>
         </div>
 
@@ -118,6 +148,23 @@ const execution = [
 
           <div class="grid gap-px sm:grid-cols-2 mt-px" style="background:var(--border)">
             @foreach (analysis as item)
+              <a href="{{ item.href }}" data-no-router class="flex flex-col p-6 sm:p-7 group" style="background:var(--surface)">
+                <h3 class="font-bold text-lg tracking-tight group-hover:opacity-70">{{ item.name }}</h3>
+                <p class="mt-2 leading-relaxed text-sm muted">{{ item.blurb }}</p>
+                <span class="mt-4 font-semibold text-xs faint num">{{ item.stat }}</span>
+              </a>
+            @endforeach
+          </div>
+        </section>
+
+        <section class="mt-16">
+          <div class="flex flex-wrap gap-3 items-baseline justify-between pb-4 border-b bd">
+            <h2 class="font-black text-2xl tracking-tight display">Follow</h2>
+            <p class="text-sm muted">Connect Kalshi and your bets fill in.</p>
+          </div>
+
+          <div class="grid gap-px sm:grid-cols-2 mt-px" style="background:var(--border)">
+            @foreach (follow as item)
               <a href="{{ item.href }}" data-no-router class="flex flex-col p-6 sm:p-7 group" style="background:var(--surface)">
                 <h3 class="font-bold text-lg tracking-tight group-hover:opacity-70">{{ item.name }}</h3>
                 <p class="mt-2 leading-relaxed text-sm muted">{{ item.blurb }}</p>
@@ -147,7 +194,7 @@ const execution = [
         <section class="flex flex-col gap-5 items-start justify-between lg:flex-row lg:items-center mt-16 p-8 sm:p-10 rounded-2xl card">
           <div>
             <h2 class="font-black text-2xl tracking-tight display">See it price a real market</h2>
-            <p class="mt-2 max-w-xl leading-relaxed muted">The candidate feed is open and needs no account. It is the same call the trading loop makes every fifteen minutes.</p>
+            <p class="mt-2 max-w-xl leading-relaxed muted">The candidate feed is open and needs no account. It is the same call the trading loop makes every thirty minutes.</p>
           </div>
           <div class="flex flex-wrap gap-3 shrink-0">
             <a href="/features/evidence" data-no-router class="px-5 py-3 font-bold text-sm rounded-lg btn btn-primary">How pricing works</a>

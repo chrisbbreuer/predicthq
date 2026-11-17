@@ -11,6 +11,7 @@
  * argument is the thing readers have learned to discount.
  */
 import { comparisons } from '../../config/compare'
+const canonicalPath = '/compare'
 
 const navActive = 'compare'
 

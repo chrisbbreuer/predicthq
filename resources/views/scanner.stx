@@ -12,6 +12,8 @@
  *
  * @see app/Services/scanner.ts for the payload.
  */
+const canonicalPath = '/scanner'
+const ogImage = '/images/og/scanner.png'
 const navActive = 'scanner'
 const pageTitle = 'PredictHQ: live scanner'
 const pageDescription = 'Live and upcoming game markets with price movement, volume surges, and model fair value.'

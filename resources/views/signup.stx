@@ -11,6 +11,7 @@
  */
 import { signupQuery } from '../../app/Support/signup-context'
 import { configuredSocialProviders, signInError } from '../../app/Support/auth'
+const canonicalPath = '/signup'
 
 const navActive = 'signup'
 const pageTitle = 'PredictHQ: create an account'

@@ -27,4 +27,12 @@ export default {
   locale: 'en',
   fallbackLocale: 'en',
   cipher: 'aes-256-cbc',
+
+  seo: {
+    sitemap: {
+      // `/market` renders one market by `?id=`; the bare path is a
+      // not-found page and has no place in the sitemap.
+      exclude: ['/market'],
+    },
+  },
 } satisfies AppConfig

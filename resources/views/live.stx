@@ -8,6 +8,7 @@
  */
 import { brandFor, teamFor } from '../../app/Support/branding'
 import { loadBoard, loadRecentMoves } from '../../app/Support/odds'
+const canonicalPath = '/live'
 
 const { bookmakers, events, summary } = await loadBoard()
 

@@ -13,6 +13,8 @@
  * from `/api/trading/positions`, which authenticates every call, so this
  * document never carries anyone's position.
  */
+// Private to the signed-in user: kept out of search results and the sitemap.
+const noindex = true
 const navActive = 'positions'
 const rawTicker = String(query?.ticker ?? '').trim().toUpperCase()
 const ticker = /^[A-Z0-9][A-Z0-9._-]{2,120}$/.test(rawTicker) ? rawTicker : ''
