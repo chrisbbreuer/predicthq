@@ -236,6 +236,10 @@ export default {
         recentSettlements(db, userId),
         realizedTotals(db, userId),
       ])
+      // Real money and paper are reported apart: a simulated loss from a
+      // strategy test months ago is not part of anyone's results.
+      const settledLive = settled.filter(position => (position.strategy_mode || 'live') !== 'paper')
+      const settledPaper = settled.filter(position => position.strategy_mode === 'paper')
 
       // Re-read the accounts we just refreshed, so the balance beside the
       // positions is from the same pass that produced them.
@@ -321,6 +325,7 @@ export default {
           committed: round(working.reduce((sum, order) => sum + order.committed, 0)),
           realizedToday: realized.today,
           realizedAll: realized.all,
+          paperRealizedAll: realized.paperAll,
           // Paper is summarized apart from the money numbers above on
           // purpose: adding a simulated gain to a real balance produces a
           // figure that describes nothing.
@@ -354,20 +359,8 @@ export default {
           statusReason: decision.status_reason,
           createdAt: decision.created_at,
         })),
-        settled: settled.map(position => ({
-          venue: position.venue,
-          marketExternalId: position.market_external_id,
-          question: position.question || position.market_external_id,
-          outcomeLabel: position.outcome_label,
-          side: position.side,
-          size: Number(position.size),
-          cost: round(Number(position.cost_basis)),
-          realized: round(Number(position.realized_pnl)),
-          won: Number(position.settlement_price) > 0,
-          settledAt: position.settled_at,
-          strategy: position.strategy_name,
-          mode: position.strategy_mode || 'live',
-        })),
+        paperSettled: settledPaper.slice(0, 10).map(settledView),
+        settled: settledLive.slice(0, 20).map(settledView),
       }
     }
     finally {
@@ -520,6 +513,24 @@ function pendingDecisions(db: Db, userId: number): Promise<DecisionRow[]> {
   `).all(userId, databaseTime(Date.now() - PENDING_MAX_AGE_HOURS * 3600_000))
 }
 
+/** One settled position as the page shows it. */
+function settledView(position: SettledRow) {
+  return {
+    venue: position.venue,
+    marketExternalId: position.market_external_id,
+    question: position.question || position.market_external_id,
+    outcomeLabel: position.outcome_label,
+    side: position.side,
+    size: Number(position.size),
+    cost: round(Number(position.cost_basis)),
+    realized: round(Number(position.realized_pnl)),
+    won: Number(position.settlement_price) > 0,
+    settledAt: position.settled_at,
+    strategy: position.strategy_name,
+    mode: position.strategy_mode || 'live',
+  }
+}
+
 /** The last positions to resolve, and what they returned. */
 function recentSettlements(db: Db, userId: number): Promise<SettledRow[]> {
   return db.prepare<SettledRow>(`
@@ -532,27 +543,32 @@ function recentSettlements(db: Db, userId: number): Promise<SettledRow[]> {
     LEFT JOIN prediction_markets m ON m.id = p.prediction_market_id
     WHERE s.user_id = ? AND p.status = 'settled'
     ORDER BY p.settled_at DESC, p.id DESC
-    LIMIT 20
+    LIMIT 40
   `).all(userId)
 }
 
-/** Realized profit and loss, today and over everything. */
-async function realizedTotals(db: Db, userId: number): Promise<{ today: number, all: number }> {
+/** Realized profit and loss for real money, today and over everything, with paper apart. */
+async function realizedTotals(db: Db, userId: number): Promise<{ today: number, all: number, paperAll: number }> {
   const midnight = new Date()
   midnight.setUTCHours(0, 0, 0, 0)
 
   // Aliased away from `today`/`all`: `all` is reserved in SQLite and the
   // statement will not even parse with it.
-  const row = await db.prepare<{ today_pnl: number, total_pnl: number }>(`
+  const row = await db.prepare<{ today_pnl: number, total_pnl: number, paper_pnl: number }>(`
     SELECT
-      COALESCE(SUM(CASE WHEN p.settled_at >= ? THEN p.realized_pnl ELSE 0 END), 0) AS today_pnl,
-      COALESCE(SUM(p.realized_pnl), 0) AS total_pnl
+      COALESCE(SUM(CASE WHEN s.mode <> 'paper' AND p.settled_at >= ? THEN p.realized_pnl ELSE 0 END), 0) AS today_pnl,
+      COALESCE(SUM(CASE WHEN s.mode <> 'paper' THEN p.realized_pnl ELSE 0 END), 0) AS total_pnl,
+      COALESCE(SUM(CASE WHEN s.mode = 'paper' THEN p.realized_pnl ELSE 0 END), 0) AS paper_pnl
     FROM exchange_positions p
     JOIN trading_strategies s ON s.id = p.trading_strategy_id
     WHERE s.user_id = ? AND p.status = 'settled'
   `).get(midnight.toISOString(), userId)
 
-  return { today: round(Number(row?.today_pnl ?? 0)), all: round(Number(row?.total_pnl ?? 0)) }
+  return {
+    today: round(Number(row?.today_pnl ?? 0)),
+    all: round(Number(row?.total_pnl ?? 0)),
+    paperAll: round(Number(row?.paper_pnl ?? 0)),
+  }
 }
 
 /**
