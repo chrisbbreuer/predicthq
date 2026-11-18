@@ -1,4 +1,8 @@
-import type Stripe from 'stripe'
+// The namespace @stacksjs/payments resolves, which is the one
+// constructEventAsync returns. The app's own `stripe` is a separate copy
+// wherever the install nests the framework's, and the two Event types
+// do not match.
+import type { Stripe } from '@stacksjs/payments'
 import { Database } from '../../Support/db'
 import process from 'node:process'
 import { log } from '@stacksjs/logging'
