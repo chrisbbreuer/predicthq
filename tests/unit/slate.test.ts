@@ -2,7 +2,7 @@ import type { Database } from '../../app/Support/db'
 import type { LiveLine } from '../../app/Services/trading/line-snapshots'
 import { afterEach, describe, expect, it } from 'bun:test'
 import { rmSync } from 'node:fs'
-import { paperParlays, parlayPayout, parlayPrice, placePaperParlay, settlePaperParlays } from '../../app/Services/trading/paper-parlays'
+import { paperParlays, parlayPayout, parlayPrice, placePaperParlay, settleHeldPositions, settlePaperParlays } from '../../app/Services/trading/paper-parlays'
 import { buildSlate, rankPicks } from '../../app/Services/trading/slate'
 import { schemaFor } from '../support/schema'
 
@@ -87,6 +87,25 @@ describe('paper parlays', () => {
     expect(second).toEqual({ settled: 1, won: 1, lost: 0 })
     const rows = await paperParlays(db, 1, 'settled')
     expect(rows.find(r => r.legs.some(l => l.ticker === 'B'))!.payout).toBeGreaterThan(3)
+  })
+
+  it('settles a paper single by refreshing the market its position holds', async () => {
+    const path = `tests/temp/held-${Bun.nanoseconds()}.sqlite`
+    paths.push(path)
+    const db = schemaFor(path, ['exchange_positions', 'prediction_markets', 'trading_strategies']) as any
+    const now = new Date().toISOString()
+    db.prepare(`INSERT INTO trading_strategies (id, user_id, name, venue, mode, categories, bankroll, max_stake, min_edge, min_confidence, max_open_positions, daily_loss_limit, auto_execute, status, halted_reason, last_run_at, created_at, updated_at)
+      VALUES (1, 1, 'Slate', 'kalshi', 'paper', '', 5, 1, 0.02, 0, 20, 5, 0, 'paused', '', '', ?, ?)`).run(now, now)
+    db.prepare(`INSERT INTO prediction_markets (id, venue, external_id, question, outcome_label, category, status, result, volume, liquidity, last_price, ends_at, created_at, updated_at)
+      VALUES (1, 'kalshi', 'KXNBAGAME-26NOV18SACX-SAC', 'Sacramento to win', 'Sacramento', 'Sports', 'open', '', 0, 0, 0.29, '', ?, ?)`).run(now, now)
+    db.prepare(`INSERT INTO exchange_positions (trading_strategy_id, prediction_market_id, venue, market_external_id, side, size, cost_basis, avg_price, realized_pnl, status, opened_at, created_at, updated_at)
+      VALUES (1, 1, 'paper:kalshi', 'KXNBAGAME-26NOV18SACX-SAC', 'yes', 3, 0.87, 0.29, 0, 'open', ?, ?, ?)`).run(now, now, now)
+
+    expect(await settleHeldPositions(db, async () => new Map([['KXNBAGAME-26NOV18SACX-SAC', '']]))).toEqual({ refreshed: 0, settled: 0 })
+    expect(await settleHeldPositions(db, async () => new Map([['KXNBAGAME-26NOV18SACX-SAC', 'yes']]))).toEqual({ refreshed: 1, settled: 1 })
+    const position = db.prepare('SELECT status, realized_pnl FROM exchange_positions').get()
+    expect(position.status).toBe('settled')
+    expect(Number(position.realized_pnl)).toBeCloseTo(2.13, 2)
   })
 
   it('refuses a parlay of one leg or the same market twice', async () => {

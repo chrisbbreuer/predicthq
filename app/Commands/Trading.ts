@@ -198,15 +198,22 @@ export default function (cli: CLI) {
     .option('--hours <n>', 'Only games starting within this many hours', { default: '12' })
     .option('--user <id>', 'Account the paper bets belong to', { default: '1' })
     .option('--dry-run', 'Show the slate without recording it', { default: false })
-    .action(async (options: { budget?: string, stake?: string, singles?: string, minGap?: string, hours?: string, user?: string, dryRun?: boolean }) => {
+    .option('--strategy <id>', 'Add to an existing slate strategy instead of starting one', { default: '' })
+    .option('--tickers <list>', 'Only these markets, as singles (comma-separated tickers)', { default: '' })
+    .action(async (options: { budget?: string, stake?: string, singles?: string, minGap?: string, hours?: string, user?: string, dryRun?: boolean, strategy?: string, tickers?: string }) => {
       const stake = Number(options.stake) || 1
-      const { slate, picks, lines } = await draftSlate({
+      const drafted = await draftSlate({
         budget: Number(options.budget) || 5,
         stake,
         singles: Number(options.singles) || 3,
         minGap: Number(options.minGap) || 0.02,
         windowMinutes: (Number(options.hours) || 12) * 60,
       })
+      const { picks, lines } = drafted
+      const only = new Set(String(options.tickers || '').split(',').map(ticker => ticker.trim()).filter(Boolean))
+      const slate = only.size > 0
+        ? { singles: picks.filter(pick => only.has(pick.line.ticker)), parlays: [] }
+        : drafted.slate
       const pctOf = (value: number) => `${value >= 0 ? '+' : ''}${(value * 100).toFixed(1)}%`
       log.info(`${lines} Kalshi game markets with a book line; ${picks.length} games where the book disagrees enough; ${picks.filter(pick => pick.ev > 0).length} worth more than they cost if the book is right`)
       for (const pick of slate.singles)
@@ -218,7 +225,7 @@ export default function (cli: CLI) {
       const db = new Database()
       try {
         const name = `Paper slate ${new Date().toISOString().slice(0, 10)}`
-        const placed = await placeSlate(db, slate, { userId: Number(options.user) || 1, stake, name })
+        const placed = await placeSlate(db, slate, { userId: Number(options.user) || 1, stake, name, strategyId: Number(options.strategy) || undefined })
         for (const single of placed.singles)
           log.info(`  ${single.placed ? 'recorded' : 'skipped'}: ${single.label}${single.reason ? ` (${single.reason})` : ''}`)
         log.success(`Recorded under "${name}" (strategy ${placed.strategyId}): ${placed.singles.filter(single => single.placed).length} singles, ${placed.parlays.length} parlays. Paper only: no money moves.`)

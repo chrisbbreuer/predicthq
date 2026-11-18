@@ -4,6 +4,7 @@ import type { ParlayTracker } from './book-tracking'
 import { kalshiMarkets } from '../prediction-markets/kalshi-public'
 import { kalshiFee } from './backtest'
 import { trackParlay } from './book-tracking'
+import { settlePositions } from './positions'
 
 /**
  * Paper parlays: simulated Kalshi parlays, priced from their legs and settled
@@ -110,6 +111,38 @@ export async function settlePaperParlays(
     else won++
   }
   return { settled: won + lost, won, lost }
+}
+
+/**
+ * Refresh the result of every Kalshi market an open position holds, then
+ * settle what resolved. Ingestion refreshes unsettled markets oldest-first
+ * and capped, across hundreds of thousands of rows, so a market a paper bet
+ * holds could wait days for its result; this asks for exactly those.
+ */
+export async function settleHeldPositions(
+  db: Database,
+  results: (tickers: string[]) => Promise<Map<string, string>> = legResults,
+): Promise<{ refreshed: number, settled: number }> {
+  const held = await db.query<{ id: number | string, external_id: string }>(`
+    SELECT DISTINCT m.id, m.external_id
+    FROM exchange_positions p
+    JOIN prediction_markets m ON m.id = p.prediction_market_id
+    WHERE p.status = 'open' AND m.venue = 'kalshi' AND m.status != 'settled'
+  `).all()
+  if (held.length === 0)
+    return { refreshed: 0, settled: 0 }
+  const known = await results(held.map(row => row.external_id))
+  const now = new Date().toISOString()
+  let refreshed = 0
+  for (const row of held) {
+    const result = known.get(row.external_id)
+    if (result !== 'yes' && result !== 'no')
+      continue
+    await db.query(`UPDATE prediction_markets SET status = 'settled', result = ?, updated_at = ? WHERE id = ?`).run(result, now, Number(row.id))
+    refreshed++
+  }
+  const summary = refreshed > 0 ? await settlePositions(db) : { settled: 0 }
+  return { refreshed, settled: summary.settled }
 }
 
 async function legResults(tickers: string[]): Promise<Map<string, string>> {

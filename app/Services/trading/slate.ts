@@ -136,19 +136,38 @@ export async function draftSlate(options: { budget?: number, stake?: number, sin
 }
 
 /**
+ * The market's row, created from the live quote when ingestion has not seen
+ * it trade yet. Its result is filled in later by the settle job, which asks
+ * Kalshi about every market a paper position holds.
+ */
+async function ensureMarket(db: Database, line: LiveLine, mid: number, now: string): Promise<number> {
+  const existing = await db.query<{ id: number | string }>(`SELECT id FROM prediction_markets WHERE venue = 'kalshi' AND external_id = ? LIMIT 1`).get(line.ticker)
+  if (existing)
+    return Number(existing.id)
+  const created = await db.query(`
+    INSERT INTO prediction_markets (venue, external_id, question, outcome_label, category, status, result, volume, liquidity, last_price, ends_at, created_at, updated_at)
+    VALUES ('kalshi', ?, ?, ?, 'Sports', 'open', '', 0, 0, ?, ?, ?, ?)
+  `).run(line.ticker, `${line.title} to win`, line.title, Math.round(mid * 10000) / 10000, line.startsAt, now, now)
+  return Number(created.lastInsertRowid)
+}
+
+/**
  * Record the slate as paper bets under its own paused paper strategy, so the
  * loop never trades it and its results stay apart from every other strategy.
  */
-export async function placeSlate(db: Database, slate: Slate, options: { userId: number, stake?: number, name: string }): Promise<{ strategyId: number, singles: Array<{ label: string, placed: boolean, reason: string }>, parlays: number[] }> {
+export async function placeSlate(db: Database, slate: Slate, options: { userId: number, stake?: number, name: string, strategyId?: number }): Promise<{ strategyId: number, singles: Array<{ label: string, placed: boolean, reason: string }>, parlays: number[] }> {
   const stake = options.stake ?? 1
   const now = new Date().toISOString()
   const budget = (slate.singles.length + slate.parlays.length) * stake
-  const created = await db.query(`
-    INSERT INTO trading_strategies (user_id, name, venue, mode, categories, bankroll, max_stake, min_edge, min_confidence,
-      max_open_positions, daily_loss_limit, cumulative_loss_limit, auto_execute, status, halted_reason, last_run_at, created_at, updated_at)
-    VALUES (?, ?, 'kalshi', 'paper', '', ?, ?, 0.02, 0, 20, ?, ?, 0, 'paused', 'one-off paper slate', ?, ?, ?)
-  `).run(options.userId, options.name, budget, stake, budget, budget, now, now, now)
-  const strategyId = Number(created.lastInsertRowid)
+  let strategyId = options.strategyId ?? 0
+  if (!strategyId) {
+    const created = await db.query(`
+      INSERT INTO trading_strategies (user_id, name, venue, mode, categories, bankroll, max_stake, min_edge, min_confidence,
+        max_open_positions, daily_loss_limit, cumulative_loss_limit, auto_execute, status, halted_reason, last_run_at, created_at, updated_at)
+      VALUES (?, ?, 'kalshi', 'paper', '', ?, ?, 0.02, 0, 20, ?, ?, 0, 'paused', 'one-off paper slate', ?, ?, ?)
+    `).run(options.userId, options.name, budget, stake, budget, budget, now, now, now)
+    strategyId = Number(created.lastInsertRowid)
+  }
   const row = await db.query<Record<string, unknown>>(`
     SELECT id, user_id, venue, mode, bankroll, max_stake, min_edge, min_confidence,
       max_open_positions, daily_loss_limit, cumulative_loss_limit, auto_execute, status
@@ -158,20 +177,16 @@ export async function placeSlate(db: Database, slate: Slate, options: { userId: 
 
   const singles: Array<{ label: string, placed: boolean, reason: string }> = []
   for (const pick of slate.singles) {
-    const market = await db.query<{ id: number | string }>(`SELECT id FROM prediction_markets WHERE venue = 'kalshi' AND external_id = ? LIMIT 1`).get(pick.line.ticker)
-    if (!market) {
-      singles.push({ label: pick.label, placed: false, reason: 'market not in our database yet' })
-      continue
-    }
-    const size = Math.floor(stake / pick.price)
     const mid = (pick.line.bid + pick.line.ask) / 2
+    const marketId = await ensureMarket(db, pick.line, mid, now)
+    const size = Math.floor(stake / pick.price)
     const sideMid = pick.side === 'yes' ? mid : 1 - mid
     const fair = pick.side === 'yes' ? pick.line.bookProb : 1 - pick.line.bookProb
     const decision = await db.query(`
       INSERT INTO trade_decisions (trading_strategy_id, prediction_market_id, venue, side, market_price, fair_value, edge, confidence,
         limit_price, size, notional, rationale, decided_by, status, status_reason, created_at, updated_at)
       VALUES (?, ?, 'kalshi', ?, ?, ?, ?, 0, ?, ?, ?, ?, 'slate', 'approved', '', ?, ?)
-    `).run(strategyId, Number(market.id), pick.side, Math.round(sideMid * 10000) / 10000, Math.round(fair * 10000) / 10000, pick.edge, pick.price, size, Math.round(size * pick.price * 100) / 100, rationale(pick), now, now)
+    `).run(strategyId, marketId, pick.side, Math.round(sideMid * 10000) / 10000, Math.round(fair * 10000) / 10000, pick.edge, pick.price, size, Math.round(size * pick.price * 100) / 100, rationale(pick), now, now)
     const [outcome] = await executePaper(db, strategy, [Number(decision.lastInsertRowid)])
     singles.push({ label: pick.label, placed: Boolean(outcome?.placed), reason: outcome?.reason ?? '' })
   }
