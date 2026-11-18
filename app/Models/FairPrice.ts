@@ -52,8 +52,14 @@ export default defineModel({
 
   attributes: {
     // The shipped fair probability: weighted across books, sharp-anchored.
+    // Probabilities keep six places and prices four. The framework's default
+    // for a number is DECIMAL(10,2), which rounded every fair probability to a
+    // whole percentage point: coarser than the 3-point edges the strategy acts
+    // on, and enough to flip which side a thin edge favours.
     probConsensus: {
       type: 'number',
+      precision: 8,
+      scale: 6,
       required: true,
       fillable: true,
       default: 0,
@@ -63,6 +69,8 @@ export default defineModel({
     // Fair probability from the sharp books alone, 0 when none quote it.
     probSharp: {
       type: 'number',
+      precision: 8,
+      scale: 6,
       fillable: true,
       default: 0,
       validation: { rule: schema.float().min(0).max(1) },
@@ -70,6 +78,8 @@ export default defineModel({
     },
     probMultiplicative: {
       type: 'number',
+      precision: 8,
+      scale: 6,
       fillable: true,
       default: 0,
       validation: { rule: schema.float().min(0).max(1) },
@@ -77,6 +87,8 @@ export default defineModel({
     },
     probPower: {
       type: 'number',
+      precision: 8,
+      scale: 6,
       fillable: true,
       default: 0,
       validation: { rule: schema.float().min(0).max(1) },
@@ -84,6 +96,8 @@ export default defineModel({
     },
     probShin: {
       type: 'number',
+      precision: 8,
+      scale: 6,
       fillable: true,
       default: 0,
       validation: { rule: schema.float().min(0).max(1) },
@@ -93,6 +107,8 @@ export default defineModel({
     // flag a market the three models disagree about — treat with care.
     methodSpread: {
       type: 'number',
+      precision: 8,
+      scale: 6,
       fillable: true,
       default: 0,
       validation: { rule: schema.float().min(0) },
@@ -101,6 +117,8 @@ export default defineModel({
     // Fair decimal odds, 1/probConsensus. Denormalized for display.
     fairPrice: {
       type: 'number',
+      precision: 12,
+      scale: 4,
       fillable: true,
       default: 0,
       validation: { rule: schema.float().min(0) },
@@ -109,6 +127,8 @@ export default defineModel({
     // Best price anyone currently offers, and who offers it.
     bestPrice: {
       type: 'number',
+      precision: 10,
+      scale: 4,
       fillable: true,
       default: 0,
       validation: { rule: schema.float().min(0) },
@@ -125,6 +145,8 @@ export default defineModel({
     // staked at the best available price, in percent. The honest edge.
     edgePct: {
       type: 'number',
+      precision: 12,
+      scale: 4,
       fillable: true,
       default: 0,
       validation: { rule: schema.float() },
@@ -134,6 +156,8 @@ export default defineModel({
     // the configured Kelly fraction. Never negative.
     kellyFraction: {
       type: 'number',
+      precision: 8,
+      scale: 6,
       fillable: true,
       default: 0,
       validation: { rule: schema.float().min(0).max(1) },
@@ -143,6 +167,8 @@ export default defineModel({
     // book set used. A market-quality readout in its own right.
     overroundPct: {
       type: 'number',
+      precision: 10,
+      scale: 4,
       fillable: true,
       default: 0,
       validation: { rule: schema.float() },
@@ -151,14 +177,14 @@ export default defineModel({
     // How many books this was computed from. One book is not a consensus,
     // and the API surfaces this so thin estimates can be discounted.
     bookCount: {
-      type: 'number',
+      type: 'integer',
       fillable: true,
       default: 0,
       validation: { rule: schema.number().min(0) },
       factory: faker => faker.number.int({ min: 1, max: 8 }),
     },
     sharpBookCount: {
-      type: 'number',
+      type: 'integer',
       fillable: true,
       default: 0,
       validation: { rule: schema.number().min(0) },
