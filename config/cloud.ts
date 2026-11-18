@@ -230,6 +230,9 @@ export const tsCloud: TsCloudConfig = {
      * }
      */
     compute: {
+      // `main` deploys first (it migrates), then the other four together.
+      // One after another, the five cutovers took over ten minutes.
+      deployConcurrency: 4,
       instances: 1,
       size: 'small', // Provider-agnostic: 'nano', 'micro', 'small', 'medium', 'large', 'xlarge', '2xlarge' (small = 2GB RAM, needed for bun install)
       disk: {

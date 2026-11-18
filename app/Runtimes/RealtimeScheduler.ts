@@ -17,6 +17,9 @@ const config: ServerConfig = {
       host: server.host,
       port: server.port,
       scheme: server.scheme,
+      // Share the port with the release being replaced, so a zero-downtime
+      // deploy can start this one beside it instead of stopping it first.
+      reusePort: true,
     },
   },
   rateLimit: server.rateLimit,
