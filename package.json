@@ -71,10 +71,10 @@
   "dependencies": {
     "@polymarket/clob-client-v2": "^1.1.0",
     "@stacksjs/stx": "0.2.378",
+    "@ts-charts/plot": "^0.2.8",
     "bun-plugin-stx": "0.2.378",
     "stacks": "0.75.618",
     "stripe": "^22.5.0",
-    "ts-charts": "github:stacksjs/ts-charts",
     "ts-web-scraper": "^0.1.10",
     "viem": "^2.55.11"
   },
@@ -96,8 +96,5 @@
       }
     },
     "commit-msg": "bun x gitlint --edit .git/COMMIT_EDITMSG"
-  },
-  "trustedDependencies": [
-    "ts-charts"
-  ]
+  }
 }

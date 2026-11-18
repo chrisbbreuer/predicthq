@@ -34,8 +34,9 @@ const pageDescription = 'Live score, box score, team stats, and how the odds mov
 </script>
 
 <script client>
-import { useIntervalFn } from '@stacksjs/composables'
-import { axisLabels, chartSvg, chartTop, gameClock, pct, startLabel, teamColor, teamShort } from '../../../../functions/bets'
+import { useIntervalFn, useWindowSize } from '@stacksjs/composables'
+import { probabilityChart } from '@ts-charts/plot'
+import { axisLabels, gameClock, startLabel, teamColor, teamShort } from '../../../../functions/bets'
 
 const LEAGUE = {{ leagueKey }}
 const EVENT = {{ eventId }}
@@ -51,9 +52,45 @@ const BASKETBALL_COLUMNS = ['MIN', 'PTS', 'REB', 'AST', '3PT', 'FG', 'FT', 'STL'
 const loading = state(true)
 const failed = state('')
 const view = state<any>(null)
-const chart = state('')
-const labels = state<any[]>([])
 const axis = state<string[]>([])
+/** What the chart draws: one series per outcome, and the time span. */
+const chartSeries = state<any[]>([])
+const chartDomain = state<number[]>([])
+const chartWidth = state(720)
+const chartBox = useRef('chartBox')
+
+/** Read the chart box's width. It is hidden until data arrives, so this runs then too. */
+function measureChart(): void {
+  void nextTick(() => {
+    const width = chartBox.current?.clientWidth ?? 0
+    if (width > 0 && width !== chartWidth())
+      chartWidth.set(width)
+  })
+}
+
+/**
+ * The win-probability chart, from @ts-charts/plot. Drawn at the box's real
+ * pixel width so text and lines stay crisp, and redrawn when it resizes.
+ */
+const chartHtml = derived(() => {
+  const series = chartSeries()
+  const domain = chartDomain()
+  if (series.length === 0 || domain.length !== 2)
+    return ''
+  const width = chartWidth()
+  const narrow = width < 560
+  return probabilityChart({
+    width,
+    height: narrow ? 220 : 260,
+    labelWidth: narrow ? 84 : 120,
+    series,
+    domain: [domain[0]!, domain[1]!],
+    extendTo: domain[1],
+    grid: [0.25, 0.5, 0.75],
+    title: 'Win probability',
+    idPrefix: 'game',
+  }).svg
+})
 const periods = state<any[]>([])
 const awayLine = state<any[]>([])
 const homeLine = state<any[]>([])
@@ -223,7 +260,15 @@ function apply(data: any): void {
       }
       return index === 0 ? 'var(--text)' : 'var(--faint)'
     }
-    const lines = c.outcomes.map((outcome: any, index: number) => ({ points: outcome.points, color: colorFor(outcome.label, index), fill: false, label: outcome.label, last: outcome.last, ticker: outcome.ticker }))
+    const labelFor = (label: string) => {
+      for (const key of ['away', 'home']) {
+        const team = game[key]
+        if ([team.location, team.name, team.shortName, team.abbreviation].map((value: string) => String(value || '').toLowerCase()).includes(String(label || '').toLowerCase()))
+          return team.abbreviation || label
+      }
+      return label
+    }
+    const lines = c.outcomes.map((outcome: any, index: number) => ({ id: outcome.ticker, label: labelFor(outcome.label), points: outcome.points, color: colorFor(outcome.label, index), fill: false, last: outcome.last }))
     let leader = 0
     lines.forEach((line: any, index: number) => {
       if ((Number(line.last) || 0) > (Number(lines[leader].last) || 0))
@@ -237,9 +282,10 @@ function apply(data: any): void {
     }
     if (lines[leader])
       lines[leader].fill = true
-    chart.set(chartSvg(lines, c.start, c.end))
+    chartSeries.set(lines)
+    chartDomain.set([c.start, c.end])
+    measureChart()
     axis.set(axisLabels(c.start, c.end, c.intervalMinutes))
-    labels.set(lines.map((line: any) => ({ key: line.ticker, label: line.label, value: pct(line.last), color: line.color, top: chartTop(line.last) })))
     betHref.set('/bet?ticker=' + encodeURIComponent(kalshi.tickers[0]) + '&side=yes')
   }
 }
@@ -286,6 +332,11 @@ const poll = useIntervalFn(() => {
 }, 15_000, { immediate: false })
 
 onMount(async () => {
+  // Redraw at the box's real width whenever the window changes size.
+  const windowSize = useWindowSize()
+  const unsubscribe = windowSize.width.subscribe(() => measureChart())
+  onDestroy(unsubscribe)
+
   await load()
   poll.resume()
 })
@@ -300,9 +351,8 @@ onMount(async () => {
       .logo { width: 64px; height: 64px; object-fit: contain; }
       .score { font-size: 60px; }
       .score.dim { color: var(--faint); }
-      .chart-wrap { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 96px; gap: 8px; }
-      .chart-area, .chart-labels { position: relative; height: 240px; }
-      .chart-label { position: absolute; left: 0; transform: translateY(-50%); line-height: 1; }
+      .chart-box { min-height: 220px; color: var(--text); }
+      .chart-axis { padding-right: 136px; }
       .lines { display: grid; gap: 10px; }
       .lines-row { display: grid; grid-template-columns: minmax(0, 1fr) repeat(3, minmax(84px, 120px)); gap: 10px; align-items: center; }
       .lines-head { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--muted); }
@@ -325,8 +375,7 @@ onMount(async () => {
       @media (max-width: 640px) {
         .logo { width: 48px; height: 48px; }
         .score { font-size: 44px; }
-        .chart-area, .chart-labels { height: 200px; }
-        .chart-wrap { grid-template-columns: minmax(0, 1fr) 72px; }
+        .chart-axis { padding-right: 100px; }
         .lines-row { grid-template-columns: minmax(0, 1fr) repeat(3, minmax(64px, 1fr)); gap: 6px; }
         .line-cell { min-height: 52px; border-radius: 12px; }
         .line-price { font-size: 14px; }
@@ -394,18 +443,8 @@ onMount(async () => {
                 </template>
               </div>
             </div>
-            <div class="mt-4 chart-wrap">
-              <div class="chart-area" x-html="chart()"></div>
-              <div class="chart-labels">
-                <template :for="label in labels">
-                  <div class="chart-label" :style="'top:' + label.top">
-                    <div class="font-bold text-xs truncate" :style="'color:' + label.color" x-text="label.label"></div>
-                    <div class="text-3xl sm:text-4xl figure-xl" :style="'color:' + label.color" x-text="label.value"></div>
-                  </div>
-                </template>
-              </div>
-            </div>
-            <div class="flex justify-between mt-2 pr-24 text-[11px] faint num">
+            <div ref="chartBox" class="mt-4 chart-box" x-html="chartHtml()"></div>
+            <div class="flex justify-between mt-2 text-[11px] chart-axis faint num">
               <template :for="tick in axis"><span x-text="tick"></span></template>
             </div>
             <div class="flex flex-wrap gap-x-3 gap-y-1 items-baseline justify-between mt-3 text-xs">

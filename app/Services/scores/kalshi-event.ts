@@ -1,6 +1,6 @@
 import type { GameDetail } from './espn'
 import type { KalshiMarketInfo } from '../prediction-markets/kalshi-public'
-import { cached, kalshiEventMarkets, kalshiSeriesOpenMarkets } from '../prediction-markets/kalshi-public'
+import { cached, kalshiEventMarkets, kalshiSeriesOpenMarkets, kalshiSettledMarkets } from '../prediction-markets/kalshi-public'
 import { findGame } from '../odds/books/exchange-games'
 import { gamesOn, parseGameTicker } from '../trading/live-games'
 
@@ -91,7 +91,7 @@ export function kalshiEventFor(league: string, gameId: string, game: Pick<GameDe
       if (markets.length > 0)
         return { eventTicker, tickers: markets.map(market => market.ticker) }
     }
-    return await eventFromSeries(league, gameId)
+    return await eventFromSeries(league, gameId, game.startsAt)
   })
 }
 
@@ -104,11 +104,24 @@ export function kalshiEventFor(league: string, gameId: string, game: Pick<GameDe
  * where ESPN has `ND` and `FLA` in the other order. Matching the series'
  * own tickers against the day's ESPN games handles both.
  */
-async function eventFromSeries(league: string, gameId: string): Promise<GameMarket | null> {
+async function eventFromSeries(league: string, gameId: string, startsAt?: string): Promise<GameMarket | null> {
   const series = WINNER_SERIES[league]
   if (!series)
     return null
-  const markets = await kalshiSeriesOpenMarkets(series).catch(() => [] as KalshiMarketInfo[])
+  const open = await kalshiSeriesOpenMarkets(series).catch(() => [] as KalshiMarketInfo[])
+  const found = await matchSeries(open, league, gameId)
+  if (found || !startsAt)
+    return found
+  // A finished game's markets have settled and left the open list; look
+  // among those that closed around its start, so its chart still shows.
+  const start = Date.parse(startsAt) / 1000
+  if (!Number.isFinite(start))
+    return null
+  const settled = await kalshiSettledMarkets(series, start - 86_400, start + 2 * 86_400).catch(() => [] as KalshiMarketInfo[])
+  return await matchSeries(settled, league, gameId)
+}
+
+async function matchSeries(markets: KalshiMarketInfo[], league: string, gameId: string): Promise<GameMarket | null> {
   const byEvent = new Map<string, KalshiMarketInfo[]>()
   for (const market of markets) {
     const list = byEvent.get(market.eventTicker) ?? []
