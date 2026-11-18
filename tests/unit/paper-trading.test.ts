@@ -133,6 +133,21 @@ describe('paper fills', () => {
     expect(outcome!.placed).toBe(true)
   })
 
+  it('books the position even when the database reports no rows changed, as Vitess does', async () => {
+    seed(0.5, 0.6)
+    const real = (db as any).upsert.bind(db)
+    ;(db as any).upsert = async (...args: unknown[]) => {
+      await real(...args)
+      return { changes: 0, lastInsertRowid: 0 }
+    }
+    const [outcome] = await executePaper(db as any, strategy, [1])
+    expect(outcome!.placed).toBe(true)
+    expect(db.prepare('SELECT * FROM exchange_positions').all()).toHaveLength(1)
+    // And a second run of the same decision books nothing more.
+    await executePaper(db as any, strategy, [1])
+    expect(db.prepare('SELECT * FROM exchange_positions').all()).toHaveLength(1)
+  })
+
   it('marks its orders so they cannot be mistaken for real ones', async () => {
     seed(0.5, 0.6)
 

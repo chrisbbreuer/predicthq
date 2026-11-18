@@ -119,7 +119,24 @@ async function record(
   const market = await db.prepare<{ external_id: string }>('SELECT external_id FROM prediction_markets WHERE id = ?')
     .get(decision.prediction_market_id)
 
-  const claim = await db.upsert('exchange_orders', [{
+  // A decision is executed once. Asked first rather than read off the
+  // upsert's row count, which Vitess reports as zero even for a new row:
+  // that made every production paper fill look like a repeat, so orders were
+  // written and no position was ever booked.
+  const prior = await db.prepare<{ status: string, avg_fill_price: number, error: string }>(
+    'SELECT status, avg_fill_price, error FROM exchange_orders WHERE trade_decision_id = ?',
+  ).get(decision.id)
+  if (prior) {
+    return {
+      decisionId: decision.id,
+      placed: prior.status === 'filled',
+      reason: prior.status === 'filled'
+        ? `already filled on paper at ${(Number(prior.avg_fill_price) * 100).toFixed(1)}`
+        : prior.error || `paper order already ${prior.status}`,
+    }
+  }
+
+  await db.upsert('exchange_orders', [{
     trade_decision_id: decision.id,
     exchange_account_id: null,
     venue: `paper:${decision.venue}`,
@@ -146,16 +163,6 @@ async function record(
 
   if (!order)
     return { decisionId: decision.id, placed: false, reason: 'could not create a paper order claim' }
-
-  if (claim.changes === 0) {
-    return {
-      decisionId: decision.id,
-      placed: order.status === 'filled',
-      reason: order.status === 'filled'
-        ? `already filled on paper at ${(Number(order.avg_fill_price) * 100).toFixed(1)}`
-        : order.error || `paper order already ${order.status}`,
-    }
-  }
 
   if (filledSize > 0) {
     await bookOrderFill(db, {
