@@ -8,7 +8,7 @@ import { schemaFor } from '../support/schema'
 
 const line = (over: Partial<LiveLine>): LiveLine => ({
   ticker: 'T', title: 'Team', league: 'nba', gameId: 'g', side: 'home', provider: 'DraftKings',
-  bookProb: 0.6, bid: 0.55, ask: 0.56, minutes: 120, startsAt: '2026-11-19T00:00:00Z', ...over,
+  bookProb: 0.6, bid: 0.55, ask: 0.56, minutes: 120, startsAt: '2026-11-19T00:00:00Z', live: false, ...over,
 })
 
 describe('ranking picks', () => {

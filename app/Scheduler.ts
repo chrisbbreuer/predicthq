@@ -90,6 +90,11 @@ export default function () {
     .job('SettlePaperParlays')
     .everyFiveMinutes()
 
+  // Suggested bets for the bets page, pre-game and live. See app/Jobs/SuggestBets.ts.
+  schedule
+    .job('SuggestBets')
+    .everyTenMinutes()
+
   // Transfermarkt career history is intentionally outside the five-minute
   // pricing loop. This bounded pass resumes durable tasks, refreshes mutable
   // squad/injury pages by TTL, and never downloads immutable history merely

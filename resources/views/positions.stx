@@ -60,6 +60,8 @@ const others = state<any[]>([])
 const paper = state<any[]>([])
 const orders = state<any[]>([])
 const pending = state<any[]>([])
+const suggestions = state<any[]>([])
+const suggestionBusy = state(0)
 const settled = state<any[]>([])
 const paperSettled = state<any[]>([])
 /** Which parlay cards have their settled legs unfolded, by position key. */
@@ -619,6 +621,7 @@ async function load(fromVenue = false): Promise<void> {
     apply(data)
     error.set('')
     live.set(true)
+    void loadSuggestions()
   }
   catch (requestError) {
     error.set(messageOf(requestError))
@@ -626,6 +629,69 @@ async function load(fromVenue = false): Promise<void> {
   }
   finally {
     loading.set(false)
+  }
+}
+
+/** A suggestion as the card draws it. */
+function suggestionView(row: any): any {
+  const legs = (row.legs || []).map((leg: any) => ({
+    label: leg.label,
+    price: cents(leg.price),
+    live: Boolean(leg.live),
+    starts: leg.live ? 'Live now' : startLabel(leg.startsAt),
+    href: '/bet?ticker=' + encodeURIComponent(leg.ticker) + '&side=' + String(leg.side || 'yes').toLowerCase(),
+  }))
+  const ev = Number(row.ev) || 0
+  return {
+    id: row.id,
+    kind: row.kind === 'parlay' ? legs.length + '-leg parlay' : 'Single',
+    legs,
+    stake: usd(row.stake),
+    price: cents(row.price),
+    pays: usd(Number(row.price) > 0 ? Number(row.stake) / Number(row.price) : 0),
+    ev: (ev >= 0 ? '+' : '') + (ev * 100).toFixed(1) + '%',
+    evTone: ev > 0 ? 'pos' : (ev < -0.015 ? 'neg' : 'muted'),
+    rationale: row.rationale,
+    expires: 'until ' + startLabel(row.expiresAt),
+    single: row.kind !== 'parlay',
+    betHref: legs.length === 1 ? legs[0].href : '',
+  }
+}
+
+async function loadSuggestions(): Promise<void> {
+  try {
+    const response = await bookFetch('/api/trading/suggestions', { credentials: 'same-origin' })
+    if (!response.ok)
+      return
+    const data = await response.json()
+    suggestions.set((data.pending || []).map(suggestionView))
+  }
+  catch {
+    // Suggestions are a side panel; the book itself must not fail with them.
+  }
+}
+
+async function decide(id: number, approve: boolean): Promise<void> {
+  suggestionBusy.set(id)
+  note.set('')
+  try {
+    const response = await bookFetch('/api/trading/suggestions/' + id + '/decide', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ approve }),
+    })
+    const data = await response.json()
+    if (!response.ok)
+      throw new Error(data.message || data.error || ('Request failed (' + response.status + ')'))
+    note.set(approve ? 'Recorded as a paper bet. It settles on its own after the game.' : 'Suggestion dismissed.')
+    await Promise.all([loadSuggestions(), load(false)])
+  }
+  catch (requestError) {
+    note.set(messageOf(requestError))
+  }
+  finally {
+    suggestionBusy.set(0)
   }
 }
 
@@ -710,6 +776,9 @@ onMount(start)
       .cell { text-align: right; }
       .cell-label { display: block; font-size: 11px; font-weight: 600; color: var(--faint); }
       .simple-row { display: grid; gap: 16px; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--border); grid-template-columns: minmax(0, 1fr) auto; }
+      .suggestion { display: grid; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+      .suggestion-legs { display: grid; gap: 6px; }
+      .suggestion-leg { display: flex; gap: 8px; align-items: center; min-width: 0; padding: 8px 10px; border-radius: 10px; background: var(--soft, rgba(127,127,127,.06)); color: inherit; text-decoration: none; }
       .paper-legs { display: grid; gap: 6px; padding: 0 18px 14px; margin-top: -6px; border-bottom: 1px solid var(--border); }
       .paper-leg { display: flex; gap: 8px; align-items: center; min-width: 0; }
       .simple-row:last-child { border-bottom: 0; }
@@ -1097,6 +1166,48 @@ onMount(start)
                     <div class="figure"><span class="cell-label">Limit</span><span class="font-bold num" x-text="order.limit"></span></div>
                     <div class="figure"><span class="cell-label">Left</span><span class="font-bold num" x-text="order.left"></span></div>
                     <div class="figure"><span class="cell-label">Committed</span><span class="font-bold num" x-text="order.committed"></span></div>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </section>
+
+          {{-- Bets PredictHQ suggests. Approving records a paper bet; betting
+               one for real is the user's own step on Kalshi, linked here. --}}
+          <section x-show="suggestions().length > 0 && tab() === 'all'">
+            <div class="section-head">
+              <h2 class="section-title">Suggested bets</h2>
+              <span class="text-xs faint">approve to track on paper · real money is your call on Kalshi</span>
+            </div>
+            <div class="overflow-hidden card">
+              <template :for="suggestion in suggestions">
+                <div class="suggestion">
+                  <div class="flex flex-wrap gap-2 items-baseline justify-between">
+                    <div class="flex gap-2 items-center">
+                      <span class="pill" x-text="suggestion.kind"></span>
+                      <span class="text-xs faint" x-text="suggestion.expires"></span>
+                    </div>
+                    <div class="flex flex-wrap gap-3 items-center">
+                      <div class="figure"><span class="cell-label">Stake</span><span class="font-bold num" x-text="suggestion.stake"></span></div>
+                      <div class="figure"><span class="cell-label">Price</span><span class="font-bold num" x-text="suggestion.price"></span></div>
+                      <div class="figure"><span class="cell-label">Pays</span><span class="font-bold num" x-text="suggestion.pays"></span></div>
+                      <div class="figure"><span class="cell-label">Expected</span><span class="font-bold num" :class="suggestion.evTone" x-text="suggestion.ev"></span></div>
+                    </div>
+                  </div>
+                  <div class="suggestion-legs">
+                    <template :for="leg in suggestion.legs">
+                      <a :href="leg.href" data-no-router class="suggestion-leg">
+                        <span class="pill" :class="leg.live ? 'live' : ''" x-text="leg.starts"></span>
+                        <span class="font-semibold text-sm truncate min-w-0" x-text="leg.label"></span>
+                        <span class="ml-auto text-sm font-semibold num" x-text="leg.price"></span>
+                      </a>
+                    </template>
+                  </div>
+                  <p class="leading-relaxed text-xs muted" x-show="suggestion.rationale" x-text="suggestion.rationale"></p>
+                  <div class="flex flex-wrap gap-2 items-center justify-end">
+                    <a x-show="suggestion.single" :href="suggestion.betHref" data-no-router class="px-4 h-9 font-bold text-sm rounded-full btn inline-flex items-center">Bet on Kalshi</a>
+                    <button type="button" class="px-4 h-9 font-bold text-sm rounded-full btn" :disabled="suggestionBusy() === suggestion.id" @click="decide(suggestion.id, false)">Dismiss</button>
+                    <button type="button" class="px-4 h-9 font-bold text-sm rounded-full btn btn-primary" :disabled="suggestionBusy() === suggestion.id" @click="decide(suggestion.id, true)">Approve on paper</button>
                   </div>
                 </div>
               </template>

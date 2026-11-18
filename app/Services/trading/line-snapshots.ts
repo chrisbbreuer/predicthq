@@ -84,13 +84,19 @@ export interface LiveLine {
   ask: number
   minutes: number
   startsAt: string
+  /**
+   * The game is under way. There is no in-play book line to compare, so
+   * `bookProb` is Kalshi's own mid: a live leg is priced at the market.
+   */
+  live: boolean
 }
 
 /**
  * Every Kalshi game market starting within `windowMinutes` that has a tight
  * quote and a book line, read now. Shared by the recorder and the slate.
+ * With `includeLive`, games under way are included too, at Kalshi's mid.
  */
-export async function liveLines(deps: RecordDeps = defaultDeps, windowMinutes = WINDOW_MINUTES): Promise<LiveLine[]> {
+export async function liveLines(deps: RecordDeps = defaultDeps, windowMinutes = WINDOW_MINUTES, options: { includeLive?: boolean } = {}): Promise<LiveLine[]> {
   const now = deps.now()
   const details = new Map<string, Promise<GameDetail | null>>()
   const out: LiveLine[] = []
@@ -104,9 +110,29 @@ export async function liveLines(deps: RecordDeps = defaultDeps, windowMinutes = 
       const game = await deps.gameFor(market.ticker).catch(() => null)
       // A soccer tie market names no team; it pays on the draw.
       const side: LineSide | null = game?.selected ?? (parseGameTicker(market.ticker)?.outcome === 'TIE' ? 'draw' : null)
-      if (!game || game.state !== 'pre' || !side)
+      if (!game || !side)
+        continue
+      const live = game.state === 'in'
+      if (game.state !== 'pre' && !(live && options.includeLive))
         continue
       const minutes = Math.round((Date.parse(game.startsAt) - now) / 60_000)
+      if (live) {
+        out.push({
+          ticker: market.ticker,
+          title: market.yesSubTitle || market.title || market.ticker,
+          league: game.league,
+          gameId: game.gameId,
+          side,
+          provider: 'Kalshi (in play)',
+          bookProb: Math.round(((bid + ask) / 2) * 10000) / 10000,
+          bid,
+          ask,
+          minutes,
+          startsAt: game.startsAt,
+          live: true,
+        })
+        continue
+      }
       if (!(minutes >= 0 && minutes <= windowMinutes))
         continue
 
@@ -130,6 +156,7 @@ export async function liveLines(deps: RecordDeps = defaultDeps, windowMinutes = 
         ask,
         minutes,
         startsAt: game.startsAt,
+        live: false,
       })
     }
   }

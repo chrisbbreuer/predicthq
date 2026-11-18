@@ -6,8 +6,9 @@ import { Database } from '../Support/db'
 import type { BacktestReport } from '../Services/trading/backtest'
 import { backtestGames, summarizeBets } from '../Services/trading/backtest'
 import { haltState, setHalt } from '../Services/trading/halt'
-import { linesReport } from '../Services/trading/line-snapshots'
-import { draftSlate, parlayExpectedReturn, placeSlate } from '../Services/trading/slate'
+import { linesReport, liveLines } from '../Services/trading/line-snapshots'
+import { draftSlate, explicitPicks, parlayExpectedReturn, placeSlate } from '../Services/trading/slate'
+import { generateSuggestions, saveSuggestions } from '../Services/trading/suggestions'
 
 /**
  * `buddy trading:halt` — stop every strategy from placing orders.
@@ -229,6 +230,46 @@ export default function (cli: CLI) {
         for (const single of placed.singles)
           log.info(`  ${single.placed ? 'recorded' : 'skipped'}: ${single.label}${single.reason ? ` (${single.reason})` : ''}`)
         log.success(`Recorded under "${name}" (strategy ${placed.strategyId}): ${placed.singles.filter(single => single.placed).length} singles, ${placed.parlays.length} parlays. Paper only: no money moves.`)
+      }
+      finally {
+        db.close()
+      }
+    })
+
+  cli
+    .command('trading:suggest', 'Suggest bets on the bets page for approval: the automatic picks, or specific markets')
+    .option('--user <id>', 'Account to suggest to', { default: '1' })
+    .option('--auto', 'Run the same picks the ten-minute job makes', { default: false })
+    .option('--singles <list>', 'Singles, as TICKER:side, comma-separated', { default: '' })
+    .option('--parlays <list>', 'Parlays, legs joined with + and parlays separated by ;', { default: '' })
+    .option('--stake <dollars>', 'Dollars per suggestion', { default: '1' })
+    .action(async (options: { user?: string, auto?: boolean, singles?: string, parlays?: string, stake?: string }) => {
+      const userId = Number(options.user) || 1
+      const stake = Number(options.stake) || 1
+      const db = new Database()
+      try {
+        const lines = await liveLines(undefined, 36 * 60, { includeLive: true })
+        let saved = 0
+        if (options.auto)
+          saved += await generateSuggestions(db, userId, { lines, stake })
+        const bets: Array<{ kind: 'single' | 'parlay', picks: ReturnType<typeof explicitPicks>, stake: number }> = []
+        for (const spec of String(options.singles || '').split(',').map(part => part.trim()).filter(Boolean)) {
+          const picks = explicitPicks(lines, [spec])
+          if (picks.length === 0)
+            log.warn(`  skipped ${spec}: no live quote and line, or outside the 25–85¢ band`)
+          else bets.push({ kind: 'single', picks, stake })
+        }
+        for (const group of String(options.parlays || '').split(';').map(part => part.trim()).filter(Boolean)) {
+          const specs = group.split('+')
+          const picks = explicitPicks(lines, specs)
+          if (picks.length !== specs.length || new Set(picks.map(pick => pick.line.gameId)).size !== picks.length)
+            log.warn(`  skipped parlay ${group}: every leg needs a quote, and legs must be different games`)
+          else bets.push({ kind: 'parlay', picks, stake })
+        }
+        for (const bet of bets)
+          log.info(`  ${bet.kind}  ${bet.picks.map(pick => `${pick.label} ${Math.round(pick.price * 100)}¢`).join('  +  ')}  expected ${((bet.kind === 'single' ? bet.picks[0]!.ev : parlayExpectedReturn(bet.picks)) * 100).toFixed(1)}%`)
+        saved += await saveSuggestions(db, userId, bets)
+        log.success(`${saved} new suggestion${saved === 1 ? '' : 's'} on the bets page, waiting for approval.`)
       }
       finally {
         db.close()

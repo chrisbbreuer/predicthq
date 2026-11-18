@@ -57,6 +57,11 @@ route.group({ middleware: ['auth', 'throttle:60,1'] }, () => {
   // Manual approval — the path a strategy left on manual, or a plan
   // without automated execution, queues decisions into.
   route.post('/trading/decisions/{id}/review', 'Actions/Trading/ReviewDecision')
+
+  // Suggested bets on the bets page. Approving records a paper bet; real
+  // money is the user's own step on Kalshi, linked from each card.
+  route.get('/trading/suggestions', 'Actions/Trading/GetSuggestions')
+  route.post('/trading/suggestions/{id}/decide', 'Actions/Trading/DecideSuggestion')
 })
 
 // Connecting an account verifies the credentials against the venue before
