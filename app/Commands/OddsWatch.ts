@@ -47,6 +47,9 @@ async function loadScheduledEvents(db: Database): Promise<ScheduledEvent[]> {
   `).all(horizon)
 }
 
+/** How long the final flush may take before the process exits regardless. */
+const SHUTDOWN_GRACE_MS = 5_000
+
 export default function (cli: CLI) {
   cli
     .command('odds:watch', 'Run the realtime odds loop')
@@ -140,15 +143,25 @@ export default function (cli: CLI) {
         void engine.refreshSchedule()
       }, 30_000)
 
+      let stopping = false
       const shutdown = () => {
+        if (stopping)
+          return
+        stopping = true
         clearInterval(refresh)
         // `stop` closes the sockets too; a half-shut process holding a
         // socket open is how a supervisor restart ends up with two.
         engine.stop()
-        void pushes.stop().finally(() => {
+        // The last flush gets a few seconds, not systemd's whole stop
+        // timeout. Pushed prices are seconds old and the next process
+        // resubscribes at once, while a flush stuck behind the database held
+        // every deploy for up to ninety seconds before systemd killed it.
+        const exit = () => {
           log.info('Odds loop stopped.')
           process.exit(0)
-        })
+        }
+        setTimeout(exit, SHUTDOWN_GRACE_MS).unref()
+        void pushes.stop().catch(() => {}).finally(exit)
       }
 
       process.on('SIGINT', shutdown)

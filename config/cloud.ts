@@ -815,6 +815,10 @@ export const tsCloud: TsCloudConfig = {
       sharedPaths: ['storage/ingest'],
       preStart: ['bun install'],
       env: productionRuntimeEnv,
+      // It exits within five seconds of SIGTERM by itself; this is the
+      // backstop so a hung flush costs a deploy fifteen seconds, not
+      // systemd's default ninety.
+      stopTimeout: '15s',
     },
   },
 }
