@@ -6,6 +6,7 @@ import { Database } from '../Support/db'
 import type { BacktestReport } from '../Services/trading/backtest'
 import { backtestGames, summarizeBets } from '../Services/trading/backtest'
 import { haltState, setHalt } from '../Services/trading/halt'
+import { linesReport } from '../Services/trading/line-snapshots'
 
 /**
  * `buddy trading:halt` — stop every strategy from placing orders.
@@ -168,6 +169,24 @@ export default function (cli: CLI) {
       }
     })
 
+
+  cli
+    .command('trading:lines', 'Score Kalshi against the recorded sportsbook lines, game by game')
+    .option('--gap <gap>', 'Minimum disagreement, in probability points, before buying', { default: '0.02' })
+    .action(async (options: { gap?: string }) => {
+      const db = new Database()
+      try {
+        const report = await linesReport(db, { gap: Number(options.gap) || 0.02 })
+        log.info(`${report.games} games recorded, ${report.settled} settled`)
+        log.info(`Brier: Kalshi ${report.brier.kalshi ?? '-'} · book ${report.brier.book ?? '-'} (lower is better)`)
+        const won = report.bets.filter(bet => bet.won).length
+        const pnl = report.bets.reduce((sum, bet) => sum + bet.pnl, 0)
+        log.info(`Bets at a ${report.gap} gap: ${report.bets.length} (${won} won) · P&L ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)} on $1 stakes · ROI ${report.roi === null ? '-' : `${(report.roi * 100).toFixed(1)}%`} · ${report.daysUp}/${report.days} days up`)
+      }
+      finally {
+        db.close()
+      }
+    })
 }
 
 /** Yesterday's date in US Eastern, `YYYYMMDD`. */

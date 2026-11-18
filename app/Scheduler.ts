@@ -79,6 +79,12 @@ export default function () {
     .job('Watchdog')
     .everyFiveMinutes()
 
+  // Kalshi beside the sportsbook line before each game, for the forward
+  // test in `buddy trading:lines`. See app/Jobs/RecordLines.ts.
+  schedule
+    .job('RecordLines')
+    .everyFiveMinutes()
+
   // Transfermarkt career history is intentionally outside the five-minute
   // pricing loop. This bounded pass resumes durable tasks, refreshes mutable
   // squad/injury pages by TTL, and never downloads immutable history merely

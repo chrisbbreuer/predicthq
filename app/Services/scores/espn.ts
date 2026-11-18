@@ -230,6 +230,8 @@ export interface GameOdds {
   overUnder: number | null
   awayMoneyLine: number | null
   homeMoneyLine: number | null
+  /** The draw, on a three-way (soccer) line; null elsewhere. */
+  drawMoneyLine: number | null
   /** 'home' | 'away' | null when the book has not called one. */
   favorite: string | null
 }
@@ -318,6 +320,7 @@ function toOdds(raw: any): GameOdds | null {
     overUnder: num(raw?.overUnder),
     awayMoneyLine: num(away?.moneyLine),
     homeMoneyLine: num(home?.moneyLine),
+    drawMoneyLine: num(raw?.drawOdds?.moneyLine),
     favorite: home?.favorite === true ? 'home' : (away?.favorite === true ? 'away' : null),
   }
 }
