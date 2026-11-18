@@ -73,6 +73,8 @@ export default defineModel({
     // probability points) before a market is even a candidate.
     minEdge: {
       type: 'number',
+      precision: 8,
+      scale: 6,
       fillable: true,
       validation: { rule: schema.float().min(0).max(1) },
       factory: () => 0.04,
@@ -81,6 +83,8 @@ export default defineModel({
     // sure of than this is recorded and skipped, never executed.
     minConfidence: {
       type: 'number',
+      precision: 8,
+      scale: 6,
       fillable: true,
       validation: { rule: schema.float().min(0).max(1) },
       factory: () => 0.65,

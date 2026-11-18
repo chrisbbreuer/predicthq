@@ -143,6 +143,8 @@ export default defineModel({
     // 1.0 is the default; sharp books sit well above it.
     consensusWeight: {
       type: 'number',
+      precision: 8,
+      scale: 4,
       fillable: true,
       default: 1,
       validation: { rule: schema.float().min(0).max(10) },

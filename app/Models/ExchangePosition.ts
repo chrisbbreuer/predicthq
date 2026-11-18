@@ -92,6 +92,8 @@ export default defineModel({
     // costBasis / size, stored so a leaderboard need not recompute it.
     avgPrice: {
       type: 'number',
+      precision: 8,
+      scale: 6,
       fillable: false,
       validation: { rule: schema.float().min(0).max(1) },
       factory: () => 0,
@@ -115,6 +117,8 @@ export default defineModel({
     // cannot silently rewrite history that has already been reported.
     settlementPrice: {
       type: 'number',
+      precision: 8,
+      scale: 6,
       fillable: false,
       validation: { rule: schema.float().min(0).max(1) },
       factory: () => 0,

@@ -84,6 +84,8 @@ export default defineModel({
     },
     limitPrice: {
       type: 'number',
+      precision: 8,
+      scale: 6,
       fillable: true,
       validation: { rule: schema.float().min(0).max(1) },
       factory: faker => faker.number.float({ min: 0.05, max: 0.95, fractionDigits: 3 }),
@@ -102,6 +104,8 @@ export default defineModel({
     },
     avgFillPrice: {
       type: 'number',
+      precision: 8,
+      scale: 6,
       fillable: false,
       validation: { rule: schema.float().min(0).max(1) },
       factory: () => 0,

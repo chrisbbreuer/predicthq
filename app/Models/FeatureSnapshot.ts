@@ -67,6 +67,8 @@ export default defineModel({
     // ---- price state -----------------------------------------------------
     bestPrice: {
       type: 'number',
+      precision: 10,
+      scale: 4,
       fillable: true,
       default: 0,
       validation: { rule: schema.float().min(0) },
@@ -74,6 +76,8 @@ export default defineModel({
     },
     fairProb: {
       type: 'number',
+      precision: 8,
+      scale: 6,
       fillable: true,
       default: 0,
       validation: { rule: schema.float().min(0).max(1) },
@@ -81,6 +85,8 @@ export default defineModel({
     },
     sharpProb: {
       type: 'number',
+      precision: 8,
+      scale: 6,
       fillable: true,
       default: 0,
       validation: { rule: schema.float().min(0).max(1) },
@@ -88,6 +94,8 @@ export default defineModel({
     },
     edgePct: {
       type: 'number',
+      precision: 12,
+      scale: 4,
       fillable: true,
       default: 0,
       validation: { rule: schema.float() },
@@ -95,6 +103,8 @@ export default defineModel({
     },
     overroundPct: {
       type: 'number',
+      precision: 12,
+      scale: 4,
       fillable: true,
       default: 0,
       validation: { rule: schema.float() },
@@ -111,6 +121,8 @@ export default defineModel({
     // opportunity and a warning that someone has stale information.
     priceStdDev: {
       type: 'number',
+      precision: 10,
+      scale: 4,
       fillable: true,
       default: 0,
       validation: { rule: schema.float().min(0) },
@@ -120,6 +132,8 @@ export default defineModel({
     // ---- movement --------------------------------------------------------
     openPrice: {
       type: 'number',
+      precision: 10,
+      scale: 4,
       fillable: true,
       default: 0,
       validation: { rule: schema.float().min(0) },
@@ -128,6 +142,8 @@ export default defineModel({
     // Percent move from the opening price to now. Sign carries direction.
     moveFromOpenPct: {
       type: 'number',
+      precision: 12,
+      scale: 4,
       fillable: true,
       default: 0,
       validation: { rule: schema.float() },
@@ -137,6 +153,8 @@ export default defineModel({
     // how far. A slow drift and a sudden lurch mean different things.
     velocityPctPerHour: {
       type: 'number',
+      precision: 12,
+      scale: 4,
       fillable: true,
       default: 0,
       validation: { rule: schema.float() },
@@ -217,6 +235,8 @@ export default defineModel({
     // fastest-converging measure of whether the estimate had real edge.
     closingFairProb: {
       type: 'number',
+      precision: 8,
+      scale: 6,
       fillable: true,
       default: 0,
       validation: { rule: schema.float().min(0).max(1) },
@@ -226,6 +246,8 @@ export default defineModel({
     // taken beat the close.
     clvPct: {
       type: 'number',
+      precision: 12,
+      scale: 4,
       fillable: true,
       default: 0,
       validation: { rule: schema.float() },

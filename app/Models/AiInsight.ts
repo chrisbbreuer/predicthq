@@ -91,6 +91,8 @@ export default defineModel({
     // scored — see the class note.
     statedProb: {
       type: 'number',
+      precision: 8,
+      scale: 6,
       fillable: true,
       default: 0,
       validation: { rule: schema.float().min(0).max(1) },
@@ -100,6 +102,8 @@ export default defineModel({
     // until its calibration has been measured.
     confidence: {
       type: 'number',
+      precision: 8,
+      scale: 6,
       fillable: true,
       default: 0,
       validation: { rule: schema.float().min(0).max(1) },
@@ -156,6 +160,8 @@ export default defineModel({
     },
     costUsd: {
       type: 'number',
+      precision: 12,
+      scale: 6,
       fillable: true,
       default: 0,
       validation: { rule: schema.float().min(0) },
@@ -183,6 +189,8 @@ export default defineModel({
     // Squared error of `statedProb` against the outcome, once known.
     brierScore: {
       type: 'number',
+      precision: 8,
+      scale: 6,
       fillable: true,
       default: 0,
       validation: { rule: schema.float().min(0) },

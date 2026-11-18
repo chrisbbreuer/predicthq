@@ -64,6 +64,8 @@ export default defineModel({
     // 0..1 — how sure the resolver was. Exact id matches are 1.
     confidence: {
       type: 'number',
+      precision: 8,
+      scale: 6,
       fillable: true,
       default: 1,
       validation: { rule: schema.float().min(0).max(1) },

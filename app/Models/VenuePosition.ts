@@ -85,6 +85,8 @@ export default defineModel({
     },
     avgPrice: {
       type: 'number',
+      precision: 8,
+      scale: 6,
       fillable: true,
       validation: { rule: schema.float().min(0).max(1) },
       factory: () => 0,

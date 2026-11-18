@@ -65,6 +65,8 @@ export default defineModel({
     // 1/price. Includes the book's margin — see the class note.
     impliedProb: {
       type: 'number',
+      precision: 8,
+      scale: 6,
       fillable: true,
       default: 0,
       validation: { rule: schema.float().min(0).max(1) },

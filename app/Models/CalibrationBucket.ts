@@ -63,6 +63,8 @@ export default defineModel({
     // Bin edges, e.g. 0.60 → 0.70.
     bucketLower: {
       type: 'number',
+      precision: 8,
+      scale: 6,
       required: true,
       fillable: true,
       default: 0,
@@ -71,6 +73,8 @@ export default defineModel({
     },
     bucketUpper: {
       type: 'number',
+      precision: 8,
+      scale: 6,
       required: true,
       fillable: true,
       default: 0,
@@ -80,6 +84,8 @@ export default defineModel({
     // Mean predicted probability of the rows that fell in this bin.
     predictedAvg: {
       type: 'number',
+      precision: 8,
+      scale: 6,
       fillable: true,
       default: 0,
       validation: { rule: schema.float().min(0).max(1) },
@@ -89,6 +95,8 @@ export default defineModel({
     // this should track `predictedAvg` closely on a calibrated model.
     observedRate: {
       type: 'number',
+      precision: 8,
+      scale: 6,
       fillable: true,
       default: 0,
       validation: { rule: schema.float().min(0).max(1) },
@@ -104,6 +112,8 @@ export default defineModel({
     // Mean squared error of the predictions in this bin. Lower is better.
     brierScore: {
       type: 'number',
+      precision: 8,
+      scale: 6,
       fillable: true,
       default: 0,
       validation: { rule: schema.float().min(0) },
@@ -112,6 +122,8 @@ export default defineModel({
     // Mean negative log likelihood. Punishes confident misses hardest.
     logLoss: {
       type: 'number',
+      precision: 8,
+      scale: 6,
       fillable: true,
       default: 0,
       validation: { rule: schema.float().min(0) },
@@ -120,6 +132,8 @@ export default defineModel({
     // Mean CLV of the rows in this bin, in percent.
     avgClvPct: {
       type: 'number',
+      precision: 12,
+      scale: 4,
       fillable: true,
       default: 0,
       validation: { rule: schema.float() },

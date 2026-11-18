@@ -70,6 +70,8 @@ export default defineModel({
     // Venue price at decision time, 0..1.
     marketPrice: {
       type: 'number',
+      precision: 8,
+      scale: 6,
       fillable: true,
       validation: { rule: schema.float().min(0).max(1) },
       factory: faker => faker.number.float({ min: 0.05, max: 0.95, fractionDigits: 3 }),
@@ -77,6 +79,8 @@ export default defineModel({
     // What our data says the side is worth, 0..1.
     fairValue: {
       type: 'number',
+      precision: 8,
+      scale: 6,
       fillable: true,
       validation: { rule: schema.float().min(0).max(1) },
       factory: faker => faker.number.float({ min: 0.05, max: 0.95, fractionDigits: 3 }),
@@ -84,6 +88,8 @@ export default defineModel({
     // fairValue − marketPrice, in probability points.
     edge: {
       type: 'number',
+      precision: 8,
+      scale: 6,
       fillable: true,
       validation: { rule: schema.float() },
       factory: faker => faker.number.float({ min: -0.2, max: 0.2, fractionDigits: 3 }),
@@ -91,6 +97,8 @@ export default defineModel({
     // 0..1. Drives sizing and the minConfidence gate.
     confidence: {
       type: 'number',
+      precision: 8,
+      scale: 6,
       fillable: true,
       validation: { rule: schema.float().min(0).max(1) },
       factory: faker => faker.number.float({ min: 0.3, max: 0.95, fractionDigits: 2 }),
@@ -98,6 +106,8 @@ export default defineModel({
     // Limit price we are willing to pay, 0..1.
     limitPrice: {
       type: 'number',
+      precision: 8,
+      scale: 6,
       fillable: true,
       validation: { rule: schema.float().min(0).max(1) },
       factory: faker => faker.number.float({ min: 0.05, max: 0.95, fractionDigits: 3 }),

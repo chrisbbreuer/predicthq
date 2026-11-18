@@ -91,6 +91,8 @@ export default defineModel({
     // winningTradeCount / resolvedTradeCount, 0..1.
     winRate: {
       type: 'number',
+      precision: 8,
+      scale: 6,
       fillable: true,
       validation: { rule: schema.float().min(0).max(1) },
       factory: faker => faker.number.float({ min: 0, max: 1, fractionDigits: 3 }),

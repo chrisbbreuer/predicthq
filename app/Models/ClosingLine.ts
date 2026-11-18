@@ -45,6 +45,8 @@ export default defineModel({
     // 1/price — still carries the book's margin.
     impliedProb: {
       type: 'number',
+      precision: 8,
+      scale: 6,
       fillable: true,
       default: 0,
       validation: { rule: schema.float().min(0).max(1) },
@@ -53,6 +55,8 @@ export default defineModel({
     // De-vigged closing probability — what CLV is measured against.
     fairProb: {
       type: 'number',
+      precision: 8,
+      scale: 6,
       fillable: true,
       default: 0,
       validation: { rule: schema.float().min(0).max(1) },

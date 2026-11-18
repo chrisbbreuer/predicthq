@@ -41,6 +41,8 @@ export default defineModel({
     },
     parlayDecimal: {
       type: 'number',
+      precision: 14,
+      scale: 4,
       fillable: true,
       validation: { rule: schema.number().min(1) },
       factory: faker => faker.number.float({ min: 1.5, max: 50, fractionDigits: 2 }),

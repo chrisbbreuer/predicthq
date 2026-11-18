@@ -70,6 +70,8 @@ export default defineModel({
     // Signed: negative argues against the side that was taken.
     contribution: {
       type: 'number',
+      precision: 8,
+      scale: 6,
       fillable: true,
       validation: { rule: schema.float() },
       factory: faker => faker.number.float({ min: -0.1, max: 0.1, fractionDigits: 4 }),
