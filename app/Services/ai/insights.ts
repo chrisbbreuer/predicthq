@@ -105,22 +105,23 @@ export async function loadCandidates(db: Database, limit = MAX_CANDIDATES_PER_RU
     ORDER BY f.edge_pct DESC
     LIMIT ?
   `).all(nowIso(), limit)).map((r: any) => ({
-    selectionId: r.selection_id,
-    marketEventId: r.market_event_id,
+    // Vitess returns DECIMAL and BIGINT columns as strings.
+    selectionId: Number(r.selection_id),
+    marketEventId: Number(r.market_event_id),
     eventTitle: r.event_title,
     league: r.league,
     marketType: r.market_type,
-    line: r.line,
+    line: r.line === null || r.line === undefined ? null : Number(r.line),
     side: r.side,
     label: r.label,
-    bestPrice: r.best_price,
-    fairProb: r.prob_consensus,
-    sharpProb: r.prob_sharp,
-    edgePct: r.edge_pct,
-    overroundPct: r.overround_pct,
-    bookCount: r.book_count,
-    sharpBookCount: r.sharp_book_count,
-    methodSpread: r.method_spread,
+    bestPrice: Number(r.best_price),
+    fairProb: Number(r.prob_consensus),
+    sharpProb: Number(r.prob_sharp),
+    edgePct: Number(r.edge_pct),
+    overroundPct: Number(r.overround_pct),
+    bookCount: Number(r.book_count),
+    sharpBookCount: Number(r.sharp_book_count),
+    methodSpread: Number(r.method_spread),
     moveFromOpenPct: 0,
     steamScore: 0,
     hoursToStart: Math.max(0, (Date.parse(r.commence_at) - Date.now()) / 3_600_000),
@@ -384,8 +385,9 @@ export async function gradeInsights(db: Database): Promise<number> {
       // A 'lay' is a call that the side loses, so the model's stated
       // probability refers to the opposite result.
       const predictedHit = row.stance === 'back' ? 1 : 0
-      const correct = row.outcome === predictedHit ? 1 : 0
-      const prob = row.stance === 'back' ? row.stated_prob : 1 - row.stated_prob
+      // Numbers, not the strings Vitess hands back for these columns.
+      const correct = Number(row.outcome) === predictedHit ? 1 : 0
+      const prob = row.stance === 'back' ? Number(row.stated_prob) : 1 - Number(row.stated_prob)
       await update.run(correct, (prob - row.outcome) ** 2, nowIso(), nowIso(), row.id)
     }
   })
