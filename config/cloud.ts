@@ -793,6 +793,9 @@ export const tsCloud: TsCloudConfig = {
       sharedPaths: ['storage/ingest'],
       preStart: ['bun install'],
       env: productionRuntimeEnv,
+      // It drains on SIGTERM and lets go of the scheduler lock; this bounds a
+      // drain stuck behind a long job, which the next release is waiting on.
+      stopTimeout: '30s',
     },
     // The remaining long-lived roles have no public domain; ts-cloud manages
     // them as systemd services, while rpx exposes no route or firewall port.

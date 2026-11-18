@@ -6,6 +6,7 @@ import { ExitCode } from '@stacksjs/types'
 import { Database } from '../Support/db'
 import { pollableSports } from '../Services/ingest/odds'
 import { enableIdentityMemo } from '../Services/ingest/resolve'
+import { BEAT_MS, beat, clearBeat } from '../Services/odds/watcher-heartbeat'
 import { IngestRunTracker } from '../Services/ingest/run'
 import { activeAdapters, booksWithoutAdapters } from '../Services/odds/books'
 import { bookContextFor } from '../Services/odds/context'
@@ -143,12 +144,18 @@ export default function (cli: CLI) {
         void engine.refreshSchedule()
       }, 30_000)
 
+      // Tells the scheduler its own odds passes would only repeat this one.
+      beat()
+      const heartbeat = setInterval(beat, BEAT_MS)
+
       let stopping = false
       const shutdown = () => {
         if (stopping)
           return
         stopping = true
         clearInterval(refresh)
+        clearInterval(heartbeat)
+        clearBeat()
         // `stop` closes the sockets too; a half-shut process holding a
         // socket open is how a supervisor restart ends up with two.
         engine.stop()

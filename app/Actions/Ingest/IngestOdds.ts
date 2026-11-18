@@ -1,4 +1,5 @@
 import { ingestOdds } from '../../Services/ingest/odds'
+import { watcherLive } from '../../Services/odds/watcher-heartbeat'
 import { openWrite } from '../../Support/db'
 
 /**
@@ -15,6 +16,10 @@ export default {
   description: 'Fetch the latest odds, persist them with history, and broadcast.',
 
   async handle() {
+    // `odds:watch` is already polling every book on a cadence of seconds.
+    if (watcherLive())
+      return { skipped: 'odds:watch is running' as const }
+
     const db = openWrite()
     try {
       return await ingestOdds(db)

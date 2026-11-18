@@ -51,30 +51,83 @@ export interface FairPriceResult {
 }
 
 /**
- * Recompute fair prices for every market that currently has quotes.
+ * Markets per page. Each page is one read and one transaction: a few quotes
+ * per market keeps the read far under Vitess's 10,000-row cap, and a page of
+ * upserts well inside its 30s transaction limit.
+ */
+const PAGE_MARKETS = 400
+
+/**
+ * Recompute fair prices for every market on a game still to be decided.
  *
- * Runs after each odds ingest. The whole pass is one transaction: a
- * half-written fair-price table would show edge on some selections and
- * stale numbers on others, which reads as a signal rather than as an
- * incomplete pass.
+ * Runs after each odds ingest. A finished game is left alone: its last fair
+ * price is its closing number, and re-deriving it from quotes nobody can take
+ * any more would only rewrite it. The rest is walked a page of markets at a
+ * time, in market-id order. A market is never split across pages, so each one
+ * is de-vigged and written whole, in one transaction: a half-written market
+ * would show edge on one side and stale numbers on the other, which reads as
+ * a signal rather than an incomplete pass.
+ *
+ * The pass used to read every quote in one query and write it in one
+ * transaction. Once the exchanges streamed into the feed that read passed
+ * Vitess's 10,000-row cap and the whole pipeline failed on every run.
  */
 export async function computeFairPrices(db: Database, options: { marketIds?: number[] } = {}): Promise<FairPriceResult> {
-  const filter = options.marketIds?.length
-    ? `AND m.id IN (${options.marketIds.map(() => '?').join(',')})`
-    : ''
-  const params = options.marketIds?.length ? options.marketIds : []
+  const result: FairPriceResult = { markets: 0, selections: 0, written: 0, positiveEdge: 0 }
+  const only = options.marketIds?.length ? `AND m.id IN (${options.marketIds.map(() => '?').join(',')})` : ''
 
-  const rows = await db.query<QuoteRow>(`
+  let after = 0
+  for (;;) {
+    const page = await db.query<{ id: number | string }>(`
+      SELECT m.id
+      FROM markets m
+      JOIN market_events e ON e.id = m.market_event_id
+      WHERE m.complete = 1 AND e.status IN ('scheduled', 'live') AND m.id > ? ${only}
+      ORDER BY m.id ASC
+      LIMIT ${PAGE_MARKETS}
+    `).all(after, ...(options.marketIds ?? []))
+    if (page.length === 0)
+      break
+
+    const ids = page.map(row => Number(row.id))
+    after = ids[ids.length - 1]!
+    const written = await priceMarkets(db, ids)
+    result.markets += written.markets
+    result.selections += written.selections
+    result.written += written.written
+    result.positiveEdge += written.positiveEdge
+
+    if (page.length < PAGE_MARKETS)
+      break
+  }
+
+  return result
+}
+
+/** De-vig, blend and write one page of markets, in one transaction. */
+async function priceMarkets(db: Database, marketIds: number[]): Promise<FairPriceResult> {
+  const raw = await db.query<QuoteRow>(`
     SELECT o.selection_id, o.bookmaker_id, o.price,
           s.market_id, s.side,
           b.sharp, b.consensus_weight
     FROM odds o
     JOIN selections s ON s.id = o.selection_id
-    JOIN markets m ON m.id = s.market_id
     JOIN bookmakers b ON b.id = o.bookmaker_id
-    WHERE o.available = 1 AND o.price > 1 AND m.complete = 1 ${filter}
+    WHERE o.available = 1 AND o.price > 1 AND s.market_id IN (${marketIds.map(() => '?').join(',')})
     ORDER BY s.market_id ASC, s.position ASC, s.id ASC
-  `).all(...params)
+  `).all(...marketIds)
+
+  // Vitess returns DECIMAL and BIGINT columns as strings. Comparing those
+  // picks the "best" price by text, so 10.5 loses to 9.8.
+  const rows: QuoteRow[] = raw.map(row => ({
+    ...row,
+    selection_id: Number(row.selection_id),
+    bookmaker_id: Number(row.bookmaker_id),
+    price: Number(row.price),
+    market_id: Number(row.market_id),
+    sharp: Number(row.sharp),
+    consensus_weight: row.consensus_weight === null || row.consensus_weight === undefined ? 1 : Number(row.consensus_weight),
+  }))
 
   // Group into market → book → the quotes that book offers on it. A book's
   // prices must be de-vigged together, as a set, because the margin is a

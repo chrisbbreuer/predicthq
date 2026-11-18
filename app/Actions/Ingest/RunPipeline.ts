@@ -3,6 +3,7 @@ import { ingestEspnFundamentals } from '../../Services/fundamentals/espn'
 import { ingestEspn } from '../../Services/ingest/espn'
 import { syncSports } from '../../Services/ingest/sports-sync'
 import { ingestOdds } from '../../Services/ingest/odds'
+import { watcherLive } from '../../Services/odds/watcher-heartbeat'
 import { computeCalibration } from '../../Services/quant/calibration'
 import { computeFairPrices } from '../../Services/quant/fair'
 import { settle } from '../../Services/quant/settle'
@@ -45,7 +46,8 @@ export default {
       // describe exist. Neither blocks pricing, so a failure here leaves
       // the board working and shows up as a degraded provider instead.
       const fundamentals = await ingestEspnFundamentals(db)
-      const odds = await ingestOdds(db)
+      // Prices are the watcher's job while it runs; this stage is the floor.
+      const odds = watcherLive() ? { skipped: 'odds:watch is running' as const } : await ingestOdds(db)
       const fair = await computeFairPrices(db)
       const snapshots = await captureFeatureSnapshots(db)
       const settlement = await settle(db)
