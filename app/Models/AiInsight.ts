@@ -114,8 +114,10 @@ export default defineModel({
       factory: faker => faker.lorem.sentence(),
     },
     // Full reasoning, shown on demand.
+    // A paragraph or several: VARCHAR(255) cut every real review short and
+    // failed the whole pipeline on the insert.
     rationale: {
-      type: 'string',
+      type: 'text',
       fillable: true,
       default: '',
       validation: { rule: schema.string() },

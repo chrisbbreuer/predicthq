@@ -279,24 +279,33 @@ export async function generateInsights(
       continue
     }
 
-    await insert.run(
-      candidate.selectionId,
-      candidate.marketEventId,
-      hash,
-      answer.stance,
-      answer.statedProb,
-      answer.confidence,
-      answer.summary.slice(0, 600),
-      answer.rationale,
-      answer.caveats.slice(0, 2000),
-      model,
-      promptTokens,
-      completionTokens,
-      0,
-      Date.now() - startedAt,
-      nowIso(),
-      nowIso(),
-    )
+    // One review the database refuses must not take down the stages after
+    // it, or the reviews already paid for in this pass.
+    try {
+      await insert.run(
+        candidate.selectionId,
+        candidate.marketEventId,
+        hash,
+        answer.stance,
+        answer.statedProb,
+        answer.confidence,
+        answer.summary.slice(0, 600),
+        answer.rationale.slice(0, 8000),
+        answer.caveats.slice(0, 2000),
+        model,
+        promptTokens,
+        completionTokens,
+        0,
+        Date.now() - startedAt,
+        nowIso(),
+        nowIso(),
+      )
+    }
+    catch (err) {
+      result.errors.push(`selection ${candidate.selectionId}: not stored: ${err instanceof Error ? err.message.slice(0, 200) : String(err)}`)
+      result.skipped++
+      continue
+    }
     result.generated++
   }
 
