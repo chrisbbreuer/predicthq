@@ -307,35 +307,78 @@ async function seriesFor(code: string, get: (url: string) => Promise<Response | 
   return seriesIds?.ids.get(code) ?? null
 }
 
-/** One league's upcoming and live games. */
-async function fetchLeague(sportSlug: string, get: (url: string) => Promise<Response | null>): Promise<GammaEvent[] | null> {
+/** How long a game's market list is reused. Prices arrive on the socket; new lines are rare. */
+const MARKETS_TTL_MS = 10 * 60_000
+
+/** Each game's main markets, by Gamma event id. */
+const marketCache = new Map<string, { at: number, markets: GammaMarket[] }>()
+
+/**
+ * One league's upcoming and live games, with only the markets this adapter
+ * prices.
+ *
+ * Gamma embeds every market in every event, and an NBA game carries about
+ * five hundred, nearly all player props: one league's listing ran to 14 MB,
+ * and discovery parsed all twelve every minute, which held the watcher at its
+ * memory ceiling. So the league is listed without markets, and only games near
+ * enough to price are fetched, one at a time, keeping the moneyline, spreads
+ * and totals and dropping the rest at once.
+ */
+export async function fetchLeague(sportSlug: string, get: (url: string) => Promise<Response | null>, now = Date.now()): Promise<GammaEvent[] | null> {
   const code = LEAGUES[sportSlug]
   const series = code ? await seriesFor(code, get) : null
   if (!series)
     return code ? null : []
   // Games that started within the last eight hours may still be live.
-  const since = new Date(Date.now() - 8 * 3_600_000).toISOString().slice(0, 19) + 'Z'
-  const events: GammaEvent[] = []
+  const since = new Date(now - 8 * 3_600_000).toISOString().slice(0, 19) + 'Z'
+  const listed: GammaEvent[] = []
   for (let offset = 0; offset < 400; offset += 50) {
-    const response = await get(`${GAMMA}/events?series_id=${series}&closed=false&end_date_min=${since}&limit=50&offset=${offset}`)
-    if (!response?.ok)
-      return offset === 0 ? null : events
+    const response = await get(`${GAMMA}/events?series_id=${series}&closed=false&end_date_min=${since}&include_markets=false&limit=50&offset=${offset}`)
+    if (!response?.ok) {
+      if (offset === 0)
+        return null
+      break
+    }
     const page = await response.json() as GammaEvent[]
-    if (!Array.isArray(page))
-      return offset === 0 ? null : events
-    events.push(...page)
+    if (!Array.isArray(page)) {
+      if (offset === 0)
+        return null
+      break
+    }
+    listed.push(...page)
     if (page.length < 50)
       break
+  }
+
+  for (const [id, entry] of marketCache) {
+    if (now - entry.at > MARKETS_TTL_MS)
+      marketCache.delete(id)
+  }
+
+  // Only games near enough to price; see `nearDate`.
+  const events: GammaEvent[] = []
+  for (const event of listed) {
+    if (!nearDate(String(event.eventDate ?? '').replace(/-/g, ''), now))
+      continue
+    const id = String(event.id ?? '')
+    let markets = marketCache.get(id)?.markets
+    if (!markets) {
+      const response = id ? await get(`${GAMMA}/events/${id}`) : null
+      if (!response?.ok)
+        continue
+      const full = await response.json() as GammaEvent
+      markets = (full.markets ?? []).filter(market => MARKET_TYPES.has(market.sportsMarketType ?? ''))
+      marketCache.set(id, { at: now, markets })
+    }
+    events.push({ ...event, markets })
   }
   return events
 }
 
 async function loadLeague(sportSlug: string, get: (url: string) => Promise<Response | null>, games = gamesForDates): Promise<GameState[] | null> {
-  const listed = await fetchLeague(sportSlug, get)
-  if (!listed)
+  const events = await fetchLeague(sportSlug, get)
+  if (!events)
     return null
-  // Only games near enough to price; see `nearDate`.
-  const events = listed.filter(event => nearDate(String(event.eventDate ?? '').replace(/-/g, '')))
   const dates = events.map(event => String(event.eventDate ?? '').replace(/-/g, '')).filter(date => /^\d{8}$/.test(date))
   return toGameStates(events, sportSlug, await games(sportSlug, dates))
 }
