@@ -82,7 +82,8 @@
     "better-dx": "^0.2.15"
   },
   "overrides": {
-    "ws": "8.21.3"
+    "ws": "8.21.3",
+    "@stacksjs/ts-cloud": "0.16.149"
   },
   "workspaces": [
     "storage/framework",
