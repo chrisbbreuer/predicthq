@@ -372,8 +372,19 @@ export async function loadBoard(options: BoardOptions = {}): Promise<Board> {
       WHERE m.market_event_id IN (${idList}) AND o.available = 1 ${typeFilter}
     `).all()
 
+    // Vitess returns DECIMAL columns as strings. Left that way, prices
+    // compared as text ("10.00" < "2.10") and summed by concatenation, so
+    // the board could crown the wrong best price; the page's own
+    // `.toFixed` then threw and emptied every price cell.
     const quotesBySelection = new Map<number, QuoteRow[]>()
-    for (const row of quoteRows) {
+    for (const raw of quoteRows) {
+      const row: QuoteRow = {
+        ...raw,
+        selection_id: Number(raw.selection_id),
+        bookmaker_id: Number(raw.bookmaker_id),
+        price: Number(raw.price),
+        point: raw.point === null || raw.point === undefined ? raw.point : Number(raw.point),
+      }
       const list = quotesBySelection.get(row.selection_id) ?? []
       list.push(row)
       quotesBySelection.set(row.selection_id, list)
@@ -399,15 +410,16 @@ export async function loadBoard(options: BoardOptions = {}): Promise<Board> {
       `).all(historyPoints)
 
       for (const row of historyRows) {
-        const list = historyBySelection.get(row.selection_id) ?? []
-        list.push(row.price)
-        historyBySelection.set(row.selection_id, list)
+        const id = Number(row.selection_id)
+        const list = historyBySelection.get(id) ?? []
+        list.push(Number(row.price))
+        historyBySelection.set(id, list)
       }
     }
 
     const selectionsByMarket = new Map<number, SelectionView[]>()
     for (const row of selectionRows) {
-      const quotes = quotesBySelection.get(row.id) ?? []
+      const quotes = quotesBySelection.get(Number(row.id)) ?? []
 
       let best: { bookmakerId: number, price: number } | null = null
       let sum = 0
@@ -419,10 +431,10 @@ export async function loadBoard(options: BoardOptions = {}): Promise<Board> {
       const average = quotes.length > 0 ? sum / quotes.length : 0
 
       const view: SelectionView = {
-        id: row.id,
+        id: Number(row.id),
         label: row.label,
         side: row.side,
-        point: row.point,
+        point: row.point === null || row.point === undefined ? null : Number(row.point),
         bestBookmakerId: best?.bookmakerId ?? null,
         bestPrice: best?.price ?? null,
         bestAmerican: best ? toAmerican(best.price) : null,
@@ -430,12 +442,12 @@ export async function loadBoard(options: BoardOptions = {}): Promise<Board> {
         bestImpliedPct: best ? impliedProbability(best.price) * 100 : 0,
         average,
         edgeVsAvgPct: best && average ? (best.price / average - 1) * 100 : 0,
-        fairProb: row.prob_consensus ?? null,
-        sharpProb: row.prob_sharp ?? null,
-        edgePct: row.edge_pct ?? null,
-        kellyFraction: row.kelly_fraction ?? null,
-        bookCount: row.book_count ?? quotes.length,
-        bestHistory: historyBySelection.get(row.id) ?? [],
+        fairProb: row.prob_consensus === null || row.prob_consensus === undefined ? null : Number(row.prob_consensus),
+        sharpProb: row.prob_sharp === null || row.prob_sharp === undefined ? null : Number(row.prob_sharp),
+        edgePct: row.edge_pct === null || row.edge_pct === undefined ? null : Number(row.edge_pct),
+        kellyFraction: row.kelly_fraction === null || row.kelly_fraction === undefined ? null : Number(row.kelly_fraction),
+        bookCount: row.book_count === null || row.book_count === undefined ? quotes.length : Number(row.book_count),
+        bestHistory: historyBySelection.get(Number(row.id)) ?? [],
         quotes: [],
       }
 
