@@ -4,7 +4,7 @@ import type { LiveGame } from './live-games'
 import { Database as Sqlite } from 'bun:sqlite'
 import { Database } from '../../Support/db'
 import { kalshiCandles, kalshiSettledMarkets, kalshiTrades } from '../prediction-markets/kalshi-public'
-import { evaluateMarketAt } from './evidence'
+import { evaluateMarketAt, tradablePrice } from './evidence'
 import { liveGameFor, parseGameTicker } from './live-games'
 
 /**
@@ -41,6 +41,8 @@ export interface BacktestOptions {
   bankroll?: number
   /** Minimum model edge (probability points) before the model bets. */
   minEdge?: number
+  /** Confidence floor for the `rules` strategies, as the live strategy applies it. */
+  minConfidence?: number
   /** Cap on events, to keep a run inside the venue's rate limits. */
   maxEvents?: number
   /** Series prefixes to include. */
@@ -179,6 +181,7 @@ export async function backtestGames(options: BacktestOptions): Promise<BacktestR
   const stake = options.stake ?? 1
   const bankroll = options.bankroll ?? 10
   const minEdge = options.minEdge ?? 0.03
+  const minConfidence = options.minConfidence ?? 0.6
   const series = options.series ?? DEFAULT_SERIES
   const skipped: Record<string, number> = {}
   const skip = (reason: string) => { skipped[reason] = (skipped[reason] ?? 0) + 1 }
@@ -321,6 +324,13 @@ export async function backtestGames(options: BacktestOptions): Promise<BacktestR
         place(checkpoint === 'pre-game' ? 'model-pre' : 'model-live', side)
         if (edge >= 0.08)
           place('model-8pt', side)
+        // What the live strategy would actually do: the same edge floor, its
+        // confidence floor (Strategy 1: 0.60) and the tradable price band.
+        if (candidate.confidence >= minConfidence && tradablePrice(costOf(point, side))) {
+          place('rules', side)
+          if (checkpoint === 'pre-game')
+            place('rules-pre', side)
+        }
       }
 
       // Plain baselines, to tell skill from luck.

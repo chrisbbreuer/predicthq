@@ -154,6 +154,24 @@ export interface MarketContext {
  * an untraded market has no evidence, and a fair value derived from
  * nothing is worse than no opinion.
  */
+/**
+ * The prices worth buying at: 25¢ to 85¢ for the side taken.
+ *
+ * Exchange long shots are overpriced (the long-shot bias), and the evidence
+ * moves fair value by a fixed number of points, which at 3¢ is a fourfold
+ * change in the odds rather than a small correction. Replaying 2,404 games
+ * (Oct 20 – Nov 17) found bets under 15¢ swinging from +25% to −81% between
+ * halves and every YES long shot losing, while the 30–70¢ band made money in
+ * both. Near-certainties above 85¢ risk a dollar to win cents on a signal too
+ * coarse to justify it.
+ */
+export const MIN_TRADE_PRICE = 0.25
+export const MAX_TRADE_PRICE = 0.85
+
+export function tradablePrice(price: number): boolean {
+  return price >= MIN_TRADE_PRICE && price <= MAX_TRADE_PRICE
+}
+
 export async function buildCandidates(db: Database, options: EvidenceOptions = {}): Promise<Candidate[]> {
   const venues = options.venues?.filter(Boolean) ?? []
   const categories = options.categories?.filter(Boolean) ?? []
@@ -205,7 +223,10 @@ export async function buildCandidates(db: Database, options: EvidenceOptions = {
   // outcomes of one game disagreed with each other should not survive.
   reconcileSiblings(candidates)
   for (let i = candidates.length - 1; i >= 0; i--) {
-    if (Math.abs(candidates[i]!.edge) < minEdge)
+    const candidate = candidates[i]!
+    // The price of the side the edge says to buy.
+    const price = candidate.edge >= 0 ? candidate.marketPrice : 1 - candidate.marketPrice
+    if (Math.abs(candidate.edge) < minEdge || !tradablePrice(price))
       candidates.splice(i, 1)
   }
 
