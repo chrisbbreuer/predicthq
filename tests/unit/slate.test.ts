@@ -3,7 +3,7 @@ import type { LiveLine } from '../../app/Services/trading/line-snapshots'
 import { afterEach, describe, expect, it } from 'bun:test'
 import { rmSync } from 'node:fs'
 import { paperParlays, parlayPayout, parlayPrice, placePaperParlay, settleHeldPositions, settlePaperParlays } from '../../app/Services/trading/paper-parlays'
-import { buildSlate, rankPicks } from '../../app/Services/trading/slate'
+import { assembleParlay, buildSlate, rankPicks } from '../../app/Services/trading/slate'
 import { schemaFor } from '../support/schema'
 
 const line = (over: Partial<LiveLine>): LiveLine => ({
@@ -45,6 +45,18 @@ describe('building a slate', () => {
     expect(slate.parlays).toHaveLength(2)
     for (const legs of slate.parlays)
       expect(new Set(legs.map(p => p.line.gameId)).size).toBe(2)
+  })
+
+  it('adds legs to a parlay of favourites until it pays at least 2x, and gives up past four', () => {
+    const favourites = rankPicks(Array.from({ length: 6 }, (_, i) => line({ ticker: `F${i}`, gameId: `f${i}`, bookProb: 0.86, bid: 0.79, ask: 0.8 })))
+    const parlay = assembleParlay(favourites)!
+    // 0.8 × 0.8 × 0.8 = 0.512 still pays under 2x; a fourth leg takes it to 0.41.
+    expect(parlay).toHaveLength(4)
+    expect(parlay.reduce((p, pick) => p * pick.price, 1)).toBeLessThanOrEqual(0.5)
+    expect(new Set(parlay.map(pick => pick.line.gameId)).size).toBe(4)
+    // At 85¢ a leg, four legs pay 1.92x: no parlay rather than a fifth leg.
+    const heavy = rankPicks(Array.from({ length: 6 }, (_, i) => line({ ticker: `H${i}`, gameId: `h${i}`, bookProb: 0.9, bid: 0.84, ask: 0.85 })))
+    expect(assembleParlay(heavy)).toBeNull()
   })
 
   it('places nothing when nothing disagrees', () => {

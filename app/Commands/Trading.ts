@@ -7,7 +7,7 @@ import type { BacktestReport } from '../Services/trading/backtest'
 import { backtestGames, summarizeBets } from '../Services/trading/backtest'
 import { haltState, setHalt } from '../Services/trading/halt'
 import { linesReport, liveLines } from '../Services/trading/line-snapshots'
-import { draftSlate, explicitPicks, parlayExpectedReturn, placeSlate } from '../Services/trading/slate'
+import { draftSlate, explicitPicks, MIN_PARLAY_PAYOUT, parlayExpectedReturn, placeSlate } from '../Services/trading/slate'
 import { generateSuggestions, saveSuggestions } from '../Services/trading/suggestions'
 
 /**
@@ -262,9 +262,14 @@ export default function (cli: CLI) {
         for (const group of String(options.parlays || '').split(';').map(part => part.trim()).filter(Boolean)) {
           const specs = group.split('+')
           const picks = explicitPicks(lines, specs)
-          if (picks.length !== specs.length || new Set(picks.map(pick => pick.line.gameId)).size !== picks.length)
+          if (picks.length !== specs.length || new Set(picks.map(pick => pick.line.gameId)).size !== picks.length) {
             log.warn(`  skipped parlay ${group}: every leg needs a quote, and legs must be different games`)
-          else bets.push({ kind: 'parlay', picks, stake })
+            continue
+          }
+          const payout = 1 / picks.reduce((product, pick) => product * pick.price, 1)
+          if (payout < MIN_PARLAY_PAYOUT)
+            log.warn(`  parlay ${group} pays only ${payout.toFixed(2)}x, under the ${MIN_PARLAY_PAYOUT}x the automatic parlays aim for; kept because you named it`)
+          bets.push({ kind: 'parlay', picks, stake })
         }
         for (const bet of bets)
           log.info(`  ${bet.kind}  ${bet.picks.map(pick => `${pick.label} ${Math.round(pick.price * 100)}¢`).join('  +  ')}  expected ${((bet.kind === 'single' ? bet.picks[0]!.ev : parlayExpectedReturn(bet.picks)) * 100).toFixed(1)}%`)

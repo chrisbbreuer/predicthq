@@ -133,22 +133,65 @@ export function parlayExpectedReturn(legs: SlatePick[]): number {
   return expectedReturn(fair, price)
 }
 
+/** A parlay should pay at least this many times its stake. */
+export const MIN_PARLAY_PAYOUT = 2
+
+/** The longest parlay assembled automatically: every leg adds Kalshi's cut. */
+export const MAX_PARLAY_LEGS = 4
+
 /**
- * Singles from the strongest picks, then two-leg parlays from the next ones.
- * Two legs only: with no proven edge every leg adds Kalshi's cut, so a longer
- * parlay compounds cost faster than it compounds payout. Legs always come
- * from different games. When there are too few picks for fresh legs, a
- * parlay reuses the singles' picks rather than reaching for weaker ones.
+ * One parlay from `pool`, in its order (strongest first), adding legs from
+ * different games until it pays at least `minPayout` times the stake (its
+ * price is at most 1 ÷ minPayout). Null when that takes more than
+ * `maxLegs` legs. Picks are taken from `pool` without reordering it.
+ */
+export function assembleParlay(
+  pool: SlatePick[],
+  options: { minPayout?: number, maxLegs?: number, start?: SlatePick[] } = {},
+): SlatePick[] | null {
+  const target = 1 / (options.minPayout ?? MIN_PARLAY_PAYOUT)
+  const maxLegs = options.maxLegs ?? MAX_PARLAY_LEGS
+  const legs = [...(options.start ?? [])]
+  const games = new Set(legs.map(pick => `${pick.line.league}:${pick.line.gameId}`))
+  const price = () => legs.reduce((product, pick) => product * pick.price, 1)
+  for (const pick of pool) {
+    if (legs.length >= 2 && price() <= target)
+      break
+    if (legs.length >= maxLegs)
+      return null
+    const game = `${pick.line.league}:${pick.line.gameId}`
+    if (games.has(game))
+      continue
+    legs.push(pick)
+    games.add(game)
+  }
+  return legs.length >= 2 && price() <= target ? legs : null
+}
+
+/**
+ * Singles from the strongest picks, then parlays from the next ones, each
+ * built to pay at least 2× (see `assembleParlay`): two legs when their
+ * prices allow, more when they are favourites. Legs come from different
+ * games, and no pick is used in two parlays. When too few picks remain after
+ * the singles, parlays draw on the singles' picks too rather than on weaker
+ * ones.
  */
 export function buildSlate(picks: SlatePick[], options: { budget?: number, stake?: number, singles?: number } = {}): Slate {
   const stake = options.stake ?? 1
   const bets = Math.floor((options.budget ?? 5) / stake)
   const singles = picks.slice(0, Math.min(options.singles ?? 3, bets, picks.length))
   const parlayCount = Math.max(0, bets - singles.length)
-  const pool = picks.length - singles.length >= parlayCount * 2 ? picks.slice(singles.length) : picks
   const parlays: SlatePick[][] = []
-  for (let i = 0; i + 1 < pool.length && parlays.length < parlayCount; i += 2)
-    parlays.push([pool[i]!, pool[i + 1]!])
+  for (const source of [picks.slice(singles.length), picks]) {
+    let pool = source.filter(pick => !parlays.flat().includes(pick))
+    while (parlays.length < parlayCount) {
+      const parlay = assembleParlay(pool)
+      if (!parlay)
+        break
+      parlays.push(parlay)
+      pool = pool.filter(pick => !parlay.includes(pick))
+    }
+  }
   return { singles, parlays }
 }
 

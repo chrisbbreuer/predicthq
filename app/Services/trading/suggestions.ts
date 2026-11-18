@@ -3,7 +3,7 @@ import type { LiveLine } from './line-snapshots'
 import type { SlatePick } from './slate'
 import { liveLines } from './line-snapshots'
 import { placePaperParlay } from './paper-parlays'
-import { buildSlate, ensurePaperStrategy, parlayExpectedReturn, pickLeg, placePaperSingle, rankPicks } from './slate'
+import { assembleParlay, buildSlate, ensurePaperStrategy, parlayExpectedReturn, pickLeg, placePaperSingle, rankPicks } from './slate'
 
 /**
  * Bet suggestions: singles and parlays PredictHQ proposes on the bets page,
@@ -74,13 +74,17 @@ export async function saveSuggestions(db: Database, userId: number, bets: Array<
 }
 
 /**
- * Build fresh suggestions from the live lines: up to three singles and two
+ * Build fresh suggestions from today's games: up to three singles and two
  * two-leg parlays from games before tip-off, and, when games are under way,
- * one parlay pairing a live leg with a pre-game one.
+ * all-live parlays of two and three legs and one pairing a live leg with a
+ * pre-game one.
  */
 export async function generateSuggestions(db: Database, userId: number, options: { lines?: LiveLine[], stake?: number, now?: number } = {}): Promise<number> {
   const stake = options.stake ?? 1
-  const lines = options.lines ?? await liveLines(undefined, 12 * 60, { includeLive: true })
+  const now = options.now ?? Date.now()
+  // Only games that start today, US Eastern, so every suggestion settles tonight.
+  const lines = (options.lines ?? await liveLines(undefined, 18 * 60, { includeLive: true }))
+    .filter(line => easternDay(Date.parse(line.startsAt)) === easternDay(now))
   const pre = rankPicks(lines.filter(line => !line.live && line.minutes >= 15), { minGap: 0.01 })
     // Not worth showing a bet expected to lose more than 3% even if the book is right.
     .filter(pick => pick.ev > -0.03)
@@ -94,11 +98,29 @@ export async function generateSuggestions(db: Database, userId: number, options:
     ...slate.singles.map(pick => ({ kind: 'single' as const, picks: [pick], stake })),
     ...slate.parlays.map(picks => ({ kind: 'parlay' as const, picks, stake })),
   ]
-  const liveLeg = live[0]
-  const partner = pre.find(pick => pick.line.gameId !== liveLeg?.line.gameId)
-  if (liveLeg && partner)
-    bets.push({ kind: 'parlay', picks: [liveLeg, partner], stake })
-  return await saveSuggestions(db, userId, bets, options.now)
+  // Live parlays while games run: up to two all-live ones from different
+  // legs, and one led by the best live leg with pre-game picks after it.
+  // Each is built to pay at least 2× (`assembleParlay`), so favourites need
+  // more legs. Picks are one per game already, so legs never share a game.
+  let livePool = live
+  for (let i = 0; i < 2; i++) {
+    const parlay = assembleParlay(livePool)
+    if (!parlay)
+      break
+    bets.push({ kind: 'parlay', picks: parlay, stake })
+    livePool = livePool.filter(pick => !parlay.includes(pick))
+  }
+  if (live[0]) {
+    const mixed = assembleParlay(pre, { start: [live[0]] })
+    if (mixed)
+      bets.push({ kind: 'parlay', picks: mixed, stake })
+  }
+  return await saveSuggestions(db, userId, bets, now)
+}
+
+/** The calendar day in US Eastern, where the schedule's "today" lives. */
+export function easternDay(ms: number): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ms))
 }
 
 function toSuggestion(row: Record<string, unknown>): Suggestion {
@@ -127,21 +149,21 @@ export async function listSuggestions(db: Database, userId: number, now = Date.n
   return { pending, recent }
 }
 
-async function pendingSuggestion(db: Database, userId: number, id: number): Promise<Suggestion> {
+async function pendingSuggestion(db: Database, userId: number, id: number, now = Date.now()): Promise<Suggestion> {
   const row = await db.query<Record<string, unknown>>(`SELECT * FROM bet_suggestions WHERE id = ? AND user_id = ?`).get(id, userId)
   if (!row)
     throw new Error('That suggestion is not yours or no longer exists.')
   const suggestion = toSuggestion(row)
   if (suggestion.status !== 'pending')
     throw new Error(`That suggestion was already ${suggestion.status}.`)
-  if (Date.parse(suggestion.expiresAt) < Date.now())
+  if (Date.parse(suggestion.expiresAt) < now)
     throw new Error('That suggestion has expired: its price no longer holds.')
   return suggestion
 }
 
 /** Record the suggestion as a paper bet under the user's "Approved suggestions" strategy. */
-export async function approveSuggestion(db: Database, userId: number, id: number): Promise<Suggestion> {
-  const suggestion = await pendingSuggestion(db, userId, id)
+export async function approveSuggestion(db: Database, userId: number, id: number, now = Date.now()): Promise<Suggestion> {
+  const suggestion = await pendingSuggestion(db, userId, id, now)
   const strategyId = await ensurePaperStrategy(db, userId, APPROVED_STRATEGY, 100, suggestion.stake)
   let outcome: string
   if (suggestion.kind === 'single') {
@@ -165,8 +187,8 @@ export async function approveSuggestion(db: Database, userId: number, id: number
   return { ...suggestion, status: 'approved', decidedAt: stamp, outcome }
 }
 
-export async function dismissSuggestion(db: Database, userId: number, id: number): Promise<void> {
-  await pendingSuggestion(db, userId, id)
+export async function dismissSuggestion(db: Database, userId: number, id: number, now = Date.now()): Promise<void> {
+  await pendingSuggestion(db, userId, id, now)
   const stamp = new Date().toISOString()
   await db.query(`UPDATE bet_suggestions SET status = 'dismissed', decided_at = ?, updated_at = ? WHERE id = ?`).run(stamp, stamp, id)
 }
