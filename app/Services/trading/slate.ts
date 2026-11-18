@@ -51,10 +51,19 @@ export interface Slate {
   parlays: SlatePick[][]
 }
 
+/** Leagues where a game can end level, so NO on one side is not a bet on the other. */
+const SOCCER = new Set(['epl', 'laliga', 'seriea', 'bundesliga', 'ligue1', 'ucl', 'uefa-nations', 'mls'])
+
 function label(line: LiveLine, side: 'yes' | 'no'): string {
   if (line.side === 'draw')
     return side === 'yes' ? `Draw (${line.title})` : `No draw (${line.title})`
-  return side === 'yes' ? `${line.title} to win` : `${line.title} not to win`
+  if (side === 'yes')
+    return `${line.title} to win`
+  // Outside soccer a game has no draw, so NO on one team is the other team
+  // winning, bought on this team's market: say who the bet is on.
+  if (line.opponent && !SOCCER.has(line.league))
+    return `${line.opponent} to win (NO on ${line.title})`
+  return `${line.title} not to win`
 }
 
 /**

@@ -89,6 +89,13 @@ export interface LiveLine {
    * `bookProb` is Kalshi's own mid: a live leg is priced at the market.
    */
   live: boolean
+  /** The other team, when the market names one: NO on a two-way game is a bet on them. */
+  opponent?: string
+}
+
+function teamName(team: { location?: string, name?: string } | undefined): string {
+  // ESPN's `name` is already the full name ("Los Angeles Lakers").
+  return String(team?.name || team?.location || '').trim()
 }
 
 /**
@@ -116,6 +123,7 @@ export async function liveLines(deps: RecordDeps = defaultDeps, windowMinutes = 
       if (game.state !== 'pre' && !(live && options.includeLive))
         continue
       const minutes = Math.round((Date.parse(game.startsAt) - now) / 60_000)
+      const opponent = side === 'draw' ? '' : teamName(side === 'home' ? game.away : game.home)
       if (live) {
         out.push({
           ticker: market.ticker,
@@ -130,6 +138,7 @@ export async function liveLines(deps: RecordDeps = defaultDeps, windowMinutes = 
           minutes,
           startsAt: game.startsAt,
           live: true,
+          opponent,
         })
         continue
       }
@@ -157,6 +166,7 @@ export async function liveLines(deps: RecordDeps = defaultDeps, windowMinutes = 
         minutes,
         startsAt: game.startsAt,
         live: false,
+        opponent,
       })
     }
   }
