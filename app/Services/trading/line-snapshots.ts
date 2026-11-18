@@ -64,17 +64,36 @@ export interface RecordDeps {
   now: () => number
 }
 
-const defaultDeps: RecordDeps = {
+export const defaultDeps: RecordDeps = {
   openMarkets: series => kalshiSeriesOpenMarkets(series),
   gameFor: ticker => liveGameFor(ticker, 'yes'),
   detailFor: fetchGame,
   now: () => Date.now(),
 }
 
-export async function recordLines(db: Database, deps: RecordDeps = defaultDeps): Promise<{ recorded: number, games: number }> {
+/** One market's quote beside the book's line, read live. */
+export interface LiveLine {
+  ticker: string
+  title: string
+  league: string
+  gameId: string
+  side: LineSide
+  provider: string
+  bookProb: number
+  bid: number
+  ask: number
+  minutes: number
+  startsAt: string
+}
+
+/**
+ * Every Kalshi game market starting within `windowMinutes` that has a tight
+ * quote and a book line, read now. Shared by the recorder and the slate.
+ */
+export async function liveLines(deps: RecordDeps = defaultDeps, windowMinutes = WINDOW_MINUTES): Promise<LiveLine[]> {
   const now = deps.now()
   const details = new Map<string, Promise<GameDetail | null>>()
-  let recorded = 0
+  const out: LiveLine[] = []
 
   for (const series of LINE_SERIES) {
     const markets = await deps.openMarkets(series).catch(() => [] as KalshiMarketInfo[])
@@ -88,7 +107,7 @@ export async function recordLines(db: Database, deps: RecordDeps = defaultDeps):
       if (!game || game.state !== 'pre' || !side)
         continue
       const minutes = Math.round((Date.parse(game.startsAt) - now) / 60_000)
-      if (!(minutes >= 0 && minutes <= WINDOW_MINUTES))
+      if (!(minutes >= 0 && minutes <= windowMinutes))
         continue
 
       const key = `${game.league}:${game.gameId}`
@@ -99,16 +118,34 @@ export async function recordLines(db: Database, deps: RecordDeps = defaultDeps):
       if (prob === null)
         continue
 
-      const stamp = new Date(now).toISOString()
-      await db.query(`
-        INSERT INTO line_snapshots (ticker, league, espn_game_id, side, provider, book_prob, kalshi_bid, kalshi_ask, minutes_to_start, starts_at, recorded_at, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(market.ticker, game.league, game.gameId, side, odds?.provider ?? '', Math.round(prob * 10000) / 10000, bid, ask, minutes, game.startsAt, stamp, stamp, stamp)
-      recorded++
+      out.push({
+        ticker: market.ticker,
+        title: market.yesSubTitle || market.title || market.ticker,
+        league: game.league,
+        gameId: game.gameId,
+        side,
+        provider: odds?.provider ?? '',
+        bookProb: Math.round(prob * 10000) / 10000,
+        bid,
+        ask,
+        minutes,
+        startsAt: game.startsAt,
+      })
     }
   }
+  return out
+}
 
-  return { recorded, games: details.size }
+export async function recordLines(db: Database, deps: RecordDeps = defaultDeps): Promise<{ recorded: number, games: number }> {
+  const lines = await liveLines(deps)
+  const stamp = new Date(deps.now()).toISOString()
+  for (const line of lines) {
+    await db.query(`
+      INSERT INTO line_snapshots (ticker, league, espn_game_id, side, provider, book_prob, kalshi_bid, kalshi_ask, minutes_to_start, starts_at, recorded_at, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(line.ticker, line.league, line.gameId, line.side, line.provider, line.bookProb, line.bid, line.ask, line.minutes, line.startsAt, stamp, stamp, stamp)
+  }
+  return { recorded: lines.length, games: new Set(lines.map(line => `${line.league}:${line.gameId}`)).size }
 }
 
 export interface LineBet {

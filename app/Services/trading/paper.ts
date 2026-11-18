@@ -78,9 +78,14 @@ export async function executePaper(
       continue
     }
 
-    const fillPrice = Math.min(decision.limit_price, Number(market.last_price) + ASSUMED_SLIPPAGE)
+    // `last_price` is the YES price; a NO order's limit is in NO terms. Read
+    // across sides, a NO order at 80¢ on a market at 20¢ used to "fill" at
+    // 21¢, and one at 30¢ on a market at 70¢ was refused as never reached.
+    const limit = Number(decision.limit_price)
+    const sidePrice = String(decision.side).toLowerCase() === 'no' ? 1 - Number(market.last_price) : Number(market.last_price)
+    const fillPrice = Math.round(Math.min(limit, sidePrice + ASSUMED_SLIPPAGE) * 10000) / 10000
 
-    if (Number(market.last_price) > decision.limit_price) {
+    if (sidePrice > limit) {
       outcomes.push(await record(db, strategy.id, decision, 'cancelled', 0, 0, 'the market never traded down to the limit'))
       continue
     }

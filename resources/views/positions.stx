@@ -710,6 +710,8 @@ onMount(start)
       .cell { text-align: right; }
       .cell-label { display: block; font-size: 11px; font-weight: 600; color: var(--faint); }
       .simple-row { display: grid; gap: 16px; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--border); grid-template-columns: minmax(0, 1fr) auto; }
+      .paper-legs { display: grid; gap: 6px; padding: 0 18px 14px; margin-top: -6px; border-bottom: 1px solid var(--border); }
+      .paper-leg { display: flex; gap: 8px; align-items: center; min-width: 0; }
       .simple-row:last-child { border-bottom: 0; }
       .figures { display: flex; gap: 22px; align-items: baseline; justify-content: flex-end; flex-wrap: wrap; }
       .figure { text-align: right; min-width: 58px; }
@@ -1158,6 +1160,17 @@ onMount(start)
                     <div class="figure"><span class="cell-label">Now</span><span class="font-bold num" x-text="position.mark"></span></div>
                     <div class="figure"><span class="cell-label">P&amp;L</span><span class="font-bold num" :class="position.pnlTone" x-text="position.pnl"></span></div>
                   </div>
+                </div>
+                {{-- A paper parlay's legs, each with how it stands. --}}
+                <div x-show="position.legs.length > 0" class="paper-legs">
+                  <template :for="leg in position.legs">
+                    <div x-show="leg.kind === 'leg'" class="paper-leg">
+                      <span class="leg-status pill" :class="leg.statusClass"><span x-show="leg.isLive" class="live-pulse"></span><span x-text="leg.statusLabel"></span></span>
+                      <span x-show="leg.choice === 'NO'" class="no pill">NO</span>
+                      <span class="text-sm truncate min-w-0" :title="leg.label" x-text="leg.label"></span>
+                      <span class="ml-auto text-sm font-semibold num" :class="leg.chanceTone" x-text="leg.chance"></span>
+                    </div>
+                  </template>
                 </div>
               </template>
             </div>

@@ -85,6 +85,11 @@ export default function () {
     .job('RecordLines')
     .everyFiveMinutes()
 
+  // Paper parlays settle from their legs' results. See app/Jobs/SettlePaperParlays.ts.
+  schedule
+    .job('SettlePaperParlays')
+    .everyFiveMinutes()
+
   // Transfermarkt career history is intentionally outside the five-minute
   // pricing loop. This bounded pass resumes durable tasks, refreshes mutable
   // squad/injury pages by TTL, and never downloads immutable history merely

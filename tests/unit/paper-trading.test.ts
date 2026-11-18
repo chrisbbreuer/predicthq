@@ -45,7 +45,7 @@ const strategy = {
 }
 
 /** A market quoted at `lastPrice`, and a decision limited at `limit`. */
-function seed(lastPrice: number, limit: number): void {
+function seed(lastPrice: number, limit: number, side = 'yes'): void {
   const now = new Date().toISOString()
 
   db.prepare(`
@@ -68,8 +68,8 @@ function seed(lastPrice: number, limit: number): void {
       id, trading_strategy_id, prediction_market_id, venue, side, market_price, fair_value,
       edge, confidence, limit_price, size, notional, rationale, decided_by, status,
       status_reason, created_at, updated_at
-    ) VALUES (1, 1, 1, 'kalshi', 'yes', ?, 0.7, 0.1, 0.8, ?, 100, ?, '', 'rules', 'approved', '', ?, ?)
-  `).run(lastPrice, limit, limit * 100, now, now)
+    ) VALUES (1, 1, 1, 'kalshi', ?, ?, 0.7, 0.1, 0.8, ?, 100, ?, '', 'rules', 'approved', '', ?, ?)
+  `).run(side, lastPrice, limit, limit * 100, now, now)
 }
 
 beforeEach(() => {
@@ -115,6 +115,22 @@ describe('paper fills', () => {
     expect(outcome!.placed).toBe(false)
     expect(outcome!.reason).toContain('never traded down')
     expect(db.prepare('SELECT * FROM exchange_positions').all()).toHaveLength(0)
+  })
+
+  it('prices a NO order on the NO side', async () => {
+    // YES trades at 20c, so NO costs about 80c: an 85c NO limit fills near
+    // 81c, not at the YES price plus a cent.
+    seed(0.2, 0.85, 'no')
+    await executePaper(db as any, strategy, [1])
+    const [position]: any[] = db.prepare('SELECT * FROM exchange_positions').all()
+    expect(position.avg_price).toBeCloseTo(0.81, 5)
+  })
+
+  it('fills a NO order the market did offer', async () => {
+    // YES at 70c means NO at 30c: a 31c NO limit is reachable.
+    seed(0.7, 0.31, 'no')
+    const [outcome] = await executePaper(db as any, strategy, [1])
+    expect(outcome!.placed).toBe(true)
   })
 
   it('marks its orders so they cannot be mistaken for real ones', async () => {

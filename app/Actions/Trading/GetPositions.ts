@@ -5,6 +5,7 @@ import { Database } from '../../Support/db'
 import { authenticatedUserId } from '../../Support/request-auth'
 import { response } from '@stacksjs/router'
 import { syncAccounts } from '../../Services/trading/account-sync'
+import { paperParlays, trackPaperParlay } from '../../Services/trading/paper-parlays'
 import { trackHoldings, trackKey } from '../../Services/trading/book-tracking'
 import { positionScorecards, scorecardKey } from '../../Services/trading/position-scores'
 
@@ -293,6 +294,11 @@ export default {
         })),
       ].sort((a, b) => b.placedAt.localeCompare(a.placedAt))
 
+      // Paper parlays have no venue market, so they join as holdings of
+      // their own, carrying the same live parlay view a real one gets.
+      const parlayBook = await paperParlayBook(db, userId).catch(() => ({ open: [] as Holding[], settled: [] as ReturnType<typeof settledView>[], realized: 0 }))
+      holdings.push(...parlayBook.open)
+
       const live = holdings.filter(holding => holding.source !== 'paper')
       const paper = holdings.filter(holding => holding.source === 'paper')
       // A score provider going quiet must never hide the portfolio itself.
@@ -325,7 +331,7 @@ export default {
           committed: round(working.reduce((sum, order) => sum + order.committed, 0)),
           realizedToday: realized.today,
           realizedAll: realized.all,
-          paperRealizedAll: realized.paperAll,
+          paperRealizedAll: round(realized.paperAll + parlayBook.realized),
           // Paper is summarized apart from the money numbers above on
           // purpose: adding a simulated gain to a real balance produces a
           // figure that describes nothing.
@@ -337,7 +343,7 @@ export default {
           scorecard: holding.source === 'paper'
             ? null
             : scorecards.get(scorecardKey(holding)) ?? null,
-          track: holding.source === 'paper' ? null : tracks.get(trackKey(holding)) ?? null,
+          track: holding.source === 'paper' ? holding.track ?? null : tracks.get(trackKey(holding)) ?? null,
         })),
         orders: working,
         pending: pending.map(decision => ({
@@ -359,7 +365,9 @@ export default {
           statusReason: decision.status_reason,
           createdAt: decision.created_at,
         })),
-        paperSettled: settledPaper.slice(0, 10).map(settledView),
+        paperSettled: [...settledPaper.map(settledView), ...parlayBook.settled]
+          .sort((a, b) => String(b.settledAt).localeCompare(String(a.settledAt)))
+          .slice(0, 10),
         settled: settledLive.slice(0, 20).map(settledView),
       }
     }
@@ -514,6 +522,71 @@ function pendingDecisions(db: Db, userId: number): Promise<DecisionRow[]> {
 }
 
 /** One settled position as the page shows it. */
+/**
+ * Paper parlays as holdings (open, with their legs tracked live) and as
+ * settled results, plus what the settled ones made or lost.
+ */
+async function paperParlayBook(db: Db, userId: number): Promise<{ open: Holding[], settled: ReturnType<typeof settledView>[], realized: number }> {
+  const rows = await paperParlays(db as any, userId)
+  if (rows.length === 0)
+    return { open: [], settled: [], realized: 0 }
+  const names = new Map<number, string>()
+  for (const row of await db.prepare<{ id: number, name: string }>(`SELECT id, name FROM trading_strategies WHERE user_id = ?`).all(userId))
+    names.set(Number(row.id), String(row.name))
+
+  const open: Holding[] = []
+  const settled: ReturnType<typeof settledView>[] = []
+  let realized = 0
+  for (const parlay of rows) {
+    const strategy = parlay.trading_strategy_id ? names.get(parlay.trading_strategy_id) ?? '' : ''
+    const contracts = parlay.price > 0 ? parlay.stake / parlay.price : 0
+    const question = `${parlay.legs.length}-leg parlay: ${parlay.legs.map(leg => leg.label).join(' · ')}`
+    if (parlay.status === 'open') {
+      const tracker = await trackPaperParlay(parlay)
+      const chance = tracker?.chance ?? null
+      const markValue = chance === null ? null : round(contracts * chance)
+      open.push({
+        venue: 'kalshi',
+        marketExternalId: `paper-parlay-${parlay.id}`,
+        question,
+        outcomeLabel: '',
+        category: 'Sports',
+        marketStatus: 'open',
+        endsAt: '',
+        side: 'yes',
+        size: round(contracts),
+        avgPrice: parlay.price,
+        cost: parlay.stake,
+        mark: chance,
+        markValue,
+        unrealized: markValue === null ? null : round(markValue - parlay.stake),
+        source: 'paper',
+        openedAt: parlay.placed_at,
+        strategies: [{ name: strategy, mode: 'paper', size: round(contracts), cost: parlay.stake }],
+        track: tracker ? { game: null, parlay: tracker, spark: [], chance, occursAt: '', progress: null } : null,
+      })
+      continue
+    }
+    const pnl = round(parlay.payout - parlay.stake)
+    realized += pnl
+    settled.push({
+      venue: 'kalshi',
+      marketExternalId: `paper-parlay-${parlay.id}`,
+      question,
+      outcomeLabel: '',
+      side: 'yes',
+      size: round(contracts),
+      cost: parlay.stake,
+      realized: pnl,
+      won: parlay.status === 'won',
+      settledAt: parlay.settled_at,
+      strategy,
+      mode: 'paper',
+    })
+  }
+  return { open, settled, realized: round(realized) }
+}
+
 function settledView(position: SettledRow) {
   return {
     venue: position.venue,

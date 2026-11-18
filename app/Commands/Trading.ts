@@ -7,6 +7,7 @@ import type { BacktestReport } from '../Services/trading/backtest'
 import { backtestGames, summarizeBets } from '../Services/trading/backtest'
 import { haltState, setHalt } from '../Services/trading/halt'
 import { linesReport } from '../Services/trading/line-snapshots'
+import { draftSlate, parlayExpectedReturn, placeSlate } from '../Services/trading/slate'
 
 /**
  * `buddy trading:halt` — stop every strategy from placing orders.
@@ -182,6 +183,45 @@ export default function (cli: CLI) {
         const won = report.bets.filter(bet => bet.won).length
         const pnl = report.bets.reduce((sum, bet) => sum + bet.pnl, 0)
         log.info(`Bets at a ${report.gap} gap: ${report.bets.length} (${won} won) · P&L ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)} on $1 stakes · ROI ${report.roi === null ? '-' : `${(report.roi * 100).toFixed(1)}%`} · ${report.daysUp}/${report.days} days up`)
+      }
+      finally {
+        db.close()
+      }
+    })
+
+  cli
+    .command('trading:slate', 'Build a day of paper bets, singles and two-leg parlays, where the book disagrees with Kalshi')
+    .option('--budget <dollars>', 'Total to stake across the slate', { default: '5' })
+    .option('--stake <dollars>', 'Dollars per single or parlay', { default: '1' })
+    .option('--singles <n>', 'How many singles before parlays', { default: '3' })
+    .option('--min-gap <points>', 'Minimum book-vs-Kalshi disagreement', { default: '0.02' })
+    .option('--hours <n>', 'Only games starting within this many hours', { default: '12' })
+    .option('--user <id>', 'Account the paper bets belong to', { default: '1' })
+    .option('--dry-run', 'Show the slate without recording it', { default: false })
+    .action(async (options: { budget?: string, stake?: string, singles?: string, minGap?: string, hours?: string, user?: string, dryRun?: boolean }) => {
+      const stake = Number(options.stake) || 1
+      const { slate, picks, lines } = await draftSlate({
+        budget: Number(options.budget) || 5,
+        stake,
+        singles: Number(options.singles) || 3,
+        minGap: Number(options.minGap) || 0.02,
+        windowMinutes: (Number(options.hours) || 12) * 60,
+      })
+      const pctOf = (value: number) => `${value >= 0 ? '+' : ''}${(value * 100).toFixed(1)}%`
+      log.info(`${lines} Kalshi game markets with a book line; ${picks.length} games where the book disagrees enough; ${picks.filter(pick => pick.ev > 0).length} worth more than they cost if the book is right`)
+      for (const pick of slate.singles)
+        log.info(`  single  $${stake}  ${pick.label} at ${Math.round(pick.price * 100)}¢  book ${(pick.fair * 100).toFixed(1)}%  expected ${pctOf(pick.ev)}`)
+      for (const legs of slate.parlays)
+        log.info(`  parlay  $${stake}  ${legs.map(pick => `${pick.label} ${Math.round(pick.price * 100)}¢`).join('  +  ')}  pays $${(stake / legs.reduce((product, pick) => product * pick.price, 1)).toFixed(2)}  expected ${pctOf(parlayExpectedReturn(legs))}`)
+      if (options.dryRun || slate.singles.length + slate.parlays.length === 0)
+        return
+      const db = new Database()
+      try {
+        const name = `Paper slate ${new Date().toISOString().slice(0, 10)}`
+        const placed = await placeSlate(db, slate, { userId: Number(options.user) || 1, stake, name })
+        for (const single of placed.singles)
+          log.info(`  ${single.placed ? 'recorded' : 'skipped'}: ${single.label}${single.reason ? ` (${single.reason})` : ''}`)
+        log.success(`Recorded under "${name}" (strategy ${placed.strategyId}): ${placed.singles.filter(single => single.placed).length} singles, ${placed.parlays.length} parlays. Paper only: no money moves.`)
       }
       finally {
         db.close()
