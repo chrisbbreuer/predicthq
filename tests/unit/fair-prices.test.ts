@@ -19,7 +19,7 @@ afterEach(() => {
   }
 })
 
-function seed(markets: number, status: (marketId: number) => string = () => 'scheduled') {
+function seed(markets: number, status: (marketId: number) => string = () => 'scheduled', commence: (marketId: number) => string = () => '2099-12-01T00:00:00.000Z') {
   const path = `tests/temp/fair-${paths.length}-${Bun.nanoseconds()}.sqlite`
   paths.push(path)
   const db = schemaFor(path, TABLES)
@@ -27,7 +27,7 @@ function seed(markets: number, status: (marketId: number) => string = () => 'sch
   db.run(`INSERT INTO bookmakers (id, slug, short, name, active, sharp, consensus_weight) VALUES (1, 'pin', 'PIN', 'Pinnacle', 1, 1, 1.0), (2, 'dk', 'DK', 'DraftKings', 1, 0, 0.5)`)
   db.run('BEGIN')
   for (let m = 1; m <= markets; m++) {
-    db.run(`INSERT INTO market_events (id, sport_id, title, commence_at, status) VALUES (?, 1, 'A at B', '2026-12-01T00:00:00.000Z', ?)`, [m, status(m)])
+    db.run(`INSERT INTO market_events (id, sport_id, title, commence_at, status) VALUES (?, 1, 'A at B', ?, ?)`, [m, commence(m), status(m)])
     db.run(`INSERT INTO markets (id, market_event_id, market_type, line, line_key, period, complete, status, position) VALUES (?, ?, 'h2h', NULL, '', 'full_game', 1, 'open', 0)`, [m, m])
     for (const [offset, side] of [[1, 'home'], [2, 'away']] as const) {
       const selection = m * 2 - 2 + offset
@@ -58,6 +58,13 @@ describe('computeFairPrices', () => {
     expect(result.markets).toBe(2)
     const priced = (db.query('SELECT selection_id FROM fair_prices ORDER BY selection_id').all() as Array<{ selection_id: number }>).map(r => r.selection_id)
     expect(priced).toEqual([1, 2, 7, 8])
+    db.close()
+  })
+
+  it('leaves a game whose final never arrived alone', async () => {
+    const db = seed(2, () => 'scheduled', id => (id === 1 ? '2026-08-21T00:00:00.000Z' : '2099-12-01T00:00:00.000Z'))
+    const result = await computeFairPrices(db)
+    expect(result.markets).toBe(1)
     db.close()
   })
 

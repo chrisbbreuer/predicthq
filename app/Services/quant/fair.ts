@@ -1,6 +1,7 @@
 import type { Database } from '../../Support/db'
 import { devig, expectedValuePct, kellyFraction } from '../../Support/devig'
 import { nowIso } from '../../Support/keys'
+import { STALE_LIVE_MS } from '../../../config/odds'
 
 /**
  * Consensus fair pricing.
@@ -58,7 +59,8 @@ export interface FairPriceResult {
 const PAGE_MARKETS = 400
 
 /**
- * Recompute fair prices for every market on a game still to be decided.
+ * Recompute fair prices for every market on a game still to be decided:
+ * scheduled or live, and started within the last day.
  *
  * Runs after each odds ingest. A finished game is left alone: its last fair
  * price is its closing number, and re-deriving it from quotes nobody can take
@@ -76,16 +78,20 @@ export async function computeFairPrices(db: Database, options: { marketIds?: num
   const result: FairPriceResult = { markets: 0, selections: 0, written: 0, positiveEdge: 0 }
   const only = options.marketIds?.length ? `AND m.id IN (${options.marketIds.map(() => '?').join(',')})` : ''
 
+  // A game that started more than a day ago is over, whatever its status
+  // says: the schedule feed leaves fixtures it skipped `scheduled` for good.
+  const since = new Date(Date.now() - STALE_LIVE_MS).toISOString()
+
   let after = 0
   for (;;) {
     const page = await db.query<{ id: number | string }>(`
       SELECT m.id
       FROM markets m
       JOIN market_events e ON e.id = m.market_event_id
-      WHERE m.complete = 1 AND e.status IN ('scheduled', 'live') AND m.id > ? ${only}
+      WHERE m.complete = 1 AND e.status IN ('scheduled', 'live') AND e.commence_at >= ? AND m.id > ? ${only}
       ORDER BY m.id ASC
       LIMIT ${PAGE_MARKETS}
-    `).all(after, ...(options.marketIds ?? []))
+    `).all(since, after, ...(options.marketIds ?? []))
     if (page.length === 0)
       break
 

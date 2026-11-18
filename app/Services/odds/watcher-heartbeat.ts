@@ -13,9 +13,10 @@ import process from 'node:process'
  * sockets and the scheduler polled every league of both instead, holding
  * ~300 MB per pass and running the scheduler out of memory every few minutes.
  *
- * The watcher touches a file under `storage/ingest`, which every release of
- * both services shares, and the scheduler skips its passes while the file is
- * fresh. A watcher that dies stops touching it, so the floor returns within
+ * The watcher touches a file and the scheduler skips its passes while the
+ * file is fresh. In production it lives outside both sites
+ * (`ODDS_WATCH_HEARTBEAT_PATH` in config/cloud.ts): each site's
+ * `storage/ingest` is shared across its own releases, not with other sites. A watcher that dies stops touching it, so the floor returns within
  * {@link STALE_MS} without anything having to notice.
  */
 const PATH = process.env.ODDS_WATCH_HEARTBEAT_PATH || 'storage/ingest/.odds-watch.heartbeat'

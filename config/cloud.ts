@@ -19,6 +19,9 @@ const productionRuntimeEnv = {
   BROADCAST_PORT: '3078',
   BROADCAST_SCHEME: 'ws',
   QUEUE_DRIVER: 'database',
+  // Outside any one site's directory: each site's `storage/ingest` is its own
+  // shared copy, and the scheduler has to see the odds watcher's heartbeat.
+  ODDS_WATCH_HEARTBEAT_PATH: '/var/lib/predicthq/odds-watch.heartbeat',
   QUEUE_FAILED_DRIVER: 'database',
 }
 

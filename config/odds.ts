@@ -267,6 +267,14 @@ export function sportEnabled(sportSlug: string, settings: OddsSettings = oddsCon
 }
 
 /**
+ * How long past its start a game can still be in play. Longer than any game
+ * runs, so only a row whose result was never recorded falls past it: twelve
+ * hours for one never reported started, a day for one reported live.
+ */
+export const STALE_UNSTARTED_MS = 12 * 60 * 60 * 1000
+export const STALE_LIVE_MS = 24 * 60 * 60 * 1000
+
+/**
  * Which bucket an event is in, from its start time and status.
  *
  * Status wins over the clock: a game that started an hour ago and is still
@@ -287,10 +295,18 @@ export function bucketFor(
   if (!Number.isFinite(start))
     return null
 
+  const untilStart = start - now
+
+  // A game whose final never arrived is not in play. The schedule feed only
+  // revisits recent dates, so a fixture it skipped stays `scheduled` (or
+  // `live`) forever, and one such row used to hold its whole league at the
+  // one-second cadence, months after the game: in November, August games in
+  // seventeen leagues had every book polled every second.
+  if (untilStart < -(status === 'in_progress' || status === 'live' ? STALE_LIVE_MS : STALE_UNSTARTED_MS))
+    return null
+
   if (status === 'in_progress' || status === 'live')
     return 'inPlay'
-
-  const untilStart = start - now
 
   // Past its start time but not reported live yet. Treat as in-play: the
   // alternative is a game that has plainly begun sitting in the ten-minute

@@ -37,15 +37,18 @@ import { PushBuffer, writePushed } from '../Services/odds/push-buffer'
  */
 async function loadScheduledEvents(db: Database): Promise<ScheduledEvent[]> {
   const horizon = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+  // Nothing that started more than a day ago is still being played; see
+  // `bucketFor`, which ignores such rows anyway.
+  const since = new Date(Date.now() - STALE_LIVE_MS).toISOString()
 
   return await db.query<ScheduledEvent>(`
     SELECT s.slug AS sportSlug, e.commence_at AS commenceAt, e.status AS status
     FROM market_events e
     JOIN sports s ON s.id = e.sport_id
     WHERE e.status NOT IN ('final', 'settled', 'cancelled')
-      AND e.commence_at <= ?
+      AND e.commence_at >= ? AND e.commence_at <= ?
     ORDER BY e.commence_at ASC
-  `).all(horizon)
+  `).all(since, horizon)
 }
 
 /** How long the final flush may take before the process exits regardless. */

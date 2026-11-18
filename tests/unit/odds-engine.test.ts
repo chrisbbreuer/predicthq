@@ -69,6 +69,15 @@ describe('intervalForSport', () => {
     expect(interval).toBe(0)
   })
 
+  it('does not keep a league in play for a game whose final never arrived', () => {
+    // Months-old fixtures the schedule feed never revisited.
+    expect(intervalForSport('nfl', [event('nfl', -24 * 90), event('nfl', 72)], NOW)).toBe(oddsConfig.cadence.far)
+    expect(intervalForSport('nfl', [event('nfl', -30, 'live'), event('nfl', 72)], NOW)).toBe(oddsConfig.cadence.far)
+    // A game that is merely running long, or whose status lags, still is.
+    expect(intervalForSport('nfl', [event('nfl', -4, 'live')], NOW)).toBe(oddsConfig.cadence.inPlay)
+    expect(intervalForSport('nfl', [event('nfl', -2)], NOW)).toBe(oddsConfig.cadence.inPlay)
+  })
+
   it('returns zero for a league with no events at all', () => {
     expect(intervalForSport('nfl', [], NOW)).toBe(0)
   })
