@@ -32,12 +32,13 @@ export default {
       for (const market of event.markets) {
         if (!market.hold?.isArbitrage || market.hold.arbitragePct < minProfit)
           continue
+        const hold = market.hold
 
         opportunities.push({
           event: { id: event.id, title: event.title, league: event.league, sport: event.sport, commenceAt: event.commenceAt },
           market: { id: market.id, type: market.marketType, label: market.label, line: market.line },
-          profitPct: market.hold.arbitragePct,
-          impliedSum: market.hold.bestBookSum,
+          profitPct: hold.arbitragePct,
+          impliedSum: hold.bestBookSum,
           legs: market.selections.map(s => ({
             label: s.label,
             side: s.side,
@@ -46,8 +47,8 @@ export default {
             bookmaker: board.bookmakers.find(b => b.id === s.bestBookmakerId)?.name ?? null,
             // The share of the total stake this leg takes to lock the
             // profit. Without it the caller has a signal but not a bet.
-            stakeShare: s.bestPrice && market.hold.bestBookSum > 0
-              ? (1 / s.bestPrice) / market.hold.bestBookSum
+            stakeShare: s.bestPrice && hold.bestBookSum > 0
+              ? (1 / s.bestPrice) / hold.bestBookSum
               : 0,
           })),
         })

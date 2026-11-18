@@ -16,7 +16,11 @@ export default {
     'activeUrl': 'The {{ field }} field must be a valid URL',
     'alpha': 'The {{ field }} field must contain only letters',
     'alphaNumeric': 'The {{ field }} field must contain only letters and numbers',
-    'min': 'The {{ field }} field must have at least {{ min }} characters',
+    // The string-length minimum, which pairs with `maxLength` below. The
+    // numeric minimum keeps `min`, so the two failures no longer share the
+    // "characters" message.
+    'minLength': 'The {{ field }} field must have at least {{ min }} characters',
+    'min': 'The {{ field }} field must be at least {{ min }}',
     'maxLength': 'The {{ field }} field must not be greater than {{ max }} characters',
     'fixedLength': 'The {{ field }} field must be {{ size }} characters long',
     'confirmed': 'The {{ field }} field and {{ otherField }} field must be the same',

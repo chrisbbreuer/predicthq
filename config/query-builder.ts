@@ -77,4 +77,7 @@ export default {
     column: 'deleted_at',
     defaultFilter: true,
   },
-} satisfies QueryBuilderConfig
+  // `Partial`: `QueryBuilderConfig` is the resolved shape after the library
+  // merges its own defaults, so every field on it is required. `setConfig()`
+  // takes `Partial<QueryBuilderConfig>`, and that is what this file is.
+} satisfies Partial<QueryBuilderConfig>

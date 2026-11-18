@@ -1,4 +1,4 @@
-import type { ServerConfig } from 'ts-broadcasting'
+import type { ServerConfig } from '@stacksjs/realtime'
 import { readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import process from 'node:process'
 import { log } from '@stacksjs/logging'
@@ -7,6 +7,20 @@ import { runScheduler, Schedule } from '@stacksjs/scheduler'
 import realtime from '../../config/realtime'
 
 const server = realtime.server
+
+/**
+ * The configured limit, in ts-broadcasting's terms.
+ *
+ * `config/realtime.ts` describes it the Stacks way (messages per second per
+ * socket), and ts-broadcasting counts `max` messages per `window` ms. This was
+ * passed through unconverted, so ts-broadcasting found no `max` or `window`,
+ * fell back to its own 100 per minute, and `enabled: false` never turned
+ * it off.
+ */
+const rateLimit: ServerConfig['rateLimit'] = server.rateLimit.enabled
+  ? { max: server.rateLimit.maxMessagesPerSecond, window: 1_000 }
+  : undefined
+
 const config: ServerConfig = {
   default: 'bun',
   host: server.host,
@@ -22,7 +36,7 @@ const config: ServerConfig = {
       reusePort: true,
     },
   },
-  rateLimit: server.rateLimit,
+  rateLimit,
   loadManagement: server.loadManagement,
   debug: realtime.debug,
 }

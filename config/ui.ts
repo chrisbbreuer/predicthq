@@ -1,4 +1,19 @@
-import type { StxOptions as UiOptions } from '@stacksjs/stx'
+import type { StxOptions } from '@stacksjs/stx'
+
+/**
+ * `pageWarmup` is read from this file by bun-plugin-stx's `serve()`, but no
+ * published `StxConfig` declares it yet (stacksjs/stx: "declare pageWarmup on
+ * StxConfig"). Once a release has it, this collapses back to `StxOptions`.
+ */
+type UiOptions = StxOptions & {
+  pageWarmup?: boolean | {
+    paths?: string[]
+    holdBind?: 'replacing' | 'always'
+    budgetMs?: number
+    concurrency?: number
+    report?: boolean
+  }
+}
 
 /**
  * STX Configuration for Stacks

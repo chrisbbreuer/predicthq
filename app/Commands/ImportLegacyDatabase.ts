@@ -56,23 +56,23 @@ async function importTable(
   requestedBatchSize: number,
   verifyOnly: boolean,
 ): Promise<{ source: number, target: number, copied: number }> {
-  const sourceExists = source.query<{ count: number }>(
+  const sourceExists = source.query<{ count: number }, [string, string]>(
     'SELECT COUNT(*) AS count FROM sqlite_master WHERE type = ? AND name = ?',
   ).get('table', table)?.count
   if (!sourceExists) return { source: 0, target: 0, copied: 0 }
 
   const targetColumns = await target.query<TargetColumn>(`SHOW COLUMNS FROM ${quote(table)}`).all()
-  const sourceColumns = source.query<SourceColumn>(`PRAGMA table_info(${quote(table)})`).all()
+  const sourceColumns = source.query<SourceColumn, []>(`PRAGMA table_info(${quote(table)})`).all()
   const sourceNames = new Set(sourceColumns.map(column => column.name))
   const columns = targetColumns.filter(column => sourceNames.has(column.Field))
   if (!columns.length) throw new Error(`${table} has no columns shared by SQLite and Vitess`)
 
-  const sourceCount = Number(source.query<{ count: number }>(`SELECT COUNT(*) AS count FROM ${quote(table)}`).get()?.count || 0)
+  const sourceCount = Number(source.query<{ count: number }, []>(`SELECT COUNT(*) AS count FROM ${quote(table)}`).get()?.count || 0)
   let copied = 0
   if (!verifyOnly && sourceCount > 0) {
     const batchSize = Math.max(1, Math.min(requestedBatchSize, Math.floor(60_000 / columns.length)))
     for (let offset = 0; offset < sourceCount; offset += batchSize) {
-      const rows = source.query<Record<string, unknown>>(
+      const rows = source.query<Record<string, unknown>, [number, number]>(
         `SELECT ${columns.map(column => quote(column.Field)).join(', ')} FROM ${quote(table)} ORDER BY rowid LIMIT ? OFFSET ?`,
       ).all(batchSize, offset)
       if (!rows.length) break

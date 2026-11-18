@@ -52,6 +52,9 @@ export default {
       )
     }
 
+    // Stripe needs absolute success and cancel URLs.
+    if (!config.app.url)
+      return response.error('Billing is not configured: config.app.url is not set.', 500)
     const appUrl = normalizeUrl(config.app.url)
 
     try {

@@ -1,8 +1,10 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { Database } from '../Support/db'
 
+export type GroupErrorStatus = 403 | 404 | 409 | 410 | 422
+
 export class GroupError extends Error {
-  constructor(message: string, readonly status = 422) { super(message) }
+  constructor(message: string, readonly status: GroupErrorStatus = 422) { super(message) }
 }
 
 export interface GroupRow {

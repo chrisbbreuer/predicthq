@@ -19,7 +19,12 @@
     "types/**/*.d.ts",
     "app/Models/**/*.ts",
     "app/Services/**/*.ts",
-    "app/Support/**/*.ts"
+    "app/Support/**/*.ts",
+    "app/Commands/**/*.ts",
+    "app/Actions/**/*.ts",
+    "app/Jobs/**/*.ts",
+    "app/Runtimes/**/*.ts",
+    "config/**/*.ts"
   ],
   "exclude": [
     "cloud/**",
