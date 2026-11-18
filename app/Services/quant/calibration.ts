@@ -59,11 +59,21 @@ interface Scope {
 export async function computeCalibration(db: Database): Promise<CalibrationResult> {
   // Pushes are excluded: a voided market has no outcome to be right or
   // wrong about, and scoring it either way would distort the curve.
-  const rows = await db.query<LabelledRow>(`
+  const raw = await db.query<Record<string, unknown>>(`
     SELECT fair_prob, label, clv_pct, sport_slug, market_type
     FROM feature_snapshots
     WHERE label IN (0, 1) AND fair_prob > 0
   `).all()
+  // Vitess returns DECIMAL columns as strings; summed, they concatenate,
+  // and the NaN that comes out failed every pipeline run once games settled.
+  const finite = (value: unknown) => (Number.isFinite(Number(value)) ? Number(value) : 0)
+  const rows: LabelledRow[] = raw.map(row => ({
+    fair_prob: finite(row.fair_prob),
+    label: finite(row.label),
+    clv_pct: finite(row.clv_pct),
+    sport_slug: String(row.sport_slug ?? ''),
+    market_type: String(row.market_type ?? ''),
+  }))
 
   if (rows.length === 0)
     return { scopes: 0, buckets: 0, sampleSize: 0, overallBrier: 0, overallLogLoss: 0 }
