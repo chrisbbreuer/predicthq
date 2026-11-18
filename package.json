@@ -19,7 +19,7 @@
     "url": "https://github.com/chrisbbreuer/predicthq/issues"
   },
   "scripts": {
-    "build:reset": "rm -rf node_modules pantry.lock && bun install && ./buddy generate:types && ./buddy lint:fix",
+    "build:reset": "rm -rf node_modules && bun install && ./buddy generate:types && ./buddy lint:fix",
     "buddy": "./buddy",
     "stacks": "./buddy",
     "setup": "./bootstrap",
@@ -70,10 +70,10 @@
   },
   "dependencies": {
     "@polymarket/clob-client-v2": "^1.1.0",
-    "@stacksjs/stx": "0.2.378",
+    "@stacksjs/stx": "0.2.913",
     "@ts-charts/plot": "^0.2.8",
-    "bun-plugin-stx": "0.2.378",
-    "stacks": "0.75.624",
+    "bun-plugin-stx": "0.2.913",
+    "stacks": "0.75.628",
     "stripe": "23.0.0",
     "ts-web-scraper": "^0.1.10",
     "viem": "^2.55.11"
