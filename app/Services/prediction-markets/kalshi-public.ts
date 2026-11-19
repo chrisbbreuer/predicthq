@@ -48,6 +48,15 @@ export interface KalshiCandle {
   volume: number
 }
 
+export interface KalshiComboCollection {
+  collection_ticker: string
+  associated_events: Array<{ ticker: string, is_yes_only?: boolean, size_max?: number }>
+  size_min: number
+  size_max: number
+  is_all_yes: boolean
+  is_single_market_per_event: boolean
+}
+
 interface Entry<T> {
   expiresAt: number
   value: Promise<T>
@@ -105,6 +114,14 @@ async function get<T>(path: string): Promise<T> {
   if (!response.ok)
     throw new KalshiPublicError(`Kalshi GET ${path.split('?')[0]} failed (${response.status})`, response.status)
   return await response.json() as T
+}
+
+export async function kalshiComboCollections(eventTicker: string): Promise<KalshiComboCollection[]> {
+  return await cached(`combo-collections:${eventTicker}`, 60_000, async () => {
+    const query = new URLSearchParams({ status: 'open', associated_event_ticker: eventTicker, limit: '200' })
+    const data = await get<{ multivariate_contracts: KalshiComboCollection[] }>(`/multivariate_event_collections?${query}`)
+    return data.multivariate_contracts ?? []
+  })
 }
 
 function price(value: unknown): number | null {

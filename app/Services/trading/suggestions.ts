@@ -51,6 +51,7 @@ interface SlateTicket extends Suggestion {
 
 interface SuggestionSlate {
   name: string
+  createdAt: string
   tickets: SlateTicket[]
   alternatives: SlateTicket[]
 }
@@ -174,11 +175,11 @@ function toSuggestion(row: Record<string, unknown>): Suggestion {
   }
 }
 
-async function savedSlate(db: Database, userId: number): Promise<{ name: string, refs: SlateTicketReference[] } | null> {
-  const row = await db.query<{ name: string, tickets: string }>(`
-    SELECT name, tickets FROM suggestion_slates WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 1
+async function savedSlate(db: Database, userId: number): Promise<{ name: string, createdAt: string, refs: SlateTicketReference[] } | null> {
+  const row = await db.query<{ name: string, tickets: string, created_at: string }>(`
+    SELECT name, tickets, created_at FROM suggestion_slates WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 1
   `).get(userId)
-  return row ? { name: row.name, refs: JSON.parse(row.tickets) } : null
+  return row ? { name: row.name, createdAt: row.created_at, refs: JSON.parse(row.tickets) } : null
 }
 
 async function paperResult(db: Database, userId: number, suggestion: Suggestion, paperId: number): Promise<PaperResult | null> {
@@ -243,7 +244,7 @@ async function listSlate(db: Database, userId: number, now: number): Promise<Sug
         : null,
     })
   }
-  return tickets.length || alternatives.length ? { name: slate.name, tickets, alternatives } : null
+  return tickets.length || alternatives.length ? { name: slate.name, createdAt: slate.createdAt, tickets, alternatives } : null
 }
 
 function kalshiOrderUrl(eventUrl: string | undefined, leg: SuggestionLeg | undefined): string | null {
@@ -283,6 +284,16 @@ async function pendingSuggestion(db: Database, userId: number, id: number, now =
   if (Date.parse(suggestion.expiresAt) < now)
     throw new Error('That suggestion has expired: its price no longer holds.')
   return suggestion
+}
+
+export async function suggestionForReview(db: Database, userId: number, id: number, now = Date.now()): Promise<Suggestion | null> {
+  const row = await db.query<Record<string, unknown>>(`SELECT * FROM bet_suggestions WHERE id = ? AND user_id = ?`).get(id, userId)
+  if (!row)
+    return null
+  const ticket = toSuggestion(row)
+  if ((ticket.status !== 'pending' && ticket.status !== 'approved') || !(Date.parse(ticket.expiresAt) > now) || !eligibleLegs(ticket.legs))
+    return null
+  return ticket
 }
 
 /** Approve an existing slate ticket or record a new paper bet under "Approved suggestions". */

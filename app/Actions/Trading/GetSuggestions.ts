@@ -1,6 +1,8 @@
 import { Database } from '../../Support/db'
 import { authenticatedUserId } from '../../Support/request-auth'
 import { response } from '@stacksjs/router'
+import { suggestionPurchaseReason } from '../../Services/trading/suggestion-kalshi'
+import { suggestionMatchups } from '../../Services/trading/suggestion-matchups'
 import { suggestionPrices } from '../../Services/trading/suggestion-prices'
 import { listSuggestions } from '../../Services/trading/suggestions'
 
@@ -17,8 +19,13 @@ export default {
     try {
       const suggestions = await listSuggestions(db, userId)
       const slate = suggestions.slate
-      const prices = slate ? await suggestionPrices([...slate.tickets, ...slate.alternatives]) : {}
-      return { ...suggestions, prices }
+      const saved = slate ? [...slate.tickets, ...slate.alternatives] : []
+      const [prices, matchups, purchaseReason] = await Promise.all([
+        suggestionPrices([...saved, ...suggestions.pending]),
+        suggestionMatchups([...saved, ...suggestions.pending]),
+        suggestionPurchaseReason(db, userId),
+      ])
+      return { ...suggestions, prices, matchups, purchaseReason }
     }
     finally {
       db.close()

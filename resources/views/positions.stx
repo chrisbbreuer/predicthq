@@ -35,7 +35,7 @@ const POLL_SECONDS = 10
 </script>
 
 <script client>
-import { useIntervalFn } from '@stacksjs/composables'
+import { useBrowserLocation, useIntervalFn } from '@stacksjs/composables'
 import { withCsrfHeader } from '@stacksjs/browser/composables/csrf'
 import { useAuth } from '@stacksjs/browser/composables/useAuth'
 import { chartSvg, contracts, cents, gameClock, pct, signedUsd, sparkSvg, startLabel, teamColor, teamShort, tone, usd } from '../functions/bets'
@@ -49,8 +49,9 @@ const signedIn = state(false)
 const error = state('')
 const note = state('')
 const busy = state(0)
-const stamp = state('')
 const tab = state('all')
+const browserLocation = useBrowserLocation()
+const panel = state(browserLocation.hash.value === '#suggestion-slate' ? 'suggestions' : browserLocation.hash.value === '#paper-tracking' ? 'paper' : 'positions')
 const accounts = state<any[]>([])
 const broken = state<any[]>([])
 const liveGames = state<any[]>([])
@@ -61,14 +62,21 @@ const paper = state<any[]>([])
 const orders = state<any[]>([])
 const pending = state<any[]>([])
 const suggestions = state<any[]>([])
+const suggestionsLoading = state(true)
+const suggestionsError = state(false)
+const purchaseReason = state('')
 const selectedSlate = state<any>(null)
-const slateGroups = derived(() => {
+const prepared = state<Record<number, { url: string, amount: string, error: string }>>({})
+const preparing = state(0)
+const pickGroups = derived(() => {
   const slate = selectedSlate()
-  if (!slate)
-    return []
-  const groups = [{ title: '', tickets: slate.tickets }]
-  if (slate.alternatives.length)
-    groups.push({ title: 'Parlay alternatives', tickets: slate.alternatives })
+  const groups: { title: string, tickets: any[] }[] = []
+  if (slate?.tickets.length)
+    groups.push({ title: '', tickets: slate.tickets })
+  if (slate?.alternatives.length)
+    groups.push({ title: 'Alternative combos', tickets: slate.alternatives })
+  if (suggestions().length)
+    groups.push({ title: 'More suggestions', tickets: suggestions() })
   return groups
 })
 const suggestionBusy = state(0)
@@ -88,8 +96,6 @@ function blankTotals(): any {
   return {
     portfolio: '$0.00',
     cash: '$0.00',
-    cost: '$0.00',
-    markValue: '$0.00',
     unrealized: '+$0.00',
     unrealizedTone: 'muted',
     realizedToday: '+$0.00',
@@ -101,13 +107,7 @@ function blankTotals(): any {
     paperTone: 'muted',
     paperRealizedAll: '+$0.00',
     paperRealizedTone: 'muted',
-    hasParlayEst: false,
-    parlayEst: '$0.00',
-    parlayEstGain: '+$0.00',
-    parlayEstTone: 'muted',
-    positionCount: 0,
     unpricedCount: 0,
-    toWin: '$0.00',
   }
 }
 
@@ -136,17 +136,12 @@ function ago(value: unknown): string {
   return Math.round(seconds / 86400) + 'd ago'
 }
 
-function clock(): string {
-  const at = new Date()
-  return ('0' + at.getHours()).slice(-2) + ':' + ('0' + at.getMinutes()).slice(-2) + ':' + ('0' + at.getSeconds()).slice(-2)
-}
-
 function sideOf(value: unknown): { label: string, cls: string } {
   const side = String(value || '').toLowerCase()
   return { label: side.toUpperCase(), cls: side === 'no' ? 'no' : 'yes' }
 }
 
-const LEAGUE_LABELS: Record<string, string> = { nba: 'NBA', wnba: 'WNBA', nfl: 'NFL', ncaaf: 'College football', ncaab: 'College basketball', nhl: 'NHL', mlb: 'MLB', mls: 'MLS', epl: 'Premier League' }
+const LEAGUE_LABELS: Record<string, string> = { nba: 'NBA', wnba: 'WNBA', nfl: 'NFL', ncaaf: 'College football', ncaab: 'College basketball', ncaaw: 'Women’s college basketball', nhl: 'NHL', mlb: 'MLB', mls: 'MLS', epl: 'Premier League' }
 
 function teamView(team: any, side: string, game: any): any {
   const rooting = game.rooting === side
@@ -395,11 +390,14 @@ function clearPrivateBook(): void {
   settled.set([])
   paperSettled.set([])
   suggestions.set([])
+  suggestionsLoading.set(true)
+  suggestionsError.set(false)
+  purchaseReason.set('')
   selectedSlate.set(null)
+  prepared.set({})
   counts.set({ all: 0, live: 0, upcoming: 0, parlays: 0, other: 0 })
   totals.set(blankTotals())
   empty.set(false)
-  stamp.set('')
 }
 
 function apply(data: any): void {
@@ -407,7 +405,6 @@ function apply(data: any): void {
   const rawTotals = data.totals || {}
   const groups: Record<string, any[]> = { live: [], upcoming: [], parlays: [], other: [] }
   const paperPositions: any[] = []
-  let toWin = 0
 
   for (const row of rows) {
     if (row.source === 'paper') {
@@ -416,7 +413,6 @@ function apply(data: any): void {
     }
     const view = holding(row, false)
     groups[view.group].push(view)
-    toWin += Number(row.size) || 0
   }
 
   const nextAccounts = (data.accounts || []).map((account: any) => ({
@@ -493,20 +489,11 @@ function apply(data: any): void {
   settled.set((data.settled || []).map(settledRow('s')))
   paperSettled.set((data.paperSettled || []).map(settledRow('p')))
 
-  // What the open parlays are worth if their legs' live prices are right.
-  // Kept beside the money numbers rather than in them: the product of
-  // correlated legs is a guide, not a price anyone will pay.
-  const parlayEst = groups.parlays.reduce((sum: number, position: any) => sum + (position.estRaw ?? 0), 0)
-  const parlayCost = groups.parlays.reduce((sum: number, position: any) => sum + (position.estRaw === null ? 0 : position.costRaw), 0)
-  const hasParlayEst = groups.parlays.some((position: any) => position.estRaw !== null)
-
   const cash = Number(rawTotals.cash) || 0
   const held = rawTotals.markValue === null || rawTotals.markValue === undefined ? Number(rawTotals.cost) || 0 : Number(rawTotals.markValue) || 0
   totals.set({
     portfolio: usd(cash + held),
     cash: usd(cash),
-    cost: usd(rawTotals.cost),
-    markValue: rawTotals.markValue === null ? '—' : usd(rawTotals.markValue),
     unrealized: rawTotals.unrealized === null ? '—' : signedUsd(rawTotals.unrealized),
     unrealizedTone: tone(rawTotals.unrealized),
     realizedToday: signedUsd(rawTotals.realizedToday),
@@ -518,17 +505,10 @@ function apply(data: any): void {
     paperTone: tone(rawTotals.paperUnrealized),
     paperRealizedAll: signedUsd(rawTotals.paperRealizedAll),
     paperRealizedTone: tone(rawTotals.paperRealizedAll),
-    hasParlayEst,
-    parlayEst: usd(parlayEst),
-    parlayEstGain: signedUsd(parlayEst - parlayCost),
-    parlayEstTone: tone(parlayEst - parlayCost),
-    positionCount: Number(rawTotals.positions) || 0,
     unpricedCount: Number(rawTotals.unpricedCount) || 0,
-    toWin: usd(toWin),
   })
 
-  empty.set(counts().all === 0 && paperPositions.length === 0 && orders().length === 0 && pending().length === 0)
-  stamp.set(clock())
+  empty.set(counts().all === 0 && orders().length === 0 && pending().length === 0)
 }
 
 function show(section: string): boolean {
@@ -644,57 +624,53 @@ async function load(fromVenue = false): Promise<void> {
   }
 }
 
-/** A suggestion as the card draws it. */
-function suggestionView(row: any, alternative = false, quote?: any): any {
+function suggestionView(row: any, group: 'saved' | 'alternative' | 'suggested', quote: any, matchups: Record<string, any>): any {
+  const quoted = quote?.flag !== 'confidence' && quote?.flag !== 'missing'
+  const isOpen = (row.status === 'pending' || row.status === 'approved') && Date.parse(row.expiresAt) > Date.now()
+  const single = row.kind === 'single'
   const legs = (row.legs || []).map((leg: any, index: number) => {
     const confidence = Number(leg.confidence ?? (leg.side === 'yes' ? leg.yesMid : 1 - leg.yesMid))
     const current = quote?.legs[index]
+    const matchup = matchups[leg.ticker]
+    const team = (value: any) => ({ logo: value.logo || '', initials: String(value.abbreviation || '').slice(0, 4) })
     return {
-      label: leg.label,
-      price: cents(leg.price),
-      confidence: current
-        ? (current.confidence * 100).toFixed(1) + '% now'
-        : Number.isFinite(confidence) ? (confidence * 100).toFixed(1) + '% at selection' : '',
+      label: String(leg.label).replace(/ \(NO on .+\)$/, ''),
+      confidence: current ? pct(current.confidence) : Number.isFinite(confidence) ? pct(confidence) : '',
+      confidenceLabel: current ? 'Market chance' : 'At selection',
       book: current ? cents(current.bid) + ' bid · ' + cents(current.ask) + ' ask' : '',
-      live: Boolean(leg.live),
-      starts: leg.live ? 'Live now' : startLabel(leg.startsAt),
+      starts: leg.live ? 'Live' : startLabel(leg.startsAt),
       side: leg.side === 'no' ? 'NO' : 'YES',
+      prop: /^KXNBA(PTS|REB|AST|PRA|3PT|STL|BLK|STOCK)/i.test(leg.ticker),
+      matchup: matchup ? matchup.away.name + ' at ' + matchup.home.name : '',
+      league: matchup ? (LEAGUE_LABELS[matchup.league] || String(matchup.league).toUpperCase()) : '',
+      teams: matchup ? [team(matchup.away), team(matchup.home)] : [],
       href: '/bet?ticker=' + encodeURIComponent(leg.ticker) + '&side=' + String(leg.side || 'yes').toLowerCase(),
     }
   })
-  const ev = Number(row.ev) || 0
-  const quoteWarnings: Record<string, string> = {
-    missing: 'Fresh order book unavailable for at least one leg.',
+  const warnings: Record<string, string> = {
+    missing: 'A current quote is unavailable.',
     confidence: 'At least one leg is below 70% now.',
-    spread: 'At least one leg has a bid–ask spread over 2¢.',
-    payout: 'Current paper payout is below 2×.',
+    spread: 'At least one bid–ask spread exceeds 2¢.',
+    payout: 'The estimated return is below 2×.',
   }
-  const canReview = quote?.flag !== 'confidence' && quote?.flag !== 'missing'
-  const currentPayout = quote?.paperPayout
+  const currentPayout = quote?.paperPayout ?? row.paperPayout
   return {
     id: row.id,
-    kind: row.kind === 'parlay' ? legs.length + '-leg parlay' : 'Single',
+    group,
+    kind: !single ? legs.length + '-leg combo' : legs[0]?.prop ? 'Player prop' : 'Game pick',
     legs,
     stake: usd(row.stake),
-    price: cents(row.price),
-    pays: usd(Number(row.price) > 0 ? Number(row.stake) / Number(row.price) : 0),
-    ev: (ev >= 0 ? '+' : '') + (ev * 100).toFixed(1) + '%',
-    evTone: ev > 0 ? 'pos' : (ev < -0.015 ? 'neg' : 'muted'),
     rationale: row.rationale,
-    expires: 'until ' + startLabel(row.expiresAt),
-    single: row.kind !== 'parlay',
-    betHref: legs.length === 1 ? legs[0].href : '',
-    canApprove: Boolean(row.canApprove),
+    single,
+    canApprove: group === 'suggested' ? isOpen && row.status === 'pending' : Boolean(row.canApprove),
     approved: row.status === 'approved',
-    kalshiOrderUrl: canReview ? (row.kalshiOrderUrl || '') : '',
-    paperPayout: currentPayout != null ? 'Current paper payout · ' + usd(currentPayout)
-      : row.paperPayout == null ? '' : 'Paper payout at selection · ' + usd(row.paperPayout),
-    quoteWarning: quoteWarnings[quote?.flag] || '',
-    comboOpen: canReview && row.kind === 'parlay' && (row.paperResult === 'pending' || alternative && row.status === 'pending')
-      && Date.parse(row.expiresAt) > Date.now() && row.status !== 'dismissed',
+    canPrepare: isOpen && quoted && !row.kalshiOrderUrl,
+    kalshiOrderUrl: isOpen && quoted ? (row.kalshiOrderUrl || '') : '',
+    paperPayout: currentPayout != null ? usd(currentPayout) : '',
+    payoutLabel: quote?.paperPayout != null ? 'Est. paper return' : 'Paper return at selection',
+    quoteWarning: warnings[quote?.flag] || '',
     result: row.paperResult === 'won' ? 'Won' : row.paperResult === 'lost' ? 'Lost' : row.paperResult === 'partial' ? 'Partial settlement'
-      : row.paperResult === 'pending' ? 'Awaiting result' : alternative && row.status === 'pending' ? 'Ready to review'
-        : row.status === 'expired' ? 'Expired' : 'Result unavailable',
+      : row.paperResult === 'pending' ? 'Tracking on paper' : row.status === 'expired' ? 'Closed for review' : '',
     resultTone: row.paperResult === 'won' ? 'pos' : row.paperResult === 'lost' ? 'neg' : '',
   }
 }
@@ -702,22 +678,51 @@ function suggestionView(row: any, alternative = false, quote?: any): any {
 async function loadSuggestions(): Promise<void> {
   try {
     const response = await bookFetch('/api/trading/suggestions', { credentials: 'same-origin' })
-    if (!response.ok)
+    if (!response.ok) {
+      suggestionsError.set(true)
       return
+    }
     const data = await response.json()
-    suggestions.set((data.pending || []).map((ticket: any) => suggestionView(ticket)))
+    const toCard = (group: 'saved' | 'alternative' | 'suggested') => (ticket: any) => suggestionView(ticket, group, data.prices?.[ticket.id], data.matchups || {})
+    suggestions.set((data.pending || []).map(toCard('suggested')))
     const slate = data.slate
     const summary = slate ? ['won', 'lost', 'pending', 'partial'].map(status => slate.tickets.filter((ticket: any) => ticket.paperResult === status).length) : []
+    const day = instant(slate?.createdAt)
+    const stake = Number(slate?.tickets?.[0]?.stake)
     selectedSlate.set(slate ? {
-      name: slate.name,
-      tickets: slate.tickets.map((ticket: any) => suggestionView(ticket, false, data.prices?.[ticket.id])),
-      alternatives: (slate.alternatives || []).map((ticket: any) => suggestionView(ticket, true, data.prices?.[ticket.id])),
-      stake: usd(slate.tickets.reduce((total: number, ticket: any) => total + Number(ticket.stake), 0)),
+      title: day ? new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' }).format(day) + ' picks' : 'Saved picks',
+      tickets: slate.tickets.map(toCard('saved')),
+      alternatives: (slate.alternatives || []).map(toCard('alternative')),
+      description: stake > 0 && slate.tickets.every((ticket: any) => Number(ticket.stake) === stake)
+        ? 'We saved these picks at ' + usd(stake) + ' each for a paper trial. Real purchases appear in Positions.'
+        : 'We saved these picks for a paper trial. Real purchases appear in Positions.',
       summary: summary[0] + ' won · ' + summary[1] + ' lost · ' + summary[2] + ' awaiting results' + (summary[3] ? ' · ' + summary[3] + ' partial' : ''),
     } : null)
+    purchaseReason.set(data.purchaseReason || '')
+    suggestionsError.set(false)
   }
   catch {
-    // Suggestions are a side panel; the book itself must not fail with them.
+    suggestionsError.set(true)
+  }
+  finally {
+    suggestionsLoading.set(false)
+  }
+}
+
+async function prepareKalshi(id: number): Promise<void> {
+  preparing.set(id)
+  try {
+    const response = await bookFetch('/api/trading/suggestions/' + id + '/prepare', { method: 'POST', credentials: 'same-origin' })
+    const data = await response.json()
+    if (!response.ok)
+      throw new Error(data.message || data.error || 'Kalshi could not prepare this ticket.')
+    prepared.set({ ...prepared(), [id]: { url: data.url, amount: usd(data.stake), error: '' } })
+  }
+  catch (requestError) {
+    prepared.set({ ...prepared(), [id]: { url: '', amount: '', error: messageOf(requestError) } })
+  }
+  finally {
+    preparing.set(0)
   }
 }
 
@@ -791,6 +796,75 @@ onMount(start)
   <head>
     @include('head')
     <style>
+      .desk-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin: 0 0 1.25rem; }
+      .desk-heading h1 { font-size: clamp(2rem, 5vw, 3.1rem); line-height: 1.03; letter-spacing: -0.055em; }
+      .desk-nav { display: flex; gap: clamp(.4rem, 2vw, 1.5rem); border-bottom: 1px solid var(--border); }
+      .desk-nav button { display: inline-flex; flex: 0 1 auto; align-items: center; justify-content: center; gap: .45rem; min-height: 3rem; padding: .55rem .45rem; border-bottom: 2px solid transparent; color: var(--muted); text-align: center; font-size: .875rem; font-weight: 650; }
+      .desk-nav button:hover, .desk-nav button[aria-pressed="true"] { color: var(--text); }
+      .desk-nav button[aria-pressed="true"] { border-color: var(--accent); }
+      .desk-panel { margin-top: 1.5rem; scroll-margin-top: 5rem; }
+      .desk-panel-heading { margin-bottom: 1.15rem; max-width: 42rem; }
+      .desk-panel-heading h2 { font-size: 1.6rem; letter-spacing: -.035em; }
+      .saved-picks, .purchase-status { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .6rem 1rem; padding: .95rem 1.05rem; border: 1px solid var(--border); border-radius: .85rem; background: var(--surface); }
+      .saved-picks { margin-top: .85rem; border-inline-start: 3px solid var(--accent); }
+      .purchase-status { flex-wrap: nowrap; justify-content: flex-start; color: var(--muted); font-size: .8rem; }
+      .purchase-status i { flex-shrink: 0; }
+      .position-overview { display: grid; grid-template-columns: minmax(11rem, 1.4fr) repeat(3, minmax(0, 1fr)); padding: 1.05rem 1.25rem; gap: .85rem 1.05rem; border: 1px solid var(--border); border-radius: 1rem; background: var(--surface); }
+      .balance-hero, .balance-metric { display: grid; align-content: center; gap: .2rem; }
+      .balance-metric { padding-inline-start: 1rem; border-inline-start: 1px solid var(--border); }
+      .balance-metric span, .balance-label { display: flex; align-items: center; gap: .5rem; color: var(--muted); font-size: .8rem; }
+      .balance-hero strong { font-size: clamp(1.55rem, 4vw, 2.3rem); letter-spacing: -.05em; line-height: 1.1; }
+      .balance-metric strong { font-size: 1.05rem; }
+      .pick-group { margin-top: 1.7rem; }
+      .pick-group-title { margin: 0 0 .65rem; font-size: 1rem; font-weight: 700; }
+      .pick-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; align-items: stretch; }
+      .pick-card { display: flex; flex-direction: column; min-width: 0; padding: .95rem; gap: .75rem; border: 1px solid var(--border); border-radius: 1rem; background: var(--surface); }
+      .pick-card-head, .pick-actions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .45rem .8rem; }
+      .pick-card-head { color: var(--muted); font-size: .78rem; }
+      .pick-card-head h4 { color: var(--text); font-weight: 700; }
+      .pick-legs { display: grid; gap: .35rem; }
+      .pick-leg { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .65rem; padding: .65rem; border-radius: .7rem; background: var(--surface-2); color: var(--text); }
+      .pick-leg:hover { background: var(--soft); }
+      .match-marks { display: flex; align-items: center; justify-content: center; min-width: 3rem; color: var(--muted); }
+      .match-mark { display: grid; place-items: center; width: 2.05rem; height: 2.05rem; padding: .12rem; border: 1px solid var(--border); border-radius: .65rem; background: var(--surface); font-size: .55rem; font-weight: 800; }
+      .match-mark + .match-mark { margin-inline-start: -.45rem; }
+      .match-mark img { width: 100%; height: 100%; object-fit: contain; }
+      .pick-name, .pick-matchup, .pick-meta { display: block; }
+      .pick-name { font-size: .94rem; font-weight: 730; line-height: 1.25; text-wrap: pretty; }
+      .pick-matchup, .pick-meta, .pick-chance small { color: var(--muted); font-size: .71rem; line-height: 1.35; }
+      .pick-matchup { margin-top: .2rem; }
+      .pick-meta { margin-top: .15rem; }
+      .pick-chance { text-align: right; }
+      .pick-chance .num { display: block; font-size: 1.05rem; font-weight: 750; line-height: 1.1; }
+      .pick-chance small { white-space: nowrap; }
+      .pick-warning { padding: .45rem .65rem; border-radius: .5rem; background: color-mix(in srgb, var(--neg) 7%, var(--surface)); color: var(--neg); font-size: .77rem; font-weight: 650; }
+      .pick-details { color: var(--muted); font-size: .78rem; }
+      .pick-details summary { cursor: pointer; font-weight: 650; }
+      .pick-details p { margin-top: .45rem; }
+      .pick-actions { margin-top: auto; padding-top: .7rem; border-top: 1px solid var(--border); }
+      .pick-stake { display: grid; gap: .08rem; font-size: .72rem; color: var(--muted); }
+      .pick-stake .num { font-size: .88rem; font-weight: 750; color: var(--text); }
+      .pick-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .65rem; }
+      .pick-primary, .desk-text-action { display: inline-flex; align-items: center; justify-content: center; gap: .35rem; min-height: 2.15rem; font-size: .78rem; font-weight: 700; }
+      .pick-primary { padding: .35rem .7rem; border-radius: .55rem; background: var(--accent); color: var(--on-accent); }
+      .pick-primary:hover { opacity: .9; }
+      .desk-text-action { color: var(--text); }
+      .desk-text-action:hover { text-decoration: underline; text-underline-offset: .14rem; }
+      .desk-text-action:disabled, .pick-primary:disabled { opacity: .55; }
+      :is(.desk-nav button, .desk-text-action, .pick-primary, .pick-leg, .pick-details summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+      @media (max-width: 48rem) {
+        .pick-grid { grid-template-columns: minmax(0, 1fr); }
+        .position-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .balance-metric:nth-child(3) { padding-inline-start: 0; border-inline-start: 0; }
+      }
+      @media (max-width: 27rem) {
+        .desk-nav button { gap: .25rem; padding-inline: .25rem; font-size: .78rem; }
+        .desk-nav button i { display: none; }
+        .pick-card { padding: .7rem; }
+        .pick-leg { gap: .45rem; padding: .55rem; }
+        .match-marks { min-width: 2.55rem; }
+        .match-mark { width: 1.7rem; height: 1.7rem; }
+      }
       .status-dot { width: 8px; height: 8px; border-radius: 9999px; background: var(--faint); }
       .status-dot.on { background: var(--pos); }
 
@@ -829,9 +903,6 @@ onMount(start)
       .cell { text-align: right; }
       .cell-label { display: block; font-size: 11px; font-weight: 600; color: var(--faint); }
       .simple-row { display: grid; gap: 16px; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--border); grid-template-columns: minmax(0, 1fr) auto; }
-      .suggestion { display: grid; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--border); }
-      .suggestion-legs { display: grid; gap: 6px; }
-      .suggestion-leg { display: flex; gap: 8px; align-items: center; min-width: 0; padding: 8px 10px; border-radius: 10px; background: var(--soft, rgba(127,127,127,.06)); color: inherit; text-decoration: none; }
       .paper-legs { display: grid; gap: 6px; padding: 0 18px 14px; margin-top: -6px; border-bottom: 1px solid var(--border); }
       .paper-leg { display: flex; gap: 8px; align-items: center; min-width: 0; }
       .simple-row:last-child { border-bottom: 0; }
@@ -877,30 +948,15 @@ onMount(start)
       </div>
 
       <main class="mx-auto pb-4 pt-8 px-4 sm:px-6 max-w-6xl">
-        {{-- Portfolio headline: one big number, the way an exchange opens. --}}
-        <div class="flex flex-wrap gap-4 items-end justify-between">
-          <div>
-            <div class="flex gap-2 items-center font-semibold text-sm muted">
-              <span class="status-dot" :class="live() ? 'on' : ''"></span>
-              <span>Portfolio</span>
-            </div>
-            <div class="mt-2 text-6xl sm:text-7xl figure-xl" x-text="signedIn() ? totals().portfolio : '—'"></div>
-            <div x-show="signedIn()" x-cloak class="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-sm">
-              <span><span class="font-semibold num" :class="totals().unrealizedTone" x-text="totals().unrealized"></span> <span class="muted">open P&amp;L</span></span>
-              <span><span class="font-semibold num" :class="totals().realizedTodayTone" x-text="totals().realizedToday"></span> <span class="muted">today</span></span>
-              <span><span class="font-semibold num" x-text="totals().cash"></span> <span class="muted">cash</span></span>
-              <span><span class="font-semibold num" x-text="totals().toWin"></span> <span class="muted">to win</span></span>
-              <span x-show="totals().hasParlayEst" title="Your parlay contracts times the product of each leg's live price. Legs move together, so this is a guide, not a price."><span class="font-semibold num" x-text="totals().parlayEst"></span> <span class="muted">est. in parlays</span> <span class="font-semibold num" :class="totals().parlayEstTone" x-text="'(' + totals().parlayEstGain + ')'"></span></span>
-            </div>
+        <header class="desk-heading">
+          <h1 class="display">My bets</h1>
+          <div x-show="signedIn()" class="flex gap-2 items-center">
+            <a href="/history" data-no-router class="inline-flex gap-2 items-center px-4 h-10 font-semibold text-sm rounded-full btn"><i aria-hidden="true" class="h-4 w-4 i-hugeicons-clock-01"></i>History</a>
+            <button type="button" class="inline-flex gap-2 items-center px-4 h-10 font-semibold text-sm rounded-full btn" @click="load(true)"><i aria-hidden="true" class="h-4 w-4 i-hugeicons-refresh"></i>Refresh</button>
           </div>
+        </header>
 
-          <div class="flex gap-2 items-center">
-            <span class="text-xs faint num" x-text="loading() ? 'Loading…' : (stamp() ? 'Updated ' + stamp() : '')"></span>
-            <a href="/history" data-no-router class="inline-flex gap-2 items-center px-4 h-10 font-semibold text-sm rounded-full btn"><i class="h-4 w-4 i-hugeicons-clock-01"></i>History</a>
-            <button type="button" class="inline-flex gap-2 items-center px-4 h-10 font-semibold text-sm rounded-full btn" @click="load(true)" aria-label="Refresh"><i class="h-4 w-4 i-hugeicons-refresh"></i><span class="hidden sm:inline">Refresh</span></button>
-          </div>
-        </div>
-
+        <p x-show="loading()" x-cloak class="mt-6 text-sm muted" role="status">Loading your bets…</p>
         <p x-show="error()" x-cloak class="mt-5 px-4 py-3 text-sm rounded-xl card" role="status">
           <span class="font-bold neg">Not updating</span>
           <span class="muted" x-text="'— ' + error() + '. These are the last figures received.'"></span>
@@ -918,59 +974,120 @@ onMount(start)
         </section>
 
         <div x-show="signedIn()" x-cloak>
-          <section id="suggestion-slate" x-show="selectedSlate()" class="scroll-mt-24" aria-labelledby="slate-title">
-            <div class="flex-wrap gap-2 section-head">
-              <h2 id="slate-title" class="section-title" x-text="selectedSlate()?.name"></h2>
-              <span class="text-xs faint" x-text="selectedSlate() ? selectedSlate().tickets.length + ' tickets · ' + selectedSlate().stake + ' total planned stake' : ''"></span>
-            </div>
-            <div class="mb-3 px-4 py-3 rounded-xl card">
-              <p class="font-semibold text-sm" x-text="selectedSlate()?.summary"></p>
-              <p class="mt-1 text-xs muted">Prices and probabilities update from Kalshi. Combo payouts shown here are paper estimates. Place real orders on Kalshi.</p>
-            </div>
-            <template :for="group in slateGroups">
+          <nav class="desk-nav" aria-label="Bet views">
+            <button type="button" :aria-pressed="panel() === 'positions'" @click="panel.set('positions')">
+              <i aria-hidden="true" class="h-4 w-4 i-hugeicons-wallet-01"></i>Positions
+            </button>
+            <button type="button" :aria-pressed="panel() === 'suggestions'" @click="panel.set('suggestions')">
+              <i aria-hidden="true" class="h-4 w-4 i-hugeicons-target-01"></i>Suggested bets
+            </button>
+            <button type="button" :aria-pressed="panel() === 'paper'" @click="panel.set('paper')">
+              <i aria-hidden="true" class="h-4 w-4 i-hugeicons-chart-line-data-01"></i>Paper tracking
+            </button>
+          </nav>
+
+          <section id="suggestion-slate" x-show="panel() === 'suggestions'" class="desk-panel" aria-labelledby="picks-title">
+            <header class="desk-panel-heading">
+              <h2 id="picks-title" class="section-title">Suggested bets</h2>
+              <p class="mt-1 text-sm muted">PredictHQ looks for picks with at least a 70% market-implied chance per leg. Review the latest Kalshi odds before buying.</p>
+            </header>
+
+            <p x-show="purchaseReason()" class="purchase-status" role="status">
+              <i aria-hidden="true" class="h-4 w-4 i-hugeicons-information-circle"></i>
+              <span x-text="purchaseReason()"></span>
+            </p>
+
+            <aside x-show="selectedSlate()" class="saved-picks">
               <div>
-                <div x-show="group.title" class="flex-wrap gap-2 section-head">
-                  <h3 class="section-title" x-text="group.title"></h3>
-                  <span class="text-xs faint">Check the live combo payout on Kalshi before placing an order.</span>
-                </div>
-                <div class="grid gap-3 grid-cols-1 lg:grid-cols-2">
+                <h3 class="font-bold" x-text="selectedSlate()?.title"></h3>
+                <p class="mt-1 text-sm muted" x-text="selectedSlate()?.description"></p>
+              </div>
+              <button type="button" class="desk-text-action" @click="panel.set('paper')">See paper results <i aria-hidden="true" class="h-4 w-4 i-hugeicons-arrow-right-01"></i></button>
+            </aside>
+
+            <p x-show="suggestionsLoading()" class="py-6 text-sm muted" role="status">Loading suggested bets…</p>
+            <p x-show="suggestionsError()" class="py-4 text-sm neg" role="status">Suggested bets couldn’t refresh. Try Refresh.</p>
+            <p x-show="!suggestionsLoading() && !suggestionsError() && pickGroups().length === 0" class="py-8 text-sm muted">There are no suggested bets to review right now.</p>
+
+            <template :for="group in pickGroups">
+              <section class="pick-group">
+                <h3 x-show="group.title" class="pick-group-title" x-text="group.title"></h3>
+                <div class="pick-grid">
                   <template :for="ticket in group.tickets">
-                    <article class="grid content-start gap-3 p-4 card">
-                      <div class="flex flex-wrap gap-2 items-center justify-between">
-                        <div class="flex gap-2 items-center">
-                          <span class="pill" x-text="ticket.kind"></span>
-                          <span class="font-bold text-sm num" x-text="ticket.stake + ' planned stake'"></span>
-                        </div>
-                        <span class="font-semibold text-xs" :class="ticket.resultTone" x-text="ticket.result"></span>
-                      </div>
-                      <div class="suggestion-legs">
+                    <article class="pick-card">
+                      <header class="pick-card-head">
+                        <h4 x-text="ticket.kind"></h4>
+                        <span x-show="ticket.result" :class="ticket.resultTone" x-text="ticket.result"></span>
+                      </header>
+                      <div class="pick-legs">
                         <template :for="leg in ticket.legs">
-                          <a :href="leg.href" data-no-router class="suggestion-leg">
-                            <span class="min-w-0 font-semibold text-sm" x-text="leg.label"></span>
-                            <span class="shrink-0 ml-auto text-right">
-                              <span class="block font-semibold text-sm num" x-text="leg.confidence"></span>
-                              <span x-show="leg.book" class="block text-xs muted" x-text="leg.book"></span>
-                              <span class="block text-xs muted" x-text="leg.side + ' · ' + leg.starts"></span>
-                            </span>
+                          <a :href="leg.href" data-no-router class="pick-leg">
+                            <div class="match-marks" aria-hidden="true">
+                              <template :for="team in leg.teams">
+                                <span class="match-mark">
+                                  <img x-show="team.logo" :src="team.logo" alt="" width="27" height="27" loading="lazy">
+                                  <span x-show="!team.logo" x-text="team.initials"></span>
+                                </span>
+                              </template>
+                              <i x-show="leg.teams.length === 0" class="h-5 w-5 i-hugeicons-basketball-01"></i>
+                            </div>
+                            <div class="min-w-0">
+                              <span class="pick-name" x-text="leg.label"></span>
+                              <span x-show="leg.matchup" class="pick-matchup" x-text="leg.matchup"></span>
+                              <span class="pick-meta" x-text="leg.league ? leg.league + ' · ' + leg.starts : leg.starts"></span>
+                            </div>
+                            <div x-show="leg.confidence" class="pick-chance">
+                              <span class="num" x-text="leg.confidence"></span>
+                              <small x-text="leg.confidenceLabel"></small>
+                            </div>
                           </a>
                         </template>
                       </div>
-                      <p x-show="ticket.paperPayout" class="text-xs muted" x-text="ticket.paperPayout"></p>
-                      <p x-show="ticket.quoteWarning" class="font-semibold text-xs neg" x-text="ticket.quoteWarning"></p>
-                      <div class="flex flex-wrap gap-2 items-center justify-end">
-                        <span x-show="ticket.approved" class="font-semibold text-xs pos">Approved on paper</span>
-                        <a x-show="ticket.kalshiOrderUrl" :href="ticket.kalshiOrderUrl" target="_blank" rel="noopener noreferrer" class="inline-flex items-center px-4 h-9 font-bold text-sm rounded-full btn">Open on Kalshi</a>
-                        <a x-show="ticket.single && !ticket.kalshiOrderUrl" :href="ticket.betHref" data-no-router class="inline-flex items-center px-4 h-9 font-bold text-sm rounded-full btn">Review market</a>
-                        <a x-show="ticket.comboOpen" href="https://kalshi.com/combos" target="_blank" rel="noopener noreferrer" class="inline-flex items-center px-4 h-9 font-bold text-sm rounded-full btn">Open Kalshi combo builder</a>
-                        <button x-show="ticket.canApprove" type="button" class="px-4 h-9 font-bold text-sm rounded-full btn btn-primary" :disabled="suggestionBusy() !== 0" @click="decide(ticket.id, true)">Approve on paper</button>
+                      <p x-show="ticket.quoteWarning" class="pick-warning" x-text="ticket.quoteWarning"></p>
+                      <details class="pick-details">
+                        <summary>Odds and reasoning</summary>
+                        <template :for="leg in ticket.legs">
+                          <p class="text-xs muted"><strong x-text="leg.label"></strong> <span x-text="leg.side"></span> <span x-show="leg.book" x-text="' · ' + leg.book"></span></p>
+                        </template>
+                        <p x-show="ticket.rationale" class="text-xs muted" x-text="ticket.rationale"></p>
+                      </details>
+                      <div class="pick-actions">
+                        <div class="pick-stake">
+                          <span class="num" x-text="ticket.stake + ' stake'"></span>
+                          <span x-show="ticket.paperPayout" x-text="ticket.payoutLabel + ' ' + ticket.paperPayout"></span>
+                        </div>
+                        <div class="pick-buttons">
+                          <a x-show="ticket.canPrepare && prepared()[ticket.id]?.url" :href="prepared()[ticket.id]?.url" target="_blank" rel="noopener noreferrer" class="pick-primary">Review on Kalshi <i aria-hidden="true" class="h-4 w-4 i-hugeicons-arrow-up-right-01"></i></a>
+                          <a x-show="ticket.kalshiOrderUrl" :href="ticket.kalshiOrderUrl" target="_blank" rel="noopener noreferrer" class="pick-primary">Review on Kalshi <i aria-hidden="true" class="h-4 w-4 i-hugeicons-arrow-up-right-01"></i></a>
+                          <button x-show="ticket.canPrepare && !prepared()[ticket.id]?.url" type="button" class="pick-primary" :disabled="preparing() !== 0" @click="prepareKalshi(ticket.id)" x-text="preparing() === ticket.id ? 'Preparing…' : ticket.single ? 'Prepare bet' : 'Prepare combo'"></button>
+                          <button x-show="ticket.canApprove" type="button" class="desk-text-action" :disabled="suggestionBusy() !== 0" @click="decide(ticket.id, true)" x-text="ticket.group === 'saved' ? 'Mark reviewed' : 'Track on paper'"></button>
+                          <button x-show="ticket.group === 'suggested' && ticket.canApprove" type="button" class="desk-text-action" :disabled="suggestionBusy() !== 0" @click="decide(ticket.id, false)">Dismiss</button>
+                          <span x-show="ticket.approved" class="font-semibold text-xs pos">Reviewed on paper</span>
+                        </div>
                       </div>
+                      <p x-show="prepared()[ticket.id]?.url && ticket.canPrepare" class="text-xs muted" x-text="'Planned stake ' + prepared()[ticket.id]?.amount + ' · check the live payout when you review.'"></p>
+                      <p x-show="prepared()[ticket.id]?.error" class="text-xs neg" role="status" x-text="prepared()[ticket.id]?.error"></p>
                     </article>
                   </template>
                 </div>
-              </div>
+              </section>
             </template>
           </section>
 
+          <div x-show="panel() === 'positions'" id="real-positions" class="desk-panel">
+            <div class="position-overview">
+              <div class="balance-hero">
+                <span class="balance-label"><span class="status-dot" :class="live() ? 'on' : ''"></span>Available cash</span>
+                <strong class="num" x-text="totals().cash"></strong>
+              </div>
+              <div class="balance-metric"><span>Portfolio value</span><strong class="num" x-text="totals().portfolio"></strong></div>
+              <div class="balance-metric"><span>Unrealized P&amp;L</span><strong class="num" :class="totals().unrealizedTone" x-text="totals().unrealized"></strong></div>
+              <div class="balance-metric"><span>Settled today</span><strong class="num" :class="totals().realizedTodayTone" x-text="totals().realizedToday"></strong></div>
+            </div>
+            <div x-show="selectedSlate() && empty()" class="saved-picks">
+              <div><h2 class="font-bold" x-text="selectedSlate()?.title"></h2><p class="mt-1 text-sm muted">Review the picks PredictHQ saved for you.</p></div>
+              <button type="button" class="desk-text-action" @click="panel.set('suggestions')">View suggested bets <i aria-hidden="true" class="h-4 w-4 i-hugeicons-arrow-right-01"></i></button>
+            </div>
           {{-- Connected venues, with whatever the venue last said. --}}
           <section x-show="accounts().length > 0" class="flex flex-wrap gap-2 items-center mt-6">
             <template :for="account in accounts">
@@ -1278,48 +1395,6 @@ onMount(start)
             </div>
           </section>
 
-          {{-- Bets PredictHQ suggests. Approving records a paper bet; betting
-               one for real is the user's own step on Kalshi, linked here. --}}
-          <section x-show="suggestions().length > 0 && tab() === 'all'">
-            <div class="section-head">
-              <h2 class="section-title">Suggested bets</h2>
-              <span class="text-xs faint">approve to track on paper · real money is your call on Kalshi</span>
-            </div>
-            <div class="overflow-hidden card">
-              <template :for="suggestion in suggestions">
-                <div class="suggestion">
-                  <div class="flex flex-wrap gap-2 items-baseline justify-between">
-                    <div class="flex gap-2 items-center">
-                      <span class="pill" x-text="suggestion.kind"></span>
-                      <span class="text-xs faint" x-text="suggestion.expires"></span>
-                    </div>
-                    <div class="flex flex-wrap gap-3 items-center">
-                      <div class="figure"><span class="cell-label">Stake</span><span class="font-bold num" x-text="suggestion.stake"></span></div>
-                      <div class="figure"><span class="cell-label">Price</span><span class="font-bold num" x-text="suggestion.price"></span></div>
-                      <div class="figure"><span class="cell-label">Pays</span><span class="font-bold num" x-text="suggestion.pays"></span></div>
-                      <div class="figure"><span class="cell-label">Expected</span><span class="font-bold num" :class="suggestion.evTone" x-text="suggestion.ev"></span></div>
-                    </div>
-                  </div>
-                  <div class="suggestion-legs">
-                    <template :for="leg in suggestion.legs">
-                      <a :href="leg.href" data-no-router class="suggestion-leg">
-                        <span class="pill" :class="leg.live ? 'live' : ''" x-text="leg.starts"></span>
-                        <span class="min-w-0 font-semibold text-sm truncate" x-text="leg.label"></span>
-                        <span class="ml-auto font-semibold text-sm num" x-text="leg.price"></span>
-                      </a>
-                    </template>
-                  </div>
-                  <p class="leading-relaxed text-xs muted" x-show="suggestion.rationale" x-text="suggestion.rationale"></p>
-                  <div class="flex flex-wrap gap-2 items-center justify-end">
-                    <a x-show="suggestion.single" :href="suggestion.betHref" data-no-router class="inline-flex items-center px-4 h-9 font-bold text-sm rounded-full btn">Bet on Kalshi</a>
-                    <button type="button" class="px-4 h-9 font-bold text-sm rounded-full btn" :disabled="suggestionBusy() === suggestion.id" @click="decide(suggestion.id, false)">Dismiss</button>
-                    <button type="button" class="px-4 h-9 font-bold text-sm rounded-full btn btn-primary" :disabled="suggestionBusy() === suggestion.id" @click="decide(suggestion.id, true)">Approve on paper</button>
-                  </div>
-                </div>
-              </template>
-            </div>
-          </section>
-
           {{-- Decisions the engine has made and is waiting on a person for.
                Approving runs the same executor the schedule does, so the
                risk checks are the same ones. --}}
@@ -1352,13 +1427,53 @@ onMount(start)
             </div>
           </section>
 
+          <section x-show="settled().length > 0 && tab() === 'all'">
+            <div class="section-head">
+              <h2 class="section-title">Recently settled</h2>
+              <span class="text-xs faint">all time <span class="num" :class="totals().realizedAllTone" x-text="totals().realizedAll"></span> · <a href="/history" data-no-router class="font-semibold underline">full history</a></span>
+            </div>
+            <div class="overflow-hidden card">
+              <template :for="position in settled">
+                <div class="simple-row">
+                  <div class="min-w-0">
+                    <div class="font-semibold truncate" x-text="position.question"></div>
+                    <div class="row-meta">
+                      <span class="pill" :class="position.resultClass" x-text="position.result"></span>
+                      <span class="text-xs faint" x-text="position.outcome"></span>
+                      <span class="text-xs muted" x-text="position.strategy"></span>
+                      <span class="text-xs faint" x-text="ago(position.settledAt)"></span>
+                    </div>
+                  </div>
+                  <div class="figures">
+                    <div class="figure"><span class="cell-label">Size</span><span class="font-bold num" x-text="position.size"></span></div>
+                    <div class="figure"><span class="cell-label">Cost</span><span class="font-bold num" x-text="position.cost"></span></div>
+                    <div class="figure"><span class="cell-label">Result</span><span class="font-bold num" :class="position.realizedTone" x-text="position.realized"></span></div>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </section>
+
+            <p x-show="totals().unpricedCount > 0" class="mt-6 text-sm muted" x-text="totals().unpricedCount + ' positions are awaiting quotes.'"></p>
+          </div>
+
+          <section x-show="panel() === 'paper'" id="paper-tracking" class="desk-panel" aria-labelledby="paper-title">
+            <header class="desk-panel-heading">
+              <h2 id="paper-title" class="section-title">Paper tracking</h2>
+              <p class="mt-1 text-sm muted">Simulated trades and outcomes.</p>
+            </header>
+            <aside x-show="selectedSlate()" class="saved-picks">
+              <div><h3 class="font-bold" x-text="selectedSlate()?.title"></h3><p class="mt-1 text-sm muted" x-text="selectedSlate()?.summary"></p></div>
+              <button type="button" class="desk-text-action" @click="panel.set('suggestions')">View picks <i aria-hidden="true" class="h-4 w-4 i-hugeicons-arrow-right-01"></i></button>
+            </aside>
+            <p x-show="!paper().length && !paperSettled().length && !selectedSlate()" class="py-8 text-sm muted">Your paper bets will appear here.</p>
           {{-- Paper, kept apart from the money above rather than summed into
                it. A simulated gain added to a real balance is a number that
                describes nothing. --}}
-          <section x-show="paper().length > 0 && tab() === 'all'">
+          <section x-show="paper().length > 0">
             <div class="section-head">
               <h2 class="section-title">Paper positions</h2>
-              <span class="text-xs faint">not real money · <span class="num" :class="totals().paperTone" x-text="totals().paperUnrealized"></span></span>
+              <span class="text-xs faint">Open P&amp;L <span class="num" :class="totals().paperTone" x-text="totals().paperUnrealized"></span></span>
             </div>
             <div class="overflow-hidden card">
               <template :for="position in paper">
@@ -1395,10 +1510,10 @@ onMount(start)
 
           {{-- What already happened. --}}
           {{-- Paper results, apart from real money. --}}
-          <section x-show="paperSettled().length > 0 && tab() === 'all'">
+          <section x-show="paperSettled().length > 0">
             <div class="section-head">
               <h2 class="section-title">Paper results</h2>
-              <span class="text-xs faint">not real money · all time <span class="num" :class="totals().paperRealizedTone" x-text="totals().paperRealizedAll"></span></span>
+              <span class="text-xs faint">All time <span class="num" :class="totals().paperRealizedTone" x-text="totals().paperRealizedAll"></span></span>
             </div>
             <div class="overflow-hidden card">
               <template :for="position in paperSettled">
@@ -1421,40 +1536,7 @@ onMount(start)
             </div>
           </section>
 
-          <section x-show="settled().length > 0 && tab() === 'all'">
-            <div class="section-head">
-              <h2 class="section-title">Recently settled</h2>
-              <span class="text-xs faint">all time <span class="num" :class="totals().realizedAllTone" x-text="totals().realizedAll"></span> · <a href="/history" data-no-router class="font-semibold underline">full history</a></span>
-            </div>
-            <div class="overflow-hidden card">
-              <template :for="position in settled">
-                <div class="simple-row">
-                  <div class="min-w-0">
-                    <div class="font-semibold truncate" x-text="position.question"></div>
-                    <div class="row-meta">
-                      <span class="pill" :class="position.resultClass" x-text="position.result"></span>
-                      <span class="text-xs faint" x-text="position.outcome"></span>
-                      <span class="text-xs muted" x-text="position.strategy"></span>
-                      <span class="text-xs faint" x-text="ago(position.settledAt)"></span>
-                    </div>
-                  </div>
-                  <div class="figures">
-                    <div class="figure"><span class="cell-label">Size</span><span class="font-bold num" x-text="position.size"></span></div>
-                    <div class="figure"><span class="cell-label">Cost</span><span class="font-bold num" x-text="position.cost"></span></div>
-                    <div class="figure"><span class="cell-label">Result</span><span class="font-bold num" :class="position.realizedTone" x-text="position.realized"></span></div>
-                  </div>
-                </div>
-              </template>
-            </div>
           </section>
-
-          <p x-show="totals().unpricedCount > 0" class="mt-6 text-sm muted">
-            <span x-text="totals().unpricedCount"></span> positions are awaiting quotes. Their value and P&amp;L are left out of the totals until a price is available.
-          </p>
-
-          <p class="mt-10 max-w-3xl leading-relaxed text-xs faint">
-            Positions and balances are read from the venue itself, including anything you traded in its own app. Values mark against the last trade; the chance shown is the live quote midpoint, an estimate rather than a price you can sell at. A parlay's chance and estimated value multiply its legs' live prices. Scores from ESPN.
-          </p>
         </div>
       </main>
 

@@ -9,6 +9,7 @@ import type {
   VenuePosition,
 } from './venue'
 import { createSign } from 'node:crypto'
+import { toMarketInfo } from '../prediction-markets/kalshi-public'
 import { isAuthFailure, isRetryableStatus, isTransientAuthFailure, VenueError } from './venue'
 
 const BASE = process.env.KALSHI_API_BASE_URL || 'https://external-api.kalshi.com/trade-api/v2'
@@ -27,6 +28,12 @@ interface KalshiOrder {
   yes_price_dollars?: string
   no_price_dollars?: string
   created_time?: string
+}
+
+export interface KalshiComboLeg {
+  event_ticker: string
+  market_ticker: string
+  side: 'yes' | 'no'
 }
 
 /**
@@ -138,6 +145,16 @@ export class KalshiTradingClient implements TradingClient {
 
   async fetchHistory() {
     return await kalshiHistory(path => this.request('GET', path), this.credentials.subaccount ?? 0)
+  }
+
+  /** Resolve the exact contract for a combo so it can be reviewed on Kalshi. */
+  async prepareCombo(collection: string, legs: KalshiComboLeg[]) {
+    const data = await this.request<{ market_ticker: string, market?: unknown }>(
+      'POST',
+      `/multivariate_event_collections/${encodeURIComponent(collection)}`,
+      { selected_markets: legs, with_market_payload: true },
+    )
+    return { ticker: data.market_ticker, market: toMarketInfo(data.market) }
   }
 
   async fetchBalance(): Promise<VenueBalance> {

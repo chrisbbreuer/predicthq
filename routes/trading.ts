@@ -71,6 +71,7 @@ route.group({ middleware: ['auth', 'throttle:60,1'] }, () => {
 // how an account gets rate limited or blocked. Nobody connects an account
 // five times a minute legitimately.
 route.group({ middleware: ['auth', 'throttle:5,1'] }, () => {
+  route.post('/trading/suggestions/{id}/prepare', 'Actions/Trading/PrepareSuggestion')
   route.post('/trading/history/sync', 'Actions/Trading/SyncHistory')
   route.post('/trading/accounts', 'Actions/Trading/ConnectExchangeAccount')
   route.delete('/trading/accounts/{venue}', 'Actions/Trading/DisconnectExchangeAccount')

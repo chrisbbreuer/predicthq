@@ -3,6 +3,7 @@ import type { LiveLine } from '../../app/Services/trading/line-snapshots'
 import { afterEach, describe, expect, it } from 'bun:test'
 import { rmSync } from 'node:fs'
 import { toMarketInfo } from '../../app/Services/prediction-markets/kalshi-public'
+import { prepareExactCombo } from '../../app/Services/trading/suggestion-kalshi'
 import { suggestionPrices } from '../../app/Services/trading/suggestion-prices'
 import { approveSuggestion, dismissSuggestion, generateSuggestions, listSuggestions } from '../../app/Services/trading/suggestions'
 import { parlayPayout } from '../../app/Services/trading/paper-parlays'
@@ -174,6 +175,32 @@ describe('suggestions', () => {
     markets.delete(parlay.legs[0]!.ticker)
     expect((await suggestionPrices([parlay], load, NOW))[parlay.id]).toMatchObject({ flag: 'missing', paperPayout: null })
     expect(await suggestionPrices([parlay], load, Date.parse(soon) + 1)).toEqual({})
+  })
+
+  it('prepares the exact Kalshi combo and rejects a changed side from the venue', async () => {
+    const legs = [
+      { market_ticker: 'GAME-A-TEAM', event_ticker: 'GAME-A', side: 'no' as const },
+      { market_ticker: 'GAME-B-TEAM', event_ticker: 'GAME-B', side: 'yes' as const },
+    ]
+    const collection = {
+      collection_ticker: 'COLLECTION',
+      associated_events: legs.map(leg => ({ ticker: leg.event_ticker })),
+      size_min: 2,
+      size_max: 0,
+      is_all_yes: false,
+      is_single_market_per_event: true,
+    }
+    const ticker = 'KXMVE-EXACT-COMBO'
+    const prepare = async (selected: string, body: typeof legs) => {
+      expect(selected).toBe(collection.collection_ticker)
+      expect(body).toEqual(legs)
+      return { ticker, market: toMarketInfo({ ticker, mve_selected_legs: [...body].reverse() }) }
+    }
+    expect(await prepareExactCombo(legs, [{ ...collection, is_all_yes: true }, collection], prepare)).toBe(ticker)
+    await expect(prepareExactCombo(legs, [collection], async () => ({
+      ticker,
+      market: toMarketInfo({ ticker, mve_selected_legs: legs.map(leg => ({ ...leg, side: 'yes' })) }),
+    }))).rejects.toThrow('different legs')
   })
 
   it('builds parlays of several live legs while games run, each paying at least 2x', async () => {
