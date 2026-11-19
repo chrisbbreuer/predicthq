@@ -645,13 +645,17 @@ async function load(fromVenue = false): Promise<void> {
 }
 
 /** A suggestion as the card draws it. */
-function suggestionView(row: any, alternative = false): any {
-  const legs = (row.legs || []).map((leg: any) => {
+function suggestionView(row: any, alternative = false, quote?: any): any {
+  const legs = (row.legs || []).map((leg: any, index: number) => {
     const confidence = Number(leg.confidence ?? (leg.side === 'yes' ? leg.yesMid : 1 - leg.yesMid))
+    const current = quote?.legs[index]
     return {
       label: leg.label,
       price: cents(leg.price),
-      confidence: Number.isFinite(confidence) ? (confidence * 100).toFixed(1) + '%' : '',
+      confidence: current
+        ? (current.confidence * 100).toFixed(1) + '% now'
+        : Number.isFinite(confidence) ? (confidence * 100).toFixed(1) + '% at selection' : '',
+      book: current ? cents(current.bid) + ' bid · ' + cents(current.ask) + ' ask' : '',
       live: Boolean(leg.live),
       starts: leg.live ? 'Live now' : startLabel(leg.startsAt),
       side: leg.side === 'no' ? 'NO' : 'YES',
@@ -659,6 +663,14 @@ function suggestionView(row: any, alternative = false): any {
     }
   })
   const ev = Number(row.ev) || 0
+  const quoteWarnings: Record<string, string> = {
+    missing: 'Fresh order book unavailable for at least one leg.',
+    confidence: 'At least one leg is below 70% now.',
+    spread: 'At least one leg has a bid–ask spread over 2¢.',
+    payout: 'Current paper payout is below 2×.',
+  }
+  const canReview = quote?.flag !== 'confidence' && quote?.flag !== 'missing'
+  const currentPayout = quote?.paperPayout
   return {
     id: row.id,
     kind: row.kind === 'parlay' ? legs.length + '-leg parlay' : 'Single',
@@ -674,9 +686,11 @@ function suggestionView(row: any, alternative = false): any {
     betHref: legs.length === 1 ? legs[0].href : '',
     canApprove: Boolean(row.canApprove),
     approved: row.status === 'approved',
-    kalshiOrderUrl: row.kalshiOrderUrl || '',
-    paperPayout: row.paperPayout == null ? '' : usd(row.paperPayout),
-    comboOpen: row.kind === 'parlay' && (row.paperResult === 'pending' || alternative && row.status === 'pending')
+    kalshiOrderUrl: canReview ? (row.kalshiOrderUrl || '') : '',
+    paperPayout: currentPayout != null ? 'Current paper payout · ' + usd(currentPayout)
+      : row.paperPayout == null ? '' : 'Paper payout at selection · ' + usd(row.paperPayout),
+    quoteWarning: quoteWarnings[quote?.flag] || '',
+    comboOpen: canReview && row.kind === 'parlay' && (row.paperResult === 'pending' || alternative && row.status === 'pending')
       && Date.parse(row.expiresAt) > Date.now() && row.status !== 'dismissed',
     result: row.paperResult === 'won' ? 'Won' : row.paperResult === 'lost' ? 'Lost' : row.paperResult === 'partial' ? 'Partial settlement'
       : row.paperResult === 'pending' ? 'Awaiting result' : alternative && row.status === 'pending' ? 'Ready to review'
@@ -696,8 +710,8 @@ async function loadSuggestions(): Promise<void> {
     const summary = slate ? ['won', 'lost', 'pending', 'partial'].map(status => slate.tickets.filter((ticket: any) => ticket.paperResult === status).length) : []
     selectedSlate.set(slate ? {
       name: slate.name,
-      tickets: slate.tickets.map((ticket: any) => suggestionView(ticket)),
-      alternatives: (slate.alternatives || []).map((ticket: any) => suggestionView(ticket, true)),
+      tickets: slate.tickets.map((ticket: any) => suggestionView(ticket, false, data.prices?.[ticket.id])),
+      alternatives: (slate.alternatives || []).map((ticket: any) => suggestionView(ticket, true, data.prices?.[ticket.id])),
       stake: usd(slate.tickets.reduce((total: number, ticket: any) => total + Number(ticket.stake), 0)),
       summary: summary[0] + ' won · ' + summary[1] + ' lost · ' + summary[2] + ' awaiting results' + (summary[3] ? ' · ' + summary[3] + ' partial' : ''),
     } : null)
@@ -911,7 +925,7 @@ onMount(start)
             </div>
             <div class="mb-3 px-4 py-3 rounded-xl card">
               <p class="font-semibold text-sm" x-text="selectedSlate()?.summary"></p>
-              <p class="mt-1 text-xs muted">Approve tickets in PredictHQ to mark them on paper. Place real orders on Kalshi. Percentages are the Kalshi-implied probabilities at selection.</p>
+              <p class="mt-1 text-xs muted">Prices and probabilities update from Kalshi. Combo payouts shown here are paper estimates. Place real orders on Kalshi.</p>
             </div>
             <template :for="group in slateGroups">
               <div>
@@ -935,12 +949,14 @@ onMount(start)
                             <span class="min-w-0 font-semibold text-sm" x-text="leg.label"></span>
                             <span class="shrink-0 ml-auto text-right">
                               <span class="block font-semibold text-sm num" x-text="leg.confidence"></span>
+                              <span x-show="leg.book" class="block text-xs muted" x-text="leg.book"></span>
                               <span class="block text-xs muted" x-text="leg.side + ' · ' + leg.starts"></span>
                             </span>
                           </a>
                         </template>
                       </div>
-                      <p x-show="ticket.paperPayout" class="text-xs muted" x-text="'Paper payout at selection · ' + ticket.paperPayout"></p>
+                      <p x-show="ticket.paperPayout" class="text-xs muted" x-text="ticket.paperPayout"></p>
+                      <p x-show="ticket.quoteWarning" class="font-semibold text-xs neg" x-text="ticket.quoteWarning"></p>
                       <div class="flex flex-wrap gap-2 items-center justify-end">
                         <span x-show="ticket.approved" class="font-semibold text-xs pos">Approved on paper</span>
                         <a x-show="ticket.kalshiOrderUrl" :href="ticket.kalshiOrderUrl" target="_blank" rel="noopener noreferrer" class="inline-flex items-center px-4 h-9 font-bold text-sm rounded-full btn">Open on Kalshi</a>

@@ -31,6 +31,8 @@ export interface KalshiMarketInfo {
   lastPrice: number | null
   yesBid: number | null
   yesAsk: number | null
+  noBid?: number | null
+  noAsk?: number | null
   volume: number
   /** Parlay legs, for multivariate markets. Empty otherwise. */
   legs: Array<{ eventTicker: string, marketTicker: string, side: 'yes' | 'no' }>
@@ -130,6 +132,8 @@ export function toMarketInfo(raw: any): KalshiMarketInfo {
     lastPrice: price(raw?.last_price_dollars),
     yesBid: price(raw?.yes_bid_dollars),
     yesAsk: price(raw?.yes_ask_dollars),
+    noBid: price(raw?.no_bid_dollars),
+    noAsk: price(raw?.no_ask_dollars),
     volume: Number.parseFloat(String(raw?.volume_fp ?? '0')) || 0,
     legs: legs.flatMap((leg: any) => leg?.market_ticker
       ? [{

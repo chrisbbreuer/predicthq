@@ -2,6 +2,8 @@ import type { Database } from '../../app/Support/db'
 import type { LiveLine } from '../../app/Services/trading/line-snapshots'
 import { afterEach, describe, expect, it } from 'bun:test'
 import { rmSync } from 'node:fs'
+import { toMarketInfo } from '../../app/Services/prediction-markets/kalshi-public'
+import { suggestionPrices } from '../../app/Services/trading/suggestion-prices'
 import { approveSuggestion, dismissSuggestion, generateSuggestions, listSuggestions } from '../../app/Services/trading/suggestions'
 import { parlayPayout } from '../../app/Services/trading/paper-parlays'
 import { schemaFor } from '../support/schema'
@@ -143,6 +145,35 @@ describe('suggestions', () => {
     const { slate } = await listSuggestions(db, 1, Date.parse(soon) + 1)
     expect(slate?.tickets.map(ticket => [ticket.paperResult, ticket.canApprove, ticket.kalshiOrderUrl]))
       .toEqual([['lost', false, null], ['won', false, null]])
+  })
+
+  it('checks the requested side and warns when a parlay moves below 2x', async () => {
+    const db = freshDb()
+    await generateSuggestions(db, 1, { lines: Array.from({ length: 7 }, (_, i) => line(i)), props: [], now: NOW })
+    const { pending } = await listSuggestions(db, 1, NOW)
+    const single = pending.find(s => s.kind === 'single')!
+    const parlay = pending.find(s => s.kind === 'parlay')!
+    const ticket = { ...single, legs: [{ ...single.legs[0]!, ticker: 'OTHER-SIDE', side: 'no' as const }] }
+    const market = (bid: number, ask: number) => toMarketInfo({ status: 'active', yes_bid_dollars: bid, yes_ask_dollars: ask })
+    const markets = new Map(parlay.legs.map(leg => [leg.ticker, market(0.81, 0.82)]))
+    markets.set('OTHER-SIDE', toMarketInfo({
+      status: 'active',
+      yes_bid_dollars: 0.19,
+      yes_ask_dollars: 0.2,
+      no_bid_dollars: 0.68,
+      no_ask_dollars: 0.7,
+    }))
+    const load = async () => markets
+    const quotes = await suggestionPrices([ticket, parlay], load, NOW)
+    expect(quotes[ticket.id]).toMatchObject({ legs: [{ bid: 0.68, ask: 0.7 }], flag: 'confidence' })
+    expect(quotes[parlay.id]).toMatchObject({ flag: 'payout' })
+    expect(quotes[parlay.id]!.paperPayout).toBeLessThan(2)
+
+    markets.set(parlay.legs[0]!.ticker, market(0.78, 0.82))
+    expect((await suggestionPrices([parlay], load, NOW))[parlay.id]!.flag).toBe('spread')
+    markets.delete(parlay.legs[0]!.ticker)
+    expect((await suggestionPrices([parlay], load, NOW))[parlay.id]).toMatchObject({ flag: 'missing', paperPayout: null })
+    expect(await suggestionPrices([parlay], load, Date.parse(soon) + 1)).toEqual({})
   })
 
   it('builds parlays of several live legs while games run, each paying at least 2x', async () => {
