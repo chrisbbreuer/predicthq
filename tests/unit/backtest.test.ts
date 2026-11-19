@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { kalshiFee, settleBet } from '../../app/Services/trading/backtest'
+import { kalshiFee, quoteAt, settleBet } from '../../app/Services/trading/backtest'
 
 describe('backtest settlement', () => {
   it('charges the taker fee rounded up to the cent', () => {
@@ -30,5 +30,23 @@ describe('backtest tape', () => {
       .get(7, '2026-11-16T22:00:00.000Z', '2026-11-17T00:30:00.000Z')
     expect(Number(row?.n)).toBe(1)
     tape.close()
+  })
+})
+
+describe('checkpoint quote selection', () => {
+  const candle = (ts: number, bid: number | null, ask: number | null) => ({ ts, bid, ask, close: 0.57, volume: 100 })
+
+  it('uses the latest completed quotes even when the trade price and future quote disagree', () => {
+    const past = candle(100, 0.45, 0.55)
+    const future = candle(160, 0.63, 0.66)
+    expect(quoteAt([future, past], 145)).toEqual({ ts: 100, mid: 0.5, bid: 0.45, ask: 0.55 })
+  })
+
+  it('skips missing, stale, crossed and excessively wide quotes', () => {
+    const valid = candle(100, 0.45, 0.55)
+    expect(quoteAt([valid, candle(110, 0.42, null)], 140)).toBeNull()
+    expect(quoteAt([valid], 161)).toBeNull()
+    expect(quoteAt([candle(130, 0.50, 0.49)], 140)).toBeNull()
+    expect(quoteAt([candle(130, 0.30, 0.60)], 140)).toBeNull()
   })
 })

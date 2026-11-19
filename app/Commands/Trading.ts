@@ -4,7 +4,7 @@ import { log } from '@stacksjs/cli'
 import { ExitCode } from '@stacksjs/types'
 import { Database } from '../Support/db'
 import type { BacktestReport } from '../Services/trading/backtest'
-import { backtestGames, summarizeBets } from '../Services/trading/backtest'
+import { backtestGames, summarizeBets, summarizeConsensus } from '../Services/trading/backtest'
 import { haltState, setHalt } from '../Services/trading/halt'
 import { linesReport, liveLines } from '../Services/trading/line-snapshots'
 import { draftSlate, explicitPicks, MIN_PARLAY_PAYOUT, parlayExpectedReturn, placeSlate } from '../Services/trading/slate'
@@ -115,19 +115,25 @@ export default function (cli: CLI) {
     .option('--min-edge <edge>', 'Minimum model edge in probability points', { default: '0.03' })
     .option('--days <n>', 'Replay this many days ending on --date and combine them', { default: '1' })
     .option('--max-events <n>', 'Cap on games replayed per day', { default: '400' })
+    .option('--series <list>', 'Comma-separated Kalshi series (for example KXNBAGAME)', { default: '' })
+    .option('--consensus', 'Compare against independent pre-game sportsbook history', { default: false })
     .option('--json <path>', 'Also write the full report, every bet included, to this file', { default: '' })
-    .action(async (options: { date?: string, days?: string, stake?: string, bankroll?: string, minEdge?: string, maxEvents?: string, json?: string }) => {
+    .action(async (options: { date?: string, days?: string, stake?: string, bankroll?: string, minEdge?: string, maxEvents?: string, json?: string, series?: string, consensus?: boolean }) => {
+      const consensusDb = options.consensus ? new Database() : undefined
       try {
         const date = options.date || yesterdayEastern()
         if (!/^\d{8}$/.test(date))
           throw new Error('--date must be YYYYMMDD')
         const bankroll = Number(options.bankroll) || 10
         const days = Math.max(1, Math.min(30, Number(options.days) || 1))
+        const series = options.series?.split(',').map(value => value.trim().toUpperCase()).filter(Boolean)
         const reports: BacktestReport[] = []
         for (let back = days - 1; back >= 0; back--) {
           const day = shiftDate(date, -back)
           const report = await backtestGames({
             date: day,
+            consensusDb,
+            series: series?.length ? series : undefined,
             stake: Number(options.stake) || 1,
             bankroll,
             minEdge: Number(options.minEdge) || 0.03,
@@ -150,7 +156,10 @@ export default function (cli: CLI) {
             }
             return count ? Math.round((total / count) * 10000) / 10000 : null
           }
+          const consensusViews = reports.flatMap(report => report.consensusViews)
           printBacktest({
+            consensus: options.consensus ? summarizeConsensus(consensusViews) : undefined,
+            consensusViews,
             date: `${reports[0]!.date}-${reports.at(-1)!.date}`,
             events: reports.reduce((sum, report) => sum + report.events, 0),
             checkpoints: reports.reduce((sum, report) => sum + report.checkpoints, 0),
@@ -168,6 +177,9 @@ export default function (cli: CLI) {
       catch (error) {
         log.error(`Backtest failed: ${error instanceof Error ? error.message : String(error)}`)
         process.exit(ExitCode.FatalError)
+      }
+      finally {
+        consensusDb?.close()
       }
     })
 
@@ -298,6 +310,13 @@ function shiftDate(yyyymmdd: string, days: number): string {
 function printBacktest(report: BacktestReport): void {
   log.info(`Backtest ${report.date}: ${report.events} games, ${report.checkpoints} checkpoints`)
   log.info(`  Brier (lower is better): market ${report.brier.market ?? '-'}, model ${report.brier.model ?? '-'} (model had a view at ${report.brier.modelViews})`)
+  if (report.consensus) {
+    const { sampleSize, market, sportsbook, blend } = report.consensus
+    const score = (value: number | null) => value?.toFixed(5) ?? '-'
+    log.info(`  Paired T-30 forecasts: ${sampleSize} games (at least two sportsbooks, exchanges excluded)`)
+    log.info(`  Brier: Kalshi ${score(market.brier)}, books ${score(sportsbook.brier)}, 50/50 blend ${score(blend.brier)}`)
+    log.info(`  Log loss: Kalshi ${score(market.logLoss)}, books ${score(sportsbook.logLoss)}, 50/50 blend ${score(blend.logLoss)}`)
+  }
   for (const result of report.strategies) {
     const roi = result.roi === null ? '-' : `${(result.roi * 100).toFixed(1)}%`
     const pnl = `${result.pnl >= 0 ? '+' : ''}${result.pnl.toFixed(2)}`

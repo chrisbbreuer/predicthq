@@ -411,7 +411,7 @@ async function evaluateMarket(db: Database, market: MarketRow, context: MarketCo
 
   // The fixture this market is about, resolved once. Two signals below
   // need it, and both need the same answer.
-  const fixture = await resolveFixture(db, { ticker: market.external_id, title: market.question })
+  const fixture = replay ? null : await resolveFixture(db, { ticker: market.external_id, title: market.question })
 
   // Which of the three outcomes this market is. Null on a draw market or
   // an unreadable ticker, and both are skipped: a strength read says who

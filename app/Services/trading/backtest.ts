@@ -1,19 +1,20 @@
 import type { KalshiCandle, KalshiTrade } from '../prediction-markets/kalshi-public'
 import type { Candidate, MarketDatabaseRow } from './evidence'
 import type { LiveGame } from './live-games'
+import type { SportsbookForecast } from './sportsbook-consensus'
 import { Database as Sqlite } from 'bun:sqlite'
 import { Database } from '../../Support/db'
 import { kalshiCandles, kalshiSettledMarkets, kalshiTrades } from '../prediction-markets/kalshi-public'
 import { evaluateMarketAt, tradablePrice } from './evidence'
 import { liveGameFor, parseGameTicker } from './live-games'
+import { sportsbookConsensus } from './sportsbook-consensus'
 
 /**
  * Replay a finished day of games and score how each way of betting would
  * have done, using only what was knowable at each moment.
  *
  * For every settled Kalshi winner market on the date, the market is read
- * at a few checkpoints (shortly before the start, then a quarter, half, and
- * three quarters of the way to the moment the price settled the question).
+ * at fixed offsets from the scheduled start (-30, +30, +60 and +90 minutes).
  * At each checkpoint:
  *
  *   - the market's own price is the baseline forecast;
@@ -23,9 +24,9 @@ import { liveGameFor, parseGameTicker } from './live-games'
  *     depends on what our own ingestion happened to capture;
  *   - a handful of plain strategies decide whether to bet.
  *
- * Bets are filled at the quote that was resting then (the ask for the side
- * bought, not the midpoint) and pay Kalshi's taker fee, so a strategy only
- * looks good here if it would have beaten the spread and the fee too.
+ * Paper fills use the quoted ask (or one minus the YES bid for NO) and
+ * pay the taker fee. Candles do not provide executable size, so this
+ * estimates prices without claiming a live order would have filled.
  *
  * Two-team events list one market per team, mirror images of each other;
  * only one market per event is scored so a single game is never counted
@@ -33,6 +34,8 @@ import { liveGameFor, parseGameTicker } from './live-games'
  */
 
 export interface BacktestOptions {
+  /** Optional historical odds database for a paired pre-game sportsbook benchmark. */
+  consensusDb?: Database
   /** Eastern date of the games, `YYYYMMDD`. */
   date: string
   /** Dollars per bet. */
@@ -95,12 +98,44 @@ export interface StrategyResult {
   endingBankroll: number
 }
 
+export interface ConsensusView {
+  ticker: string
+  at: number
+  market: number
+  sportsbook: number
+  books: string[]
+  outcome: 0 | 1
+}
+
+export function summarizeConsensus(views: ConsensusView[]) {
+  const summarize = (forecast: (row: ConsensusView) => number) => {
+    if (views.length === 0)
+      return { brier: null, logLoss: null }
+    let brier = 0
+    let logLoss = 0
+    for (const row of views) {
+      const p = forecast(row)
+      brier += (p - row.outcome) ** 2
+      logLoss -= Math.log(Math.max(1e-9, row.outcome ? p : 1 - p))
+    }
+    return { brier: brier / views.length, logLoss: logLoss / views.length }
+  }
+  return {
+    sampleSize: views.length,
+    market: summarize(row => row.market),
+    sportsbook: summarize(row => row.sportsbook),
+    blend: summarize(row => (row.market + row.sportsbook) / 2),
+  }
+}
+
 export interface BacktestReport {
   date: string
   events: number
   checkpoints: number
   /** Mean squared error of each forecast against the outcome; lower is better. */
   brier: { market: number | null, model: number | null, modelViews: number }
+  consensus?: ReturnType<typeof summarizeConsensus>
+  consensusViews: ConsensusView[]
   strategies: StrategyResult[]
   bets: BacktestBet[]
   views: ModelView[]
@@ -122,51 +157,33 @@ export function settleBet(stake: number, price: number, won: boolean): { fee: nu
   return { fee, pnl: Math.round(pnl * 100) / 100 }
 }
 
-interface PricePoint { ts: number, mid: number, bid: number | null, ask: number | null }
+interface PricePoint { ts: number, mid: number, bid: number, ask: number }
 
-function pricePath(candles: KalshiCandle[]): PricePoint[] {
-  const path: PricePoint[] = []
-  let last: number | null = null
+const CHECKPOINTS = [
+  ['pre-game', -30],
+  ['+30m', 30],
+  ['+60m', 60],
+  ['+90m', 90],
+] as const
+const MAX_QUOTE_AGE_SECONDS = 60
+
+/** Use the latest completed candle. A missing side on that candle means no quote. */
+export function quoteAt(candles: KalshiCandle[], ts: number): PricePoint | null {
+  let found: KalshiCandle | undefined
   for (const candle of candles) {
-    let mid: number | null = null
-    if (candle.bid !== null && candle.ask !== null && candle.ask > 0 && candle.ask - candle.bid <= 0.1)
-      mid = (candle.bid + candle.ask) / 2
-    else if (candle.close !== null)
-      mid = candle.close
-    if (mid === null)
-      mid = last
-    if (mid === null)
-      continue
-    last = mid
-    path.push({ ts: candle.ts, mid, bid: candle.bid, ask: candle.ask })
+    if (candle.ts <= ts && (!found || candle.ts > found.ts))
+      found = candle
   }
-  return path
+  if (!found || ts - found.ts > MAX_QUOTE_AGE_SECONDS)
+    return null
+  const { bid, ask } = found
+  if (bid === null || ask === null || !Number.isFinite(bid) || !Number.isFinite(ask) || bid <= 0 || ask >= 1 || ask < bid || ask - bid > 0.100000001)
+    return null
+  return { ts: found.ts, mid: (bid + ask) / 2, bid, ask }
 }
 
-function pointAt(path: PricePoint[], ts: number): PricePoint | null {
-  let found: PricePoint | null = null
-  for (const point of path) {
-    if (point.ts > ts)
-      break
-    found = point
-  }
-  return found
-}
-
-/** The first moment the price all but settled the question. */
-function decidedAt(path: PricePoint[], after: number): number | null {
-  for (const point of path) {
-    if (point.ts > after && (point.mid >= 0.97 || point.mid <= 0.03))
-      return point.ts
-  }
-  return null
-}
-
-/** What it costs to buy one side at a point: the ask, or a cent over the mid. */
 function costOf(point: PricePoint, side: 'yes' | 'no'): number {
-  if (side === 'yes')
-    return point.ask !== null && point.ask > 0 ? point.ask : Math.min(0.99, point.mid + 0.01)
-  return point.bid !== null && point.bid > 0 ? 1 - point.bid : Math.min(0.99, 1 - point.mid + 0.01)
+  return side === 'yes' ? point.ask : 1 - point.bid
 }
 
 function gameAt(game: LiveGame | null, ts: number, startsAt: number): LiveGame | null {
@@ -187,11 +204,15 @@ export async function backtestGames(options: BacktestOptions): Promise<BacktestR
   const skip = (reason: string) => { skipped[reason] = (skipped[reason] ?? 0) + 1 }
 
   const yymmdd = `${options.date.slice(2, 4)}${['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'][Number(options.date.slice(4, 6)) - 1]}${options.date.slice(6, 8)}`
-  // A day's games close between that morning and two days later at most.
+  // Include games whose scheduled market close is several days after tip-off.
   const dayStart = Date.UTC(Number(options.date.slice(0, 4)), Number(options.date.slice(4, 6)) - 1, Number(options.date.slice(6, 8))) / 1000
-  const rows: Array<MarketDatabaseRow & { result: string }> = []
+  type SettledRow = MarketDatabaseRow & { result: string, openedAt: number, closedAt: number }
+  const rows: SettledRow[] = []
   for (const prefix of series) {
-    const markets = await kalshiSettledMarkets(prefix, dayStart, dayStart + 2 * 86_400).catch(() => [])
+    const markets = await kalshiSettledMarkets(prefix, dayStart, dayStart + 4 * 86_400).catch(() => {
+      skip('market listing unavailable')
+      return []
+    })
     for (const market of markets) {
       if (!market.ticker.startsWith(`${prefix}-${yymmdd}`))
         continue
@@ -205,13 +226,15 @@ export async function backtestGames(options: BacktestOptions): Promise<BacktestR
         last_price: market.lastPrice ?? 0,
         liquidity: 0,
         result: market.result,
+        openedAt: Date.parse(market.openTime) / 1000,
+        closedAt: Math.min(...[market.closeTime, market.settledAt ?? ''].map(Date.parse).filter(Number.isFinite)) / 1000,
       })
     }
   }
   rows.sort((a, b) => a.external_id.localeCompare(b.external_id))
 
   // One market per event: the alphabetically first outcome.
-  const byEvent = new Map<string, MarketDatabaseRow & { result: string }>()
+  const byEvent = new Map<string, SettledRow>()
   for (const row of rows) {
     const ref = parseGameTicker(row.external_id)
     if (!ref?.winner) {
@@ -230,6 +253,7 @@ export async function backtestGames(options: BacktestOptions): Promise<BacktestR
 
   const bets: BacktestBet[] = []
   const views: ModelView[] = []
+  const consensusViews: ConsensusView[] = []
   const brierMarket: number[] = []
   const brierModel: number[] = []
   let modelViews = 0
@@ -248,106 +272,136 @@ export async function backtestGames(options: BacktestOptions): Promise<BacktestR
       continue
     }
 
-    const candles = await kalshiCandles(ref.eventTicker, row.external_id, startsAt - 3 * 3600, startsAt + 6 * 3600, 1, 600_000)
+    if (!Number.isFinite(row.closedAt)) {
+      skip('no market close time')
+      continue
+    }
+    const first = startsAt + CHECKPOINTS[0][1] * 60
+    const last = Math.min(row.closedAt, startsAt + CHECKPOINTS.at(-1)![1] * 60)
+    if (first >= last) {
+      skip('market closed before first checkpoint')
+      continue
+    }
+    const candles = await kalshiCandles(ref.eventTicker, row.external_id, first - 16 * 60, last, 1, 600_000)
       .catch(() => [] as KalshiCandle[])
-    const path = pricePath(candles)
-    const decided = decidedAt(path, startsAt)
-    if (path.length < 10 || !decided) {
-      skip(path.length < 10 ? 'no price history' : 'never decided in window')
+    if (candles.length === 0) {
+      skip('no quote history')
       continue
     }
 
-    // The engine's window reaches a day back from the earliest checkpoint.
-    const trades = await kalshiTrades(row.external_id, startsAt - 30 * 60 - 25 * 3600, decided).catch(() => null)
-    if (!trades) {
+    // The market baseline and sportsbook comparison remain usable without trades.
+    const trades = await kalshiTrades(row.external_id, first - 25 * 3600, last).catch(() => null)
+    if (!trades)
       skip('no trade tape')
-      continue
-    }
-    const tape = tapeDatabase(Number(row.id), trades)
+    const tape = trades ? tapeDatabase(Number(row.id), trades) : null
+    try {
+      for (const [checkpoint, offset] of CHECKPOINTS) {
+        const ts = startsAt + offset * 60
+        if (ts >= row.closedAt) {
+          skip('checkpoint after market close')
+          continue
+        }
+        const point = quoteAt(candles, ts)
+        if (!point || point.ts < row.openedAt) {
+          skip('no usable bid and ask at checkpoint')
+          continue
+        }
+        checkpoints++
+        brierMarket.push((point.mid - outcome) ** 2)
 
-    const span = decided - startsAt
-    const marks: Array<[string, number]> = [
-      ['pre-game', startsAt - 30 * 60],
-      ['25%', startsAt + span * 0.25],
-      ['50%', startsAt + span * 0.5],
-      ['75%', startsAt + span * 0.75],
-    ]
+        let candidate: Candidate | null = null
+        if (tape) {
+          try {
+            candidate = await evaluateMarketAt(tape.db, row, { asOf: point.ts * 1000, yesPriceAt: point.mid, game: gameAt(game, ts, startsAt) })
+          }
+          catch {
+            skip('evidence replay failed')
+          }
+        }
+        const modelYes = candidate ? (candidate.side === 'yes' ? candidate.fairValue : 1 - candidate.fairValue) : point.mid
+        if (candidate) {
+          modelViews++
+          const towardsYes = candidate.side === 'yes' ? 1 : -1
+          views.push({
+            ticker: row.external_id,
+            checkpoint,
+            inPlay: checkpoint !== 'pre-game',
+            mid: Math.round(point.mid * 1000) / 1000,
+            fair: Math.round(modelYes * 1000) / 1000,
+            confidence: candidate.confidence,
+            outcome,
+            signals: Object.fromEntries(candidate.evidence.map(item => [item.kind, Math.round(item.contribution * towardsYes * 10000) / 10000])),
+          })
+        }
+        brierModel.push((modelYes - outcome) ** 2)
 
-    for (const [checkpoint, ts] of marks) {
-      const point = pointAt(path, ts)
-      if (!point || point.mid <= 0.02 || point.mid >= 0.98) {
-        skip('no tradable price at checkpoint')
-        continue
-      }
-      checkpoints++
-      brierMarket.push((point.mid - outcome) ** 2)
+        const place = (strategy: string, side: 'yes' | 'no', forecast = candidate ? modelYes : null) => {
+          const price = costOf(point, side)
+          if (price <= 0.01 || price >= 0.99)
+            return
+          const won = side === 'yes' ? outcome === 1 : outcome === 0
+          const { fee, pnl } = settleBet(stake, price, won)
+          bets.push({ strategy, ticker: row.external_id, label: row.outcome_label || row.question, checkpoint, at: ts, side, price, stake, fee, won, pnl, mid: Math.round(point.mid * 1000) / 1000, fair: forecast === null ? null : Math.round(forecast * 1000) / 1000 })
+        }
 
-      let candidate: Candidate | null = null
-      try {
-        candidate = await evaluateMarketAt(tape.db, row, { asOf: ts * 1000, yesPriceAt: point.mid, game: gameAt(game, ts, startsAt) })
-      }
-      catch {
-        candidate = null
-      }
-      const modelYes = candidate ? (candidate.side === 'yes' ? candidate.fairValue : 1 - candidate.fairValue) : point.mid
-      if (candidate) {
-        modelViews++
-        const towardsYes = candidate.side === 'yes' ? 1 : -1
-        views.push({
-          ticker: row.external_id,
-          checkpoint,
-          inPlay: checkpoint !== 'pre-game',
-          mid: Math.round(point.mid * 1000) / 1000,
-          fair: Math.round(modelYes * 1000) / 1000,
-          confidence: candidate.confidence,
-          outcome,
-          signals: Object.fromEntries(candidate.evidence.map(item => [item.kind, Math.round(item.contribution * towardsYes * 10000) / 10000])),
-        })
-      }
-      brierModel.push((modelYes - outcome) ** 2)
+        // The model, only where it disagrees with the market by enough.
+        // Split by phase and by size of disagreement, to see where it helps.
+        const edge = Math.abs(modelYes - point.mid)
+        if (candidate && edge >= minEdge) {
+          const side = modelYes > point.mid ? 'yes' : 'no'
+          place('model', side)
+          place(checkpoint === 'pre-game' ? 'model-pre' : 'model-live', side)
+          if (edge >= 0.08)
+            place('model-8pt', side)
+          // What the live strategy would actually do: the same edge floor, its
+          // confidence floor (Strategy 1: 0.60) and the tradable price band.
+          if (candidate.confidence >= minConfidence && tradablePrice(costOf(point, side))) {
+            place('rules', side)
+            if (checkpoint === 'pre-game')
+              place('rules-pre', side)
+          }
+        }
 
-      const place = (strategy: string, side: 'yes' | 'no') => {
-        const price = costOf(point, side)
-        if (price <= 0.01 || price >= 0.99)
-          return
-        const won = side === 'yes' ? outcome === 1 : outcome === 0
-        const { fee, pnl } = settleBet(stake, price, won)
-        bets.push({ strategy, ticker: row.external_id, label: row.outcome_label || row.question, checkpoint, at: ts, side, price: Math.round(price * 1000) / 1000, stake, fee, won, pnl, mid: Math.round(point.mid * 1000) / 1000, fair: candidate ? Math.round(modelYes * 1000) / 1000 : null })
-      }
+        if (options.consensusDb && checkpoint === 'pre-game' && game) {
+          const consensus: SportsbookForecast | null = await sportsbookConsensus(options.consensusDb, game, point.ts * 1000)
+          if (consensus) {
+            consensusViews.push({ ticker: row.external_id, at: point.ts, market: point.mid, sportsbook: consensus.probability, books: consensus.books, outcome })
+            const forecasts = [
+              ['sportsbook', consensus.probability],
+              ['sportsbook-blend', (consensus.probability + point.mid) / 2],
+            ] as const
+            for (const [strategy, probability] of forecasts) {
+              const side = probability > point.mid ? 'yes' : 'no'
+              const price = costOf(point, side)
+              const fair = side === 'yes' ? probability : 1 - probability
+              const feePerContract = kalshiFee(stake / price, price) / (stake / price)
+              if (Math.abs(probability - point.mid) >= minEdge && tradablePrice(price) && fair > price + feePerContract)
+                place(strategy, side, probability)
+            }
+          }
+          else {
+            skip('no fresh two-book consensus')
+          }
+        }
 
-      // The model, only where it disagrees with the market by enough.
-      // Split by phase and by size of disagreement, to see where it helps.
-      const edge = Math.abs(modelYes - point.mid)
-      if (candidate && edge >= minEdge) {
-        const side = modelYes > point.mid ? 'yes' : 'no'
-        place('model', side)
-        place(checkpoint === 'pre-game' ? 'model-pre' : 'model-live', side)
-        if (edge >= 0.08)
-          place('model-8pt', side)
-        // What the live strategy would actually do: the same edge floor, its
-        // confidence floor (Strategy 1: 0.60) and the tradable price band.
-        if (candidate.confidence >= minConfidence && tradablePrice(costOf(point, side))) {
-          place('rules', side)
-          if (checkpoint === 'pre-game')
-            place('rules-pre', side)
+        // Plain baselines, to tell skill from luck.
+        place('favorite', point.mid >= 0.5 ? 'yes' : 'no')
+        place('underdog', point.mid >= 0.5 ? 'no' : 'yes')
+
+        // Momentum over the previous fifteen minutes, in play only.
+        if (checkpoint !== 'pre-game') {
+          const before = quoteAt(candles, point.ts - 15 * 60)
+          const move = before ? point.mid - before.mid : 0
+          if (Math.abs(move) >= 0.08) {
+            place('momentum', move > 0 ? 'yes' : 'no')
+            place('fade', move > 0 ? 'no' : 'yes')
+          }
         }
       }
-
-      // Plain baselines, to tell skill from luck.
-      place('favorite', point.mid >= 0.5 ? 'yes' : 'no')
-      place('underdog', point.mid >= 0.5 ? 'no' : 'yes')
-
-      // Momentum over the previous fifteen minutes, in play only.
-      if (checkpoint !== 'pre-game') {
-        const before = pointAt(path, ts - 15 * 60)
-        const move = before ? point.mid - before.mid : 0
-        if (Math.abs(move) >= 0.08) {
-          place('momentum', move > 0 ? 'yes' : 'no')
-          place('fade', move > 0 ? 'no' : 'yes')
-        }
-      }
     }
-    tape.close()
+    finally {
+      tape?.close()
+    }
   }
 
   const strategies = summarizeBets(bets, bankroll)
@@ -358,6 +412,8 @@ export async function backtestGames(options: BacktestOptions): Promise<BacktestR
     events: events.length,
     checkpoints,
     brier: { market: mean(brierMarket), model: mean(brierModel), modelViews },
+    consensus: options.consensusDb ? summarizeConsensus(consensusViews) : undefined,
+    consensusViews,
     strategies,
     bets,
     views,
