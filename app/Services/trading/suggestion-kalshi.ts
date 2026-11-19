@@ -16,7 +16,7 @@ export class SuggestionPreparationError extends Error {}
 export async function suggestionPurchaseReason(db: Database, userId: number): Promise<string> {
   const [halt, entitlement] = await Promise.all([haltState(db), resolveEntitlements(db, userId)])
   if (halt.halted)
-    return 'In-app buying is disabled in production. You can prepare a ticket for review on Kalshi.'
+    return 'In-app buying is disabled in production. Review eligible tickets on Kalshi.'
   if (!entitlement.canAutoExecute || liveAccessReason(userId))
     return 'In-app buying is unavailable for your account. You can prepare a ticket for review on Kalshi.'
   return 'You can prepare an exact ticket here and confirm the purchase on Kalshi.'
@@ -54,6 +54,8 @@ export async function prepareExactCombo(
       return ticker
     }
     catch (error) {
+      if (error instanceof VenueError && error.status === 403 && error.message.includes('write::trade'))
+        throw new SuggestionPreparationError('This Kalshi key is read-only for trading. Connect a key with trade permission in Account to prepare the exact combo.')
       if (!(error instanceof VenueError) || error.status !== 400)
         throw error
     }

@@ -149,12 +149,14 @@ export class KalshiTradingClient implements TradingClient {
 
   /** Resolve the exact contract for a combo so it can be reviewed on Kalshi. */
   async prepareCombo(collection: string, legs: KalshiComboLeg[]) {
-    const data = await this.request<{ market_ticker: string, market?: unknown }>(
+    const data = await this.request<{ market_ticker: string, market?: { mve_selected_legs?: KalshiComboLeg[] } }>(
       'POST',
       `/multivariate_event_collections/${encodeURIComponent(collection)}`,
       { selected_markets: legs, with_market_payload: true },
     )
-    return { ticker: data.market_ticker, market: toMarketInfo(data.market) }
+    const exactSides = Array.isArray(data.market?.mve_selected_legs)
+      && data.market.mve_selected_legs.every(leg => leg.side === 'yes' || leg.side === 'no')
+    return { ticker: data.market_ticker, market: toMarketInfo(exactSides ? data.market : undefined) }
   }
 
   async fetchBalance(): Promise<VenueBalance> {

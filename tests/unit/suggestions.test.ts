@@ -7,6 +7,7 @@ import { prepareExactCombo } from '../../app/Services/trading/suggestion-kalshi'
 import { suggestionPrices } from '../../app/Services/trading/suggestion-prices'
 import { approveSuggestion, dismissSuggestion, generateSuggestions, listSuggestions } from '../../app/Services/trading/suggestions'
 import { parlayPayout } from '../../app/Services/trading/paper-parlays'
+import { VenueError } from '../../app/Services/trading/venue'
 import { schemaFor } from '../support/schema'
 
 const TABLES = ['suggestion_slates', 'bet_suggestions', 'paper_parlays', 'trading_strategies', 'prediction_markets', 'trade_decisions', 'exchange_orders', 'exchange_positions']
@@ -201,6 +202,9 @@ describe('suggestions', () => {
       ticker,
       market: toMarketInfo({ ticker, mve_selected_legs: legs.map(leg => ({ ...leg, side: 'yes' })) }),
     }))).rejects.toThrow('different legs')
+    await expect(prepareExactCombo(legs, [collection], async () => {
+      throw new VenueError('insufficient scope: write::trade required', 'kalshi', 403, false)
+    })).rejects.toThrow('read-only for trading')
   })
 
   it('builds parlays of several live legs while games run, each paying at least 2x', async () => {
