@@ -1,3 +1,4 @@
+import { saveInjuryReports } from './injuries'
 import type { Database } from '../../Support/db'
 import { loadSports, resolveTeam } from '../ingest/resolve'
 import { fetchWithRetry, IngestRunTracker } from '../ingest/run'
@@ -86,7 +87,8 @@ export async function ingestEspnFundamentals(db: Database): Promise<Fundamentals
     const teamsRes = await fetchWithRetry(`${SCOREBOARD}/${sport.espn_path}/teams`)
     tracker.requestCount++
 
-    if (teamsRes) {
+    const reportTeams: Array<{ id: number, espnId: string }> = []
+    if (teamsRes?.ok) {
       try {
         const payload = await teamsRes.json() as any
         const entries = payload?.sports?.[0]?.leagues?.[0]?.teams ?? []
@@ -99,12 +101,13 @@ export async function ingestEspnFundamentals(db: Database): Promise<Fundamentals
 
           // resolveTeam creates on a miss, which is what is wanted here:
           // this feed is the authority on who competes in its league.
-          await resolveTeam(db, sport.id, name, {
+          const teamId = await resolveTeam(db, sport.id, name, {
             espnId: String(team?.id ?? ''),
             abbreviation: String(team?.abbreviation ?? ''),
             shortName: String(team?.shortDisplayName ?? ''),
             logo: String(team?.logos?.[0]?.href ?? ''),
           })
+          if (teamId && team?.id) reportTeams.push({ id: teamId, espnId: String(team.id) })
           touched = true
         }
       }
@@ -117,7 +120,7 @@ export async function ingestEspnFundamentals(db: Database): Promise<Fundamentals
     const standingsRes = await fetchWithRetry(`${STANDINGS}/${sport.espn_path}/standings`)
     tracker.requestCount++
 
-    if (!standingsRes) {
+    if (!standingsRes?.ok) {
       tracker.fail(`${sport.slug}: standings unreachable`)
     }
     else {
@@ -183,9 +186,13 @@ export async function ingestEspnFundamentals(db: Database): Promise<Fundamentals
     const injuriesRes = await fetchWithRetry(`${SCOREBOARD}/${sport.espn_path}/injuries`)
     tracker.requestCount++
 
-    if (injuriesRes) {
+    if (injuriesRes?.ok) {
       try {
         const payload = await injuriesRes.json() as any
+        if (!Array.isArray(payload?.injuries))
+          throw new Error('Invalid injury report; keeping previous capture')
+        if (reportTeams.length > 0)
+          await saveInjuryReports(db, reportTeams, payload.injuries, capturedAt)
         await db.transaction(async (transaction) => {
           for (const teamBlock of payload?.injuries ?? []) {
             const name = String(teamBlock?.displayName ?? '').trim()
@@ -229,6 +236,10 @@ export async function ingestEspnFundamentals(db: Database): Promise<Fundamentals
       catch (err) {
         tracker.fail(`${sport.slug}: injuries ${(err as Error).message}`)
       }
+    }
+
+    else {
+      tracker.fail(`${sport.slug}: injuries ${injuriesRes ? `HTTP ${injuriesRes.status}` : 'unreachable'}`)
     }
 
     if (touched)

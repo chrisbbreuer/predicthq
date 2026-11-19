@@ -22,6 +22,7 @@ export interface KalshiMarketInfo {
   noSubTitle: string
   status: string
   result: string
+  settlementValue?: number | null
   openTime: string
   closeTime: string
   /** When the underlying event happens, for a game its scheduled start. */
@@ -120,6 +121,7 @@ export function toMarketInfo(raw: any): KalshiMarketInfo {
     noSubTitle: String(raw?.no_sub_title ?? ''),
     status: String(raw?.status ?? ''),
     result: String(raw?.result ?? ''),
+    settlementValue: price(raw?.settlement_value_dollars),
     openTime: String(raw?.open_time ?? ''),
     closeTime: String(raw?.close_time ?? ''),
     occursAt: String(raw?.occurrence_datetime ?? raw?.expected_expiration_time ?? ''),

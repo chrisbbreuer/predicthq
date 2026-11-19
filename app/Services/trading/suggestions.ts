@@ -1,8 +1,10 @@
 import type { Database } from '../../Support/db'
 import type { LiveLine } from './line-snapshots'
 import type { SlatePick } from './slate'
+import { propParlays } from './prop-parlays'
 import { liveLines } from './line-snapshots'
 import { placePaperParlay } from './paper-parlays'
+import { propLines } from './props'
 import { assembleParlay, buildSlate, ensurePaperStrategy, parlayExpectedReturn, pickLeg, placePaperSingle, rankPicks } from './slate'
 
 /**
@@ -67,7 +69,7 @@ export async function saveSuggestions(db: Database, userId: number, bets: Array<
     await db.query(`
       INSERT INTO bet_suggestions (user_id, kind, legs, signature, stake, price, ev, rationale, status, expires_at, decided_at, outcome, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, '', '', ?, ?)
-    `).run(userId, bet.kind, JSON.stringify(legs), sig, bet.stake, price, ev, legs.map(leg => leg.rationale).join(' · '), expiry(legs, now), stamp, stamp)
+    `).run(userId, bet.kind, JSON.stringify(legs), sig, bet.stake, price, ev, (bet.kind === 'parlay' ? 'Paper parlay; payout assumes independent legs and is not a Kalshi combo quote. ' : '') + legs.map(leg => leg.rationale).join(' · '), expiry(legs, now), stamp, stamp)
     saved++
   }
   return saved
@@ -75,16 +77,16 @@ export async function saveSuggestions(db: Database, userId: number, bets: Array<
 
 /**
  * Build fresh suggestions from today's games: up to three singles and two
- * two-leg parlays from games before tip-off, and, when games are under way,
- * all-live parlays of two and three legs and one pairing a live leg with a
- * pre-game one.
+ * parlays from games before tip-off; while games run, all-live parlays and
+ * one led by a live leg; and up to two player-prop parlays. Every parlay pays
+ * at least 2×.
  */
-export async function generateSuggestions(db: Database, userId: number, options: { lines?: LiveLine[], stake?: number, now?: number } = {}): Promise<number> {
+export async function generateSuggestions(db: Database, userId: number, options: { lines?: LiveLine[], props?: LiveLine[], stake?: number, now?: number } = {}): Promise<number> {
   const stake = options.stake ?? 1
   const now = options.now ?? Date.now()
   // Only games that start today, US Eastern, so every suggestion settles tonight.
   const lines = (options.lines ?? await liveLines(undefined, 18 * 60, { includeLive: true }))
-    .filter(line => easternDay(Date.parse(line.startsAt)) === easternDay(now))
+    .filter(line => Number.isFinite(Date.parse(line.startsAt)) && easternDay(Date.parse(line.startsAt)) === easternDay(now))
   const pre = rankPicks(lines.filter(line => !line.live && line.minutes >= 15), { minGap: 0.01 })
     // Not worth showing a bet expected to lose more than 3% even if the book is right.
     .filter(pick => pick.ev > -0.03)
@@ -104,17 +106,27 @@ export async function generateSuggestions(db: Database, userId: number, options:
   // more legs. Picks are one per game already, so legs never share a game.
   let livePool = live
   for (let i = 0; i < 2; i++) {
-    const parlay = assembleParlay(livePool)
+    const parlay = assembleParlay(livePool, { stake })
     if (!parlay)
       break
     bets.push({ kind: 'parlay', picks: parlay, stake })
     livePool = livePool.filter(pick => !parlay.includes(pick))
   }
   if (live[0]) {
-    const mixed = assembleParlay(pre, { start: [live[0]] })
+    const mixed = assembleParlay(pre, { start: [live[0]], stake })
     if (mixed)
       bets.push({ kind: 'parlay', picks: mixed, stake })
   }
+
+  // Player-prop parlays, pre-game or live: the cheapest legs, not "edges"
+  // (see props.ts). Overs bought down to 75–84¢ (four of them reach 2×) with a spread of 2¢ or less,
+  // one line per game, lowest cost first, assembled to pay at least 2×.
+  const props = (options.props ?? await propLines())
+    .filter(line => line.live || Date.parse(line.startsAt) > now + 15 * 60_000)
+    .filter(line => Number.isFinite(Date.parse(line.startsAt)) && easternDay(Date.parse(line.startsAt)) === easternDay(now))
+    .filter(line => line.ask >= 0.75 && line.ask <= 0.84 && line.ask - line.bid >= 0 && line.ask - line.bid <= 0.02 + 1e-8)
+  for (const picks of propParlays(props, { stake }))
+    bets.push({ kind: 'parlay', picks, stake })
   return await saveSuggestions(db, userId, bets, now)
 }
 

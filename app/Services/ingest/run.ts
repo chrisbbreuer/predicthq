@@ -1,3 +1,4 @@
+import { espnFetch } from '../scores/espn-client'
 import type { Database } from '../../Support/db'
 import { nowIso } from '../../Support/keys'
 
@@ -113,6 +114,14 @@ export async function fetchWithRetry(
   url: string,
   options: { timeoutMs?: number, retries?: number, headers?: Record<string, string> } = {},
 ): Promise<Response | null> {
+  if (new URL(url).hostname === 'site.web.api.espn.com') {
+    let ttlMs = /\/(teams|standings)(?:\?|$)/.test(url) ? 30 * 60_000 : /\/injuries(?:\?|$)/.test(url) ? 5 * 60_000 : 30_000
+    const dates = new URL(url).searchParams.get('dates')
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()).replace(/-/g, '')
+    if (dates && /^\d{8}$/.test(dates) && dates !== today)
+      ttlMs = 30 * 60_000
+    return espnFetch(url, { ttlMs, timeoutMs: options.timeoutMs })
+  }
   const { timeoutMs = 12_000, retries = 2, headers } = options
 
   for (let attempt = 0; attempt <= retries; attempt++) {

@@ -26,7 +26,7 @@ export interface PaperParlayRow {
   legs: PaperLeg[]
   stake: number
   price: number
-  status: 'open' | 'won' | 'lost'
+  status: 'open' | 'won' | 'lost' | 'settled'
   payout: number
   rationale: string
   placed_at: string
@@ -88,7 +88,7 @@ export async function paperParlays(db: Database, userId: number, status?: 'open'
  */
 export async function settlePaperParlays(
   db: Database,
-  results: (tickers: string[]) => Promise<Map<string, string>> = legResults,
+  results: (tickers: string[]) => Promise<Map<string, string | number>> = legResults,
 ): Promise<{ settled: number, won: number, lost: number }> {
   const open = (await db.query<Record<string, unknown>>(`SELECT * FROM paper_parlays WHERE status = 'open'`).all()).map(toRow)
   if (open.length === 0)
@@ -96,21 +96,29 @@ export async function settlePaperParlays(
   const known = await results([...new Set(open.flatMap(parlay => parlay.legs.map(leg => leg.ticker)))])
   let won = 0
   let lost = 0
+  let settled = 0
   const now = new Date().toISOString()
   for (const parlay of open) {
-    const outcomes = parlay.legs.map(leg => known.get(leg.ticker))
-    const anyLost = parlay.legs.some((leg, i) => (outcomes[i] === 'yes' || outcomes[i] === 'no') && outcomes[i] !== leg.side)
-    const allWon = parlay.legs.every((leg, i) => outcomes[i] === leg.side)
-    if (!anyLost && !allWon)
+    const values = parlay.legs.map((leg) => {
+      const result = known.get(leg.ticker)
+      const yes = result === 'yes' ? 1 : result === 'no' ? 0 : typeof result === 'number' && Number.isFinite(result) && result >= 0 && result <= 1 ? result : null
+      return yes === null ? null : leg.side === 'yes' ? yes : 1 - yes
+    })
+    const anyLost = values.some(value => value === 0)
+    if (!anyLost && values.some(value => value === null))
       continue
-    const payout = anyLost ? 0 : parlayPayout(parlay.stake, parlay.price)
+    const fractional = values.some(value => value !== null && value > 0 && value < 1)
+    const resolution = anyLost ? 0 : values.reduce<number>((product, value) => product * (value ?? 0), 1)
+    const contracts = parlay.stake / parlay.price
+    const payout = Math.max(0, Math.round((contracts * resolution - kalshiFee(contracts, parlay.price)) * 100) / 100)
+    const status = anyLost ? 'lost' : fractional ? 'settled' : 'won'
     await db.query(`UPDATE paper_parlays SET status = ?, payout = ?, settled_at = ?, updated_at = ? WHERE id = ? AND status = 'open'`)
-      .run(anyLost ? 'lost' : 'won', payout, now, now, parlay.id)
-    if (anyLost)
-      lost++
-    else won++
+      .run(status, payout, now, now, parlay.id)
+    settled++
+    if (status === 'won') won++
+    if (status === 'lost') lost++
   }
-  return { settled: won + lost, won, lost }
+  return { settled, won, lost }
 }
 
 /**
@@ -121,7 +129,7 @@ export async function settlePaperParlays(
  */
 export async function settleHeldPositions(
   db: Database,
-  results: (tickers: string[]) => Promise<Map<string, string>> = legResults,
+  results: (tickers: string[]) => Promise<Map<string, string | number>> = legResults,
 ): Promise<{ refreshed: number, settled: number }> {
   const held = await db.query<{ id: number | string, external_id: string }>(`
     SELECT DISTINCT m.id, m.external_id
@@ -145,11 +153,13 @@ export async function settleHeldPositions(
   return { refreshed, settled: summary.settled }
 }
 
-async function legResults(tickers: string[]): Promise<Map<string, string>> {
-  const out = new Map<string, string>()
+async function legResults(tickers: string[]): Promise<Map<string, string | number>> {
+  const out = new Map<string, string | number>()
   for (let i = 0; i < tickers.length; i += 100) {
     const markets = await kalshiMarkets(tickers.slice(i, i + 100), 30_000).catch(() => new Map<string, KalshiMarketInfo>())
-    for (const [ticker, market] of markets) out.set(ticker, market.result)
+    for (const [ticker, market] of markets) {
+      out.set(ticker, market.result === 'scalar' && market.settlementValue != null ? market.settlementValue : market.result)
+    }
   }
   return out
 }

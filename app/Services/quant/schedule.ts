@@ -58,6 +58,7 @@ export async function loadScheduleContext(db: Database, teamId: number, commence
     SELECT commence_at
     FROM market_events
     WHERE (home_sports_team_id = ? OR away_sports_team_id = ?)
+      AND status NOT IN ('cancelled', 'postponed')
       AND commence_at != '' AND commence_at < ?
     ORDER BY commence_at DESC
     LIMIT 1
@@ -69,6 +70,7 @@ export async function loadScheduleContext(db: Database, teamId: number, commence
     SELECT COUNT(*) AS games
     FROM market_events
     WHERE (home_sports_team_id = ? OR away_sports_team_id = ?)
+      AND status NOT IN ('cancelled', 'postponed')
       AND commence_at != '' AND commence_at < ? AND commence_at >= ?
   `).get(teamId, teamId, commenceAt, windowStart)
 

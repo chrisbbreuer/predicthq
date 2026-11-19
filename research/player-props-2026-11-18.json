@@ -1,0 +1,79 @@
+{
+  "source": "Recovered Claude backtest cache, ESPN site.web.api game logs and Kalshi T-30 quotes",
+  "dateRange": [
+    "2026-11-11",
+    "2026-11-12",
+    "2026-11-13",
+    "2026-11-14",
+    "2026-11-15",
+    "2026-11-16",
+    "2026-11-17",
+    "2026-11-18"
+  ],
+  "players": 256,
+  "overall": {
+    "observations": 12824,
+    "marketBrier": 0.15995459879912874,
+    "modelBrier": 0.1715192384771111,
+    "modelBets": 4916,
+    "modelRoi": -0.06422869724260848
+  },
+  "beforeNov14": {
+    "observations": 4569,
+    "marketBrier": 0.15935112168964805,
+    "modelBrier": 0.16392143894724662,
+    "modelBets": 1714,
+    "modelRoi": 0.031505800917570624
+  },
+  "fromNov14": {
+    "observations": 8255,
+    "marketBrier": 0.1602886129618441,
+    "modelBrier": 0.17572448936166102,
+    "modelBets": 3202,
+    "modelRoi": -0.11547445921841945
+  },
+  "byStat": {
+    "PTS": {
+      "observations": 2638,
+      "marketBrier": 0.16366506823351026,
+      "modelBrier": 0.17570815691366473,
+      "modelBets": 1075,
+      "modelRoi": -0.05286957893773573
+    },
+    "REB": {
+      "observations": 2941,
+      "marketBrier": 0.1556562308738522,
+      "modelBrier": 0.16615850157943463,
+      "modelBets": 1069,
+      "modelRoi": -0.06825255743669842
+    },
+    "AST": {
+      "observations": 2204,
+      "marketBrier": 0.141817105263158,
+      "modelBrier": 0.15080084708478947,
+      "modelBets": 650,
+      "modelRoi": -0.10627544095149268
+    },
+    "3PT": {
+      "observations": 3123,
+      "marketBrier": 0.14544274735830945,
+      "modelBrier": 0.15567151104464538,
+      "modelBets": 1045,
+      "modelRoi": -0.05054846327038596
+    },
+    "PRA": {
+      "observations": 1918,
+      "marketBrier": 0.2059133211678829,
+      "modelBrier": 0.2235898056203493,
+      "modelBets": 1077,
+      "modelRoi": -0.05947011481034678
+    }
+  },
+  "limitations": [
+    "Short retrospective sample; thresholds and props on the same player/game are correlated observations.",
+    "Current-season game logs can contain fewer than twenty prior appearances; minimum was five.",
+    "Fractional DNP/fair-price settlements and missing quotes were excluded by the original collector.",
+    "ROI uses the original unrounded fee approximation, not cent-rounded order fees.",
+    "No reliable out-of-sample advantage established. This does not test actual Kalshi combo quotes."
+  ]
+}

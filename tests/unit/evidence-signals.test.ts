@@ -15,7 +15,7 @@ import { schemaFor } from '../support/schema'
 const TABLES = [
   'prediction_markets', 'market_traders', 'market_trades',
   'sports', 'sports_teams', 'market_events', 'markets', 'selections',
-  'team_standings', 'team_injuries', 'club_valuations',
+  'team_standings', 'team_injuries', 'team_injury_reports', 'club_valuations',
   'bookmakers', 'odds', 'odds_snapshots',
 ]
 

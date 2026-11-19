@@ -1,3 +1,4 @@
+import { injuryReport } from './injuries'
 import type { Database } from '../../Support/db'
 
 /**
@@ -37,6 +38,7 @@ export interface TeamFundamentals {
   gamesPlayed: number
   /** Summed severity of listed absences. */
   injuryBurden: number
+  injuriesKnown?: boolean
   hasStanding: boolean
   hasValuation: boolean
 }
@@ -76,14 +78,7 @@ export async function loadTeamFundamentals(db: Database, teamId: number): Promis
     WHERE t.id = ?
     `).get(teamId),
 
-  // Only the most recent capture, so a player listed across many runs is
-  // counted once rather than accumulating with every pipeline pass.
-    db.query<any>(`
-    SELECT COALESCE(SUM(severity), 0) AS burden
-    FROM team_injuries
-    WHERE sports_team_id = ?
-      AND captured_at = (SELECT MAX(captured_at) FROM team_injuries WHERE sports_team_id = ?)
-    `).get(teamId, teamId),
+    injuryReport(db, teamId),
   ])
 
   return {
@@ -93,7 +88,8 @@ export async function loadTeamFundamentals(db: Database, teamId: number): Promis
     winPercent: Number(standing?.win_percent ?? 0),
     pointDifferential: Number(standing?.point_differential ?? 0),
     gamesPlayed: Number(standing?.games_played ?? 0),
-    injuryBurden: Number(injuries?.burden ?? 0),
+    injuryBurden: injuries.known ? injuries.injuries.reduce((sum, injury) => sum + injury.severity, 0) : 0,
+    injuriesKnown: injuries.known,
     hasStanding: Boolean(standing),
     hasValuation: Boolean(valuation) || Number(league?.tier ?? 0) > 0,
   }
@@ -152,7 +148,7 @@ export function assessMismatch(home: TeamFundamentals, away: TeamFundamentals): 
   // reading of prose and the count says nothing about who is missing, so
   // a heavy list moves the number a little and never carries a call.
   const burdenGap = away.injuryBurden - home.injuryBurden
-  if (Math.abs(burdenGap) >= 2) {
+  if (home.injuriesKnown !== false && away.injuriesKnown !== false && Math.abs(burdenGap) >= 2) {
     parts.push({
       edge: squash(burdenGap, 8),
       weight: 0.5,

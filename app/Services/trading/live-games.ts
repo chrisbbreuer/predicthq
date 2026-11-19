@@ -1,3 +1,4 @@
+import { kalshiGameFor } from '../scores/kalshi'
 import type { Game, Team } from '../scores/espn'
 import { cached } from '../prediction-markets/kalshi-public'
 import { fetchScoreboard } from '../scores/espn'
@@ -236,7 +237,7 @@ function gameByName(hint: string, games: Game[]): Game | null {
  * outcome label) when the code is spelled in a way ESPN does not use.
  */
 export function matchGame(ref: GameTickerRef, games: Game[], hint = ''): Game | null {
-  return games.find(game => splitCode(ref.code, game)) ?? (hint ? gameByName(hint, games) : null)
+  return games.find(game => ref.eventTicker && game.eventTicker && game.eventTicker.split('-')[1] === ref.eventTicker.split('-')[1]) ?? games.find(game => splitCode(ref.code, game)) ?? (hint ? gameByName(hint, games) : null)
 }
 
 function liveTeam(team: Team): LiveTeam {
@@ -322,7 +323,7 @@ export async function liveGameFor(
     return null
 
   const games = await gamesOn(ref.league, ref.date, loader).catch(() => [] as Game[])
-  const game = matchGame(ref, games, hint)
+  const game = matchGame(ref, games, hint) ?? (loader === fetchScoreboard ? await kalshiGameFor(ref.league, ref.eventTicker.split('-')[1]!).catch(() => null) : null)
   return game ? liveGameCard(game, ref, side, hint) : null
 }
 

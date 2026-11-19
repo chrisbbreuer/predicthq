@@ -55,13 +55,13 @@ export default defineModel({
       validation: { rule: schema.float().min(0).max(1) },
       factory: () => 0.3,
     },
-    // 'open' | 'won' | 'lost'
+    // A fractional (DNP/fair-price) resolution is 'settled'.
     status: {
       type: 'string',
       required: true,
       fillable: true,
       default: 'open',
-      validation: { rule: schema.enum(['open', 'won', 'lost']) },
+      validation: { rule: schema.enum(['open', 'won', 'lost', 'settled']) },
       factory: () => 'open',
     },
     payout: {

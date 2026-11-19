@@ -1,8 +1,10 @@
+import { gameIntelligence } from '../../Services/scores/intelligence'
 import { response } from '@stacksjs/router'
 import { Database } from '../../Support/db'
 import { kalshiChart, parseRange } from '../../Services/prediction-markets/kalshi-chart'
 import { kalshiEventMarkets } from '../../Services/prediction-markets/kalshi-public'
 import { gameBoard } from '../../Services/scores/game-board'
+import type { GameDetail } from '../../Services/scores/espn'
 import { isKnownLeague } from '../../Services/scores/espn'
 import { kalshiEventFor } from '../../Services/scores/kalshi-event'
 import { gameDetail } from '../../Services/trading/leg-progress'
@@ -28,21 +30,21 @@ export default {
   async handle(request?: ParamRequest) {
     const league = String(request?.getParam?.('league') ?? '').toLowerCase()
     const id = String(request?.getParam?.('id') ?? '')
-    if (!isKnownLeague(league) || !/^\d{1,20}$/.test(id))
+    if (!isKnownLeague(league) || !/^(?:\d{1,20}|kalshi-[a-f0-9-]{36})$/i.test(id))
       return response.error('Unknown game.', 404)
 
     const game = await gameDetail(league, id).catch(() => null)
     if (!game)
-      return response.error('ESPN has no game with that id.', 404)
+      return response.error('No score feed has a game with that id.', 404)
 
     const market = await kalshiEventFor(league, id, game).catch(() => null)
     const range = parseRange(request?.get?.('range'))
-    const [chart, outcomes, board] = await Promise.all([
+    const [chart, outcomes, context] = await Promise.all([
       market
         ? kalshiChart(market.tickers[0]!, range, { liveSince: game.state === 'pre' ? null : game.startsAt ?? null }).catch(() => null)
         : Promise.resolve(null),
       market ? kalshiEventMarkets(market.eventTicker).catch(() => []) : Promise.resolve([]),
-      boardFor(id),
+      contextFor(game),
     ])
     // Every contract trades on exactly one outcome's market, so the event's
     // volume is the sum across its outcomes.
@@ -52,19 +54,21 @@ export default {
       asOf: new Date().toISOString(),
       game,
       kalshi: market && chart ? { eventTicker: market.eventTicker, tickers: market.tickers, chart, range, volume } : null,
-      board,
+      board: context.board,
+      intelligence: context.intelligence,
     }
   },
 }
 
 /** The game's prices from our own odds feed, or null when it has none. */
-async function boardFor(espnId: string) {
+async function contextFor(game: GameDetail) {
   const db = new Database()
   try {
-    return await gameBoard(db, espnId)
+    const [board, intelligence] = await Promise.all([gameBoard(db, game.id).catch(() => null), gameIntelligence(db, game).catch(() => null)])
+    return { board, intelligence }
   }
   catch {
-    return null
+    return { board: null, intelligence: null }
   }
   finally {
     db.close()

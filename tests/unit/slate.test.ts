@@ -59,6 +59,11 @@ describe('building a slate', () => {
     expect(assembleParlay(heavy)).toBeNull()
   })
 
+  it('does not claim a 2x payout when fees take it below 2x', () => {
+    const picks = rankPicks(Array.from({ length: 4 }, (_, i) => line({ ticker: `E${i}`, gameId: `e${i}`, bookProb: 0.9, bid: 0.83, ask: 0.84 })))
+    expect(assembleParlay(picks)).toBeNull()
+  })
+
   it('places nothing when nothing disagrees', () => {
     expect(buildSlate([], { budget: 5 })).toEqual({ singles: [], parlays: [] })
   })
@@ -118,6 +123,18 @@ describe('paper parlays', () => {
     const position = db.prepare('SELECT status, realized_pnl FROM exchange_positions').get()
     expect(position.status).toBe('settled')
     expect(Number(position.realized_pnl)).toBeCloseTo(2.13, 2)
+  })
+
+  it('settles a fractional fair-price prop instead of leaving a DNP open forever', async () => {
+    const db = freshDb()
+    await placePaperParlay(db, { userId: 1, strategyId: null, stake: 1, legs: [
+      { ticker: 'PROP', side: 'yes', price: 0.8, label: 'Player 10+' },
+      { ticker: 'WINNER', side: 'no', price: 0.5, label: 'Team' },
+    ] })
+    expect(await settlePaperParlays(db, async () => new Map<string, string | number>([['PROP', 0.6], ['WINNER', 'no']]))).toEqual({ settled: 1, won: 0, lost: 0 })
+    const rows = await paperParlays(db, 1, 'settled')
+    expect(rows[0]!.status).toBe('settled')
+    expect(rows[0]!.payout).toBe(1.45)
   })
 
   it('refuses a parlay of one leg or the same market twice', async () => {

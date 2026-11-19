@@ -91,6 +91,8 @@ export interface LiveLine {
   live: boolean
   /** The other team, when the market names one: NO on a two-way game is a bet on them. */
   opponent?: string
+  /** A player prop: `title` already reads as the bet ("Luka Dončić 25+ points"). */
+  prop?: boolean
 }
 
 function teamName(team: { location?: string, name?: string } | undefined): string {

@@ -4,7 +4,7 @@ import type { PaperLeg } from './paper-parlays'
 import { tradablePrice } from './evidence'
 import { liveLines } from './line-snapshots'
 import { executePaper } from './paper'
-import { placePaperParlay } from './paper-parlays'
+import { parlayPayout, placePaperParlay } from './paper-parlays'
 import { normalizeStrategyRow } from './run'
 
 /**
@@ -55,6 +55,8 @@ export interface Slate {
 const SOCCER = new Set(['epl', 'laliga', 'seriea', 'bundesliga', 'ligue1', 'ucl', 'uefa-nations', 'mls'])
 
 function label(line: LiveLine, side: 'yes' | 'no'): string {
+  if (line.prop)
+    return side === 'yes' ? line.title : `Under: ${line.title}`
   if (line.side === 'draw')
     return side === 'yes' ? `Draw (${line.title})` : `No draw (${line.title})`
   if (side === 'yes')
@@ -147,15 +149,17 @@ export const MAX_PARLAY_LEGS = 4
  */
 export function assembleParlay(
   pool: SlatePick[],
-  options: { minPayout?: number, maxLegs?: number, start?: SlatePick[] } = {},
+  options: { minPayout?: number, maxLegs?: number, start?: SlatePick[], stake?: number } = {},
 ): SlatePick[] | null {
-  const target = 1 / (options.minPayout ?? MIN_PARLAY_PAYOUT)
+  const minPayout = options.minPayout ?? MIN_PARLAY_PAYOUT
+  const stake = options.stake ?? 1
+  const meetsPayout = (price: number) => parlayPayout(stake, price) >= minPayout * stake
   const maxLegs = options.maxLegs ?? MAX_PARLAY_LEGS
   const legs = [...(options.start ?? [])]
   const games = new Set(legs.map(pick => `${pick.line.league}:${pick.line.gameId}`))
   const price = () => legs.reduce((product, pick) => product * pick.price, 1)
   for (const pick of pool) {
-    if (legs.length >= 2 && price() <= target)
+    if (legs.length >= 2 && meetsPayout(price()))
       break
     if (legs.length >= maxLegs)
       return null
@@ -165,7 +169,7 @@ export function assembleParlay(
     legs.push(pick)
     games.add(game)
   }
-  return legs.length >= 2 && price() <= target ? legs : null
+  return legs.length >= 2 && meetsPayout(price()) ? legs : null
 }
 
 /**
@@ -185,7 +189,7 @@ export function buildSlate(picks: SlatePick[], options: { budget?: number, stake
   for (const source of [picks.slice(singles.length), picks]) {
     let pool = source.filter(pick => !parlays.flat().includes(pick))
     while (parlays.length < parlayCount) {
-      const parlay = assembleParlay(pool)
+      const parlay = assembleParlay(pool, { stake })
       if (!parlay)
         break
       parlays.push(parlay)
@@ -202,6 +206,8 @@ function pct(p: number): string {
 function rationale(pick: SlatePick): string {
   const mid = (pick.line.bid + pick.line.ask) / 2
   const sideMid = pick.side === 'yes' ? mid : 1 - mid
+  if (pick.line.prop || pick.line.live)
+    return `${pick.label}: Kalshi has it at ${pct(sideMid)}, buying at ${Math.round(pick.price * 100)}¢. No edge claimed; spread and fee cost about ${(-pick.ev * 100).toFixed(1)}%`
   return `${pick.label}: ${pick.line.provider || 'Book'} ${pct(pick.fair)} vs Kalshi ${pct(sideMid)}, buying at ${Math.round(pick.price * 100)}¢, ${(pick.ev * 100).toFixed(1)}% expected if the book is right`
 }
 

@@ -1,14 +1,16 @@
+import { kalshiScoreboard } from '../scores/kalshi'
 import type { Database } from '../../Support/db'
 import type { SportRow } from './resolve'
 import { nowIso, toIso } from '../../Support/keys'
-import { loadSports, resolveEvent, resolveTeam } from './resolve'
+import { loadSports, resolveEvent, resolveExistingTeam, resolveTeam } from './resolve'
 import { fetchWithRetry, IngestRunTracker } from './run'
 
 /**
  * ESPN as the schedule-and-results backbone.
  *
- * ESPN's site API needs no key, no account, and no quota, which makes it
- * the right source for the two things the system cannot function without:
+ * ESPN's site API needs no key or account and supplies two things the
+ * system cannot function without. Access is not guaranteed; Kalshi's
+ * milestone and live-data feeds provide a fallback where listed:
  * **which games exist** and **how they finished**. Odds feeds are metered
  * and partial; a schedule is neither, and every paid request we spend
  * discovering fixtures is one not spent on prices.
@@ -45,6 +47,8 @@ interface EspnCompetitor {
 }
 
 function num(value: unknown): number | null {
+  if (value === null || value === undefined || value === '')
+    return null
   const n = Number(value)
   return Number.isFinite(n) ? n : null
 }
@@ -117,7 +121,24 @@ export async function ingestEspn(
 
       const res = await fetchWithRetry(url, { timeoutMs: 10_000 })
       if (!res || !res.ok) {
-        tracker.fail(`${sport.slug} ${offset >= 0 ? '+' : ''}${offset}d: ${res ? `HTTP ${res.status}` : 'network'}`)
+        tracker.fail(`${sport.slug} ${offset >= 0 ? '+' : ''}${offset}d: ${res ? `HTTP ${res.status}` : 'network'}; using Kalshi where available`)
+        const games = await kalshiScoreboard(sport.slug, espnDate(offset)).catch(() => [])
+        for (const game of games) {
+          const outcome = await ingestOneEvent(db, sport, {
+            id: game.eventTicker, date: game.startsAt,
+            status: { type: { state: game.state, shortDetail: game.status } },
+            competitions: [{ competitors: (['home', 'away'] as const).map(side => ({
+              homeAway: side, score: game[side].score, team: { displayName: game[side].name },
+            })) }],
+          }, 'kalshi')
+          tracker.rowsRead++
+          if (outcome) {
+            eventsSeen++
+            tracker.rowsWritten++
+            if (outcome.created) eventsCreated++
+            if (outcome.resultWritten) resultsWritten++
+          }
+        }
         continue
       }
 
@@ -174,6 +195,7 @@ async function ingestOneEvent(
   db: Database,
   sport: SportRow,
   event: any,
+  provider = 'espn',
 ): Promise<{ created: boolean, resultWritten: boolean } | null> {
   const externalId = String(event?.id ?? '')
   if (!externalId)
@@ -190,10 +212,24 @@ async function ingestOneEvent(
   if (!homeRaw || !awayRaw)
     return null
 
-  const homeName = String(homeRaw.team?.displayName ?? homeRaw.team?.name ?? '')
-  const awayName = String(awayRaw.team?.displayName ?? awayRaw.team?.name ?? '')
+  let homeName = String(homeRaw.team?.displayName ?? homeRaw.team?.name ?? '')
+  let awayName = String(awayRaw.team?.displayName ?? awayRaw.team?.name ?? '')
   if (!homeName || !awayName)
     return null
+
+  if (provider === 'kalshi') {
+    const canonicalName = async (name: string) => {
+      const suffix = /^[A-Z]{2,4} (.{4,})$/.exec(name)?.[1]
+      const id = await resolveExistingTeam(db, sport.id, name) ?? (suffix ? await resolveExistingTeam(db, sport.id, suffix) : null)
+      if (!id) return null
+      return (await db.query<{ name: string }>('SELECT name FROM sports_teams WHERE id = ?').get(id))?.name ?? null
+    }
+    const home = await canonicalName(homeName)
+    const away = await canonicalName(awayName)
+    if (!home || !away || home === away) return null
+    homeName = home
+    awayName = away
+  }
 
   const homeTeamId = await resolveTeam(db, sport.id, homeName, {
     shortName: homeRaw.team?.shortDisplayName,
@@ -221,7 +257,7 @@ async function ingestOneEvent(
 
   const { eventId, created } = await resolveEvent(db, {
     sportId: sport.id,
-    provider: 'espn',
+    provider,
     externalId,
     // ESPN orders its own titles away-at-home; ours reads the same way so
     // the board and the scoreboard agree at a glance.
@@ -243,7 +279,7 @@ async function ingestOneEvent(
     const homeScore = num(homeRaw.score)
     const awayScore = num(awayRaw.score)
     if (homeScore !== null && awayScore !== null) {
-      await writeResult(db, eventId, homeScore, awayScore, competition)
+      await writeResult(db, eventId, homeScore, awayScore, competition, provider)
       resultWritten = true
     }
   }
@@ -268,6 +304,7 @@ async function writeResult(
   homeScore: number,
   awayScore: number,
   competition: any,
+  provider: string,
 ): Promise<void> {
   const winnerSide = homeScore > awayScore ? 'home' : (awayScore > homeScore ? 'away' : 'draw')
 
@@ -285,7 +322,7 @@ async function writeResult(
     winner_side: winnerSide,
     period_scores: periodScores,
     completed: 1,
-    source: 'espn',
+    source: provider,
     settled_at: nowIso(),
     graded_at: previous && previous.home_score === homeScore && previous.away_score === awayScore ? previous.graded_at : '',
     updated_at: nowIso(),

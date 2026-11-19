@@ -1,3 +1,5 @@
+import { kalshiGameDetail, kalshiScoreboard } from './kalshi'
+import { espnFetch } from './espn-client'
 /**
  * ESPN scoreboard client.
  *
@@ -28,6 +30,9 @@ export interface Team {
 }
 
 export interface Game {
+  source?: string
+  sourceUpdatedAt?: string
+  eventTicker?: string
   id: string
   league: string
   startsAt: string
@@ -108,6 +113,8 @@ function hexColor(value: unknown): string {
 }
 
 function num(value: unknown): number | null {
+  if (value === null || value === undefined || value === '')
+    return null
   const n = Number(value)
   return Number.isFinite(n) ? n : null
 }
@@ -141,6 +148,7 @@ function toTeam(competitor: any): Team {
 export async function fetchScoreboard(leagueKey: string, date?: string): Promise<Game[]> {
   const league = leagueFor(leagueKey)
   const groups = league.groups?.length ? league.groups : [null]
+  let failed = false
   const payloads = await Promise.all(groups.map(async (group) => {
     // The older `site.api` hostname rejects Bun's TLS client at the edge.
     // `site.web.api` serves the same public site payload and is reachable by
@@ -154,18 +162,16 @@ export async function fetchScoreboard(leagueKey: string, date?: string): Promise
       url.searchParams.set('limit', String(league.limit))
 
     try {
-      const res = await fetch(url, {
-        headers: { accept: 'application/json' },
-        // A scoreboard that has not answered in eight seconds is not a
-        // scoreboard worth blocking a page render on.
-        signal: AbortSignal.timeout(8000),
-      })
-      if (!res.ok)
+      const res = await espnFetch(url)
+      if (!res?.ok) {
+        failed = true
         return []
+      }
       const payload: any = await res.json()
       return Array.isArray(payload?.events) ? payload.events : []
     }
     catch {
+      failed = true
       // Network failure, timeout, or unparseable body. The page renders its
       // empty state; an undocumented upstream going quiet is not an outage
       // worth failing the request over.
@@ -183,6 +189,9 @@ export async function fetchScoreboard(leagueKey: string, date?: string): Promise
     seen.add(id)
     return true
   })
+
+  if (events.length === 0 && failed)
+    return kalshiScoreboard(leagueKey, date).catch(() => [])
 
   return events.flatMap((event) => {
     const competition = event?.competitions?.[0]
@@ -244,6 +253,9 @@ export interface BoxTeam {
 }
 
 export interface BoxPlayer {
+  id?: string
+  headshot?: string
+  dnpReason?: string
   name: string
   shortName: string
   jersey: string
@@ -256,6 +268,9 @@ export interface BoxPlayer {
 }
 
 export interface GameDetail {
+  source?: string
+  sourceUpdatedAt?: string
+  eventTicker?: string
   id: string
   league: string
   state: string
@@ -288,6 +303,9 @@ function toBoxTeam(entry: any): BoxTeam | null {
   return {
     labels,
     players: athletes.map(row => ({
+      id: String(row?.athlete?.id ?? ''),
+      headshot: String(row?.athlete?.headshot?.href ?? ''),
+      dnpReason: String(row?.reason ?? ''),
       name: String(row?.athlete?.displayName ?? ''),
       shortName: String(row?.athlete?.shortName ?? row?.athlete?.displayName ?? ''),
       jersey: String(row?.athlete?.jersey ?? ''),
@@ -373,13 +391,15 @@ function flatStats(team: any): Map<string, string> {
  * changes shape or an id is stale.
  */
 export async function fetchGame(leagueKey: string, eventId: string): Promise<GameDetail | null> {
+  if (eventId.startsWith('kalshi-'))
+    return kalshiGameDetail(leagueKey, eventId).catch(() => null)
   const league = leagueFor(leagueKey)
   const url = `https://site.web.api.espn.com/apis/site/v2/sports/${league.path}/summary?event=${encodeURIComponent(eventId)}`
 
   let d: any
   try {
-    const res = await fetch(url, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(8000) })
-    if (!res.ok)
+    const res = await espnFetch(url)
+    if (!res?.ok)
       return null
     d = await res.json()
   }

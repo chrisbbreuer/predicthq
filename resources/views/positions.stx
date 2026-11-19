@@ -468,8 +468,8 @@ function apply(data: any): void {
       key: prefix + index,
       question: position.question,
       outcome: position.outcomeLabel || position.side,
-      result: position.won ? 'Won' : 'Lost',
-      resultClass: position.won ? 'pos' : 'neg',
+      result: position.resultLabel || (position.won ? 'Won' : 'Lost'),
+      resultClass: position.resultLabel ? 'muted' : (position.won ? 'pos' : 'neg'),
       strategy: position.strategy + (position.mode === 'paper' ? ' · paper' : ''),
       settledAt: position.settledAt,
       size: contracts(position.size),
@@ -1198,14 +1198,14 @@ onMount(start)
                     <template :for="leg in suggestion.legs">
                       <a :href="leg.href" data-no-router class="suggestion-leg">
                         <span class="pill" :class="leg.live ? 'live' : ''" x-text="leg.starts"></span>
-                        <span class="font-semibold text-sm truncate min-w-0" x-text="leg.label"></span>
-                        <span class="ml-auto text-sm font-semibold num" x-text="leg.price"></span>
+                        <span class="min-w-0 font-semibold text-sm truncate" x-text="leg.label"></span>
+                        <span class="ml-auto font-semibold text-sm num" x-text="leg.price"></span>
                       </a>
                     </template>
                   </div>
                   <p class="leading-relaxed text-xs muted" x-show="suggestion.rationale" x-text="suggestion.rationale"></p>
                   <div class="flex flex-wrap gap-2 items-center justify-end">
-                    <a x-show="suggestion.single" :href="suggestion.betHref" data-no-router class="px-4 h-9 font-bold text-sm rounded-full btn inline-flex items-center">Bet on Kalshi</a>
+                    <a x-show="suggestion.single" :href="suggestion.betHref" data-no-router class="inline-flex items-center px-4 h-9 font-bold text-sm rounded-full btn">Bet on Kalshi</a>
                     <button type="button" class="px-4 h-9 font-bold text-sm rounded-full btn" :disabled="suggestionBusy() === suggestion.id" @click="decide(suggestion.id, false)">Dismiss</button>
                     <button type="button" class="px-4 h-9 font-bold text-sm rounded-full btn btn-primary" :disabled="suggestionBusy() === suggestion.id" @click="decide(suggestion.id, true)">Approve on paper</button>
                   </div>
@@ -1278,8 +1278,8 @@ onMount(start)
                     <div x-show="leg.kind === 'leg'" class="paper-leg">
                       <span class="leg-status pill" :class="leg.statusClass"><span x-show="leg.isLive" class="live-pulse"></span><span x-text="leg.statusLabel"></span></span>
                       <span x-show="leg.choice === 'NO'" class="no pill">NO</span>
-                      <span class="text-sm truncate min-w-0" :title="leg.label" x-text="leg.label"></span>
-                      <span class="ml-auto text-sm font-semibold num" :class="leg.chanceTone" x-text="leg.chance"></span>
+                      <span class="min-w-0 text-sm truncate" :title="leg.label" x-text="leg.label"></span>
+                      <span class="ml-auto font-semibold text-sm num" :class="leg.chanceTone" x-text="leg.chance"></span>
                     </div>
                   </template>
                 </div>
