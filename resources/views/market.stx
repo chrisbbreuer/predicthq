@@ -1,7 +1,8 @@
 <script server>
 import { loadMarket } from '../../app/Support/market-discovery'
 const navActive = 'home'
-const market = await loadMarket(query.id)
+const pageQuery = typeof query === 'undefined' ? {} : query
+const market = await loadMarket(pageQuery.id)
 const pageTitle = market ? `${market.question} | PredictHQ` : 'Market not found | PredictHQ'
 const pageDescription = 'Review the latest captured prediction-market price, volume, and settlement status.'
 const updated = market?.updated_at ? String(market.updated_at) : 'Unavailable'

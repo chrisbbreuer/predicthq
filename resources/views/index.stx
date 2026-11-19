@@ -4,7 +4,8 @@ const canonicalPath = '/'
 const navActive = 'home'
 const pageTitle = 'PredictHQ | A clearer view of every market'
 const pageDescription = 'Kalshi and Polymarket prices side by side, live scores next to the markets they move, and a tracker that follows your bets leg by leg.'
-const discovery = await loadDiscovery(query)
+const pageQuery = typeof query === 'undefined' ? {} : query
+const discovery = await loadDiscovery(pageQuery)
 const cards = discovery.cards
 const featured = cards[0] || null
 const selectedCategory = discovery.category

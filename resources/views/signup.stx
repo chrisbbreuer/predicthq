@@ -17,9 +17,10 @@ const navActive = 'signup'
 const pageTitle = 'PredictHQ: create an account'
 const pageDescription = 'Create a PredictHQ account to save your sheets, connect your venues, and follow the markets you trade.'
 
-const authContextQuery = signupQuery(query.ref, query.invite)
+const pageQuery = typeof query === 'undefined' ? {} : query
+const authContextQuery = signupQuery(pageQuery.ref, pageQuery.invite)
 const providers = configuredSocialProviders()
-const authError = signInError(query.error)
+const authError = signInError(pageQuery.error)
 const authHeading = 'Create your account'
 const authBlurb = 'One step. Pick a provider and PredictHQ builds the account from the email it shares.'
 const authVerb = 'Continue with'

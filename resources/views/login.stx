@@ -21,9 +21,10 @@ const pageDescription = 'Sign in to PredictHQ to keep your sheets, your venue ac
 
 // Read by the `auth-panel` partial out of this scope, the same way the
 // nav reads `navActive`.
-const authContextQuery = signupQuery(query.ref, query.invite)
+const pageQuery = typeof query === 'undefined' ? {} : query
+const authContextQuery = signupQuery(pageQuery.ref, pageQuery.invite)
 const providers = configuredSocialProviders()
-const authError = signInError(query.error)
+const authError = signInError(pageQuery.error)
 const authHeading = 'Welcome back'
 const authBlurb = 'Sign in with the provider you used the first time. PredictHQ matches you on the email it shares.'
 const authVerb = 'Sign in with'

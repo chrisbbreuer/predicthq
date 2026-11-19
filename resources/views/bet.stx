@@ -16,9 +16,10 @@
 // Private to the signed-in user: kept out of search results and the sitemap.
 const noindex = true
 const navActive = 'positions'
-const rawTicker = String(query?.ticker ?? '').trim().toUpperCase()
+const pageQuery = typeof query === 'undefined' ? {} : query
+const rawTicker = String(pageQuery?.ticker ?? '').trim().toUpperCase()
 const ticker = /^[A-Z0-9][A-Z0-9._-]{2,120}$/.test(rawTicker) ? rawTicker : ''
-const side = String(query?.side ?? 'yes').toLowerCase() === 'no' ? 'no' : 'yes'
+const side = String(pageQuery?.side ?? 'yes').toLowerCase() === 'no' ? 'no' : 'yes'
 const pageTitle = ticker ? `${ticker} | PredictHQ` : 'Bet not found | PredictHQ'
 const pageDescription = 'Follow a bet live: score, clock, and how the odds moved through the game.'
 </script>

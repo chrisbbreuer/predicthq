@@ -6,7 +6,8 @@ const shareOrigin = String(config.app.url || 'https://predicthq.org').replace(/\
 const navActive = 'groups'
 const pageTitle = 'Groups | PredictHQ'
 const pageDescription = 'Your people. Your market conversations. Create a private PredictHQ group and invite friends.'
-const invitationToken = /^[a-f0-9]{64}$/.test(String(query.invite || '')) ? String(query.invite) : ''
+const pageQuery = typeof query === 'undefined' ? {} : query
+const invitationToken = /^[a-f0-9]{64}$/.test(String(pageQuery.invite || '')) ? String(pageQuery.invite) : ''
 const signInPath = invitationToken ? `/login?invite=${invitationToken}` : '/login'
 </script>
 
