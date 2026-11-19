@@ -34,14 +34,33 @@ export interface Suggestion {
   createdAt: string
 }
 
+interface SlateTicketReference {
+  suggestionId: number
+  paperId: number
+  kalshiEventUrl?: string
+}
+
+type PaperResult = 'pending' | 'won' | 'lost' | 'partial'
+
+interface SlateTicket extends Suggestion {
+  canApprove: boolean
+  paperResult: PaperResult | null
+  kalshiOrderUrl: string | null
+}
+
+interface SuggestionSlate {
+  name: string
+  tickets: SlateTicket[]
+}
+
 /** Name of the paper strategy approved suggestions are recorded under. */
 export const APPROVED_STRATEGY = 'Approved suggestions'
 
 /** How long a suggestion with a live leg stays good: in-play prices move in seconds. */
 const LIVE_SHELF_MS = 15 * 60_000
 
-function signature(legs: SuggestionLeg[]): string {
-  return legs.map(leg => `${leg.ticker}:${leg.side}`).sort().join('+').slice(0, 255)
+function legKey(legs: Pick<SuggestionLeg, 'ticker' | 'side'>[]): string {
+  return legs.map(leg => `${leg.ticker}:${leg.side}`).sort().join('+')
 }
 
 function eligibleLegs(legs: SuggestionLeg[]): boolean {
@@ -65,7 +84,7 @@ export async function saveSuggestions(db: Database, userId: number, bets: Array<
     const legs = bet.picks.map(pickLeg)
     if (!eligibleLegs(legs))
       continue
-    const sig = signature(legs)
+    const sig = legKey(legs).slice(0, 255)
     const seen = await db.query<{ status: string, legs: string }>(`SELECT status, legs FROM bet_suggestions WHERE user_id = ? AND signature = ? AND created_at >= ? ORDER BY id DESC LIMIT 1`).get(userId, sig, since)
     if (seen && (seen.status !== 'pending' || eligibleLegs(JSON.parse(seen.legs))))
       continue
@@ -153,14 +172,99 @@ function toSuggestion(row: Record<string, unknown>): Suggestion {
   }
 }
 
-/** Pending suggestions that are still good, then the last few decided. */
-export async function listSuggestions(db: Database, userId: number, now = Date.now()): Promise<{ pending: Suggestion[], recent: Suggestion[] }> {
+async function savedSlate(db: Database, userId: number): Promise<{ name: string, refs: SlateTicketReference[] } | null> {
+  const row = await db.query<{ name: string, tickets: string }>(`
+    SELECT name, tickets FROM suggestion_slates WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 1
+  `).get(userId)
+  return row ? { name: row.name, refs: JSON.parse(row.tickets) } : null
+}
+
+async function paperResult(db: Database, userId: number, suggestion: Suggestion, paperId: number): Promise<PaperResult | null> {
+  if (suggestion.kind === 'single') {
+    const leg = suggestion.legs[0]
+    if (!leg)
+      return null
+    const position = await db.query<{ status: string, settlement_price: number }>(`
+      SELECT p.status, p.settlement_price FROM exchange_positions p
+      JOIN trading_strategies s ON s.id = p.trading_strategy_id
+      WHERE p.id = ? AND s.user_id = ? AND s.mode = 'paper' AND p.venue = 'paper:kalshi'
+        AND p.market_external_id = ? AND p.side = ?
+    `).get(paperId, userId, leg.ticker, leg.side)
+    if (!position)
+      return null
+    if (position.status !== 'settled')
+      return 'pending'
+    const price = Number(position.settlement_price)
+    return price === 1 ? 'won' : price === 0 ? 'lost' : 'partial'
+  }
+
+  const parlay = await db.query<{ status: string, stake: number, legs: string }>(`
+    SELECT status, stake, legs FROM paper_parlays WHERE id = ? AND user_id = ?
+  `).get(paperId, userId)
+  if (!parlay || Number(parlay.stake) !== suggestion.stake || legKey(JSON.parse(parlay.legs)) !== legKey(suggestion.legs))
+    return null
+  if (parlay.status === 'won' || parlay.status === 'lost')
+    return parlay.status
+  return parlay.status === 'settled' ? 'partial' : 'pending'
+}
+
+async function listSlate(db: Database, userId: number, now: number): Promise<SuggestionSlate | null> {
+  const slate = await savedSlate(db, userId)
+  if (!slate?.refs.length)
+    return null
+  const ids = slate.refs.map(ref => ref.suggestionId)
+  const rows = await db.query<Record<string, unknown>>(`
+    SELECT * FROM bet_suggestions WHERE user_id = ? AND id IN (${ids.map(() => '?').join(', ')})
+  `).all(userId, ...ids)
+  const suggestions = new Map(rows.map((row) => {
+    const suggestion = toSuggestion(row)
+    return [suggestion.id, suggestion]
+  }))
+  const tickets: SlateTicket[] = []
+  for (const ref of slate.refs) {
+    const suggestion = suggestions.get(ref.suggestionId)
+    if (!suggestion)
+      continue
+    const result = await paperResult(db, userId, suggestion, ref.paperId)
+    tickets.push({
+      ...suggestion,
+      canApprove: suggestion.status === 'pending' && result === 'pending' && eligibleLegs(suggestion.legs),
+      paperResult: result,
+      kalshiOrderUrl: suggestion.kind === 'single' && result === 'pending'
+        && (suggestion.status === 'pending' || suggestion.status === 'approved')
+        && Date.parse(suggestion.expiresAt) > now
+        ? kalshiOrderUrl(ref.kalshiEventUrl, suggestion.legs[0])
+        : null,
+    })
+  }
+  return tickets.length ? { name: slate.name, tickets } : null
+}
+
+function kalshiOrderUrl(eventUrl: string | undefined, leg: SuggestionLeg | undefined): string | null {
+  if (!eventUrl || !leg)
+    return null
+  const url = URL.parse(eventUrl)
+  if (url?.origin !== 'https://kalshi.com' || !url.pathname.startsWith('/markets/'))
+    return null
+  url.search = new URLSearchParams({
+    op_market_ticker: leg.ticker,
+    op_order_side: leg.side,
+    op_order_type: 'dollars',
+    op_side: 'buy',
+  }).toString()
+  return url.href
+}
+
+/** The saved slate, pending suggestions that are still good, and recent decisions. */
+export async function listSuggestions(db: Database, userId: number, now = Date.now()): Promise<{ slate: SuggestionSlate | null, pending: Suggestion[], recent: Suggestion[] }> {
   const stamp = new Date(now).toISOString()
   await db.query(`UPDATE bet_suggestions SET status = 'expired', updated_at = ? WHERE user_id = ? AND status = 'pending' AND expires_at < ?`).run(stamp, userId, stamp)
+  const slate = await listSlate(db, userId, now)
+  const slateIds = new Set(slate?.tickets.map(ticket => ticket.id))
   const pending = (await db.query<Record<string, unknown>>(`SELECT * FROM bet_suggestions WHERE user_id = ? AND status = 'pending' ORDER BY ev DESC, id DESC`).all(userId))
-    .map(toSuggestion).filter(suggestion => eligibleLegs(suggestion.legs)).slice(0, 20)
+    .map(toSuggestion).filter(suggestion => !slateIds.has(suggestion.id) && eligibleLegs(suggestion.legs)).slice(0, 20)
   const recent = (await db.query<Record<string, unknown>>(`SELECT * FROM bet_suggestions WHERE user_id = ? AND status IN ('approved', 'dismissed') ORDER BY id DESC LIMIT 8`).all(userId)).map(toSuggestion)
-  return { pending, recent }
+  return { slate, pending, recent }
 }
 
 async function pendingSuggestion(db: Database, userId: number, id: number, now = Date.now()): Promise<Suggestion> {
@@ -175,13 +279,28 @@ async function pendingSuggestion(db: Database, userId: number, id: number, now =
   return suggestion
 }
 
-/** Record the suggestion as a paper bet under the user's "Approved suggestions" strategy. */
+/** Approve an existing slate ticket or record a new paper bet under "Approved suggestions". */
 export async function approveSuggestion(db: Database, userId: number, id: number, now = Date.now()): Promise<Suggestion> {
   const suggestion = await pendingSuggestion(db, userId, id, now)
   if (!eligibleLegs(suggestion.legs))
     throw new Error(`Every suggestion leg needs at least ${MIN_PICK_CONFIDENCE * 100}% confidence.`)
-  const strategyId = await ensurePaperStrategy(db, userId, APPROVED_STRATEGY, 100, suggestion.stake)
+  const ref = (await savedSlate(db, userId))?.refs.find(ticket => ticket.suggestionId === id)
   let outcome: string
+  if (ref) {
+    if (await paperResult(db, userId, suggestion, ref.paperId) !== 'pending')
+      throw new Error('The paper position for this slate ticket is unavailable or settled.')
+    outcome = `paper ${suggestion.kind} #${ref.paperId}`
+    const stamp = new Date(now).toISOString()
+    const updated = await db.query(`
+      UPDATE bet_suggestions SET status = 'approved', decided_at = ?, outcome = ?, updated_at = ?
+      WHERE id = ? AND user_id = ? AND status = 'pending' AND expires_at >= ?
+    `).run(stamp, outcome, stamp, id, userId, stamp)
+    if (!updated.changes)
+      throw new Error('This slate ticket has already been decided or has expired.')
+    return { ...suggestion, status: 'approved', decidedAt: stamp, outcome }
+  }
+
+  const strategyId = await ensurePaperStrategy(db, userId, APPROVED_STRATEGY, 100, suggestion.stake)
   if (suggestion.kind === 'single') {
     const result = await placePaperSingle(db, strategyId, suggestion.legs[0]!, suggestion.stake)
     if (!result.placed)

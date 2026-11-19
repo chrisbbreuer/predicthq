@@ -11086,6 +11086,71 @@
         ]
       },
       {
+        "table": "suggestion_slates",
+        "columns": [
+          {
+            "name": "id",
+            "type": "bigint",
+            "isPrimaryKey": true,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": false
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": false,
+            "maxLength": 255
+          },
+          {
+            "name": "tickets",
+            "type": "text",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": false
+          },
+          {
+            "name": "user_id",
+            "type": "bigint",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": true,
+            "hasDefault": false
+          },
+          {
+            "name": "created_at",
+            "type": "datetime",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": true,
+            "defaultValue": "UTC_TIMESTAMP"
+          },
+          {
+            "name": "updated_at",
+            "type": "datetime",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": true,
+            "hasDefault": false
+          }
+        ],
+        "indexes": [
+          {
+            "name": "suggestion_slates_user_created",
+            "columns": [
+              "user_id",
+              "created_at"
+            ],
+            "type": "index"
+          }
+        ]
+      },
+      {
         "table": "tags",
         "columns": [
           {
@@ -16088,7 +16153,7 @@
       }
     ]
   },
-  "hash": "a006192ab193f48e0e77b90802ec7eac819ad1cdee5d6042b52743ff5666e408",
+  "hash": "7f84128c0194f477a9feb63855c51cc65eef404b0ed43b5f864501f1433adae3",
   "dialect": "sqlite",
-  "updatedAt": "2026-09-09T15:15:43.811Z"
+  "updatedAt": "2026-11-19T17:22:30.711Z"
 }

@@ -12908,6 +12908,71 @@
         ]
       },
       {
+        "table": "suggestion_slates",
+        "columns": [
+          {
+            "name": "id",
+            "type": "bigint",
+            "isPrimaryKey": true,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": false
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": false,
+            "maxLength": 255
+          },
+          {
+            "name": "tickets",
+            "type": "text",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": false
+          },
+          {
+            "name": "user_id",
+            "type": "bigint",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": true,
+            "hasDefault": false
+          },
+          {
+            "name": "created_at",
+            "type": "datetime",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": true,
+            "defaultValue": "UTC_TIMESTAMP"
+          },
+          {
+            "name": "updated_at",
+            "type": "datetime",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": true,
+            "hasDefault": false
+          }
+        ],
+        "indexes": [
+          {
+            "name": "suggestion_slates_user_created",
+            "columns": [
+              "user_id",
+              "created_at"
+            ],
+            "type": "index"
+          }
+        ]
+      },
+      {
         "table": "tags",
         "columns": [
           {
@@ -16191,7 +16256,7 @@
       }
     ]
   },
-  "hash": "abb9e978eabfa3405bf452948fae9efe28017dc6e65e9b8a11250e82571f1ac5",
+  "hash": "a524077ecb805502fd5619f5f82414c623202b1d742f242645eb08829578e104",
   "dialect": "vitess",
-  "updatedAt": "2026-09-09T15:15:49.142Z"
+  "updatedAt": "2026-11-19T17:22:30.908Z"
 }

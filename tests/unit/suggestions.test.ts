@@ -6,7 +6,7 @@ import { approveSuggestion, dismissSuggestion, generateSuggestions, listSuggesti
 import { parlayPayout } from '../../app/Services/trading/paper-parlays'
 import { schemaFor } from '../support/schema'
 
-const TABLES = ['bet_suggestions', 'paper_parlays', 'trading_strategies', 'prediction_markets', 'trade_decisions', 'exchange_orders', 'exchange_positions']
+const TABLES = ['suggestion_slates', 'bet_suggestions', 'paper_parlays', 'trading_strategies', 'prediction_markets', 'trade_decisions', 'exchange_orders', 'exchange_positions']
 const paths: string[] = []
 afterEach(() => {
   for (const path of paths.splice(0)) {
@@ -92,6 +92,46 @@ describe('suggestions', () => {
     await expect(approveSuggestion(db, 1, other.id, NOW)).rejects.toThrow('already dismissed')
     // Someone else's suggestion is not reachable.
     await expect(approveSuggestion(db, 2, single.id, NOW)).rejects.toThrow('not yours')
+  })
+
+  it('keeps a private slate together and approves already tracked tickets without placing twice', async () => {
+    const db = freshDb()
+    await generateSuggestions(db, 1, { lines: Array.from({ length: 7 }, (_, i) => line(i)), props: [], now: NOW })
+    const { pending } = await listSuggestions(db, 1, NOW)
+    const single = pending.find(s => s.kind === 'single')!
+    const parlay = pending.find(s => s.kind === 'parlay')!
+    await approveSuggestion(db, 1, single.id, NOW)
+    await approveSuggestion(db, 1, parlay.id, NOW)
+    const position = (await db.query<{ id: number }>('SELECT id FROM exchange_positions').get())!
+    const combo = (await db.query<{ id: number }>('SELECT id FROM paper_parlays').get())!
+    await db.query("UPDATE bet_suggestions SET status = 'pending' WHERE id IN (?, ?)").run(single.id, parlay.id)
+    await db.query('INSERT INTO suggestion_slates (user_id, name, tickets) VALUES (?, ?, ?)').run(1, 'Evening slate', JSON.stringify([
+      { suggestionId: parlay.id, paperId: combo.id },
+      { suggestionId: single.id, paperId: position.id, kalshiEventUrl: 'https://kalshi.com/markets/kxnbagame/nba-game/event' },
+    ]))
+
+    const saved = await listSuggestions(db, 1, NOW)
+    expect(saved.slate?.name).toBe('Evening slate')
+    expect(saved.slate?.tickets.map(ticket => [ticket.id, ticket.canApprove, ticket.paperResult]))
+      .toEqual([[parlay.id, true, 'pending'], [single.id, true, 'pending']])
+    const orderUrl = new URL(saved.slate!.tickets[1]!.kalshiOrderUrl!)
+    expect(orderUrl.searchParams.get('op_market_ticker')).toBe(single.legs[0]!.ticker)
+    expect(orderUrl.searchParams.get('op_order_side')).toBe(single.legs[0]!.side)
+    expect(saved.pending.map(suggestion => suggestion.id)).not.toContain(single.id)
+    expect((await listSuggestions(db, 2, NOW)).slate).toBeNull()
+    await expect(approveSuggestion(db, 2, single.id, NOW)).rejects.toThrow('not yours')
+
+    expect((await approveSuggestion(db, 1, single.id, NOW)).outcome).toBe(`paper single #${position.id}`)
+    expect((await approveSuggestion(db, 1, parlay.id, NOW)).outcome).toBe(`paper parlay #${combo.id}`)
+    await expect(approveSuggestion(db, 1, single.id, NOW)).rejects.toThrow('already approved')
+    expect(await db.query('SELECT id FROM exchange_positions').all()).toHaveLength(1)
+    expect(await db.query('SELECT id FROM paper_parlays').all()).toHaveLength(1)
+
+    await db.query("UPDATE exchange_positions SET status = 'settled', settlement_price = 1 WHERE id = ?").run(position.id)
+    await db.query("UPDATE paper_parlays SET status = 'lost' WHERE id = ?").run(combo.id)
+    const { slate } = await listSuggestions(db, 1, Date.parse(soon) + 1)
+    expect(slate?.tickets.map(ticket => [ticket.paperResult, ticket.canApprove, ticket.kalshiOrderUrl]))
+      .toEqual([['lost', false, null], ['won', false, null]])
   })
 
   it('builds parlays of several live legs while games run, each paying at least 2x', async () => {
