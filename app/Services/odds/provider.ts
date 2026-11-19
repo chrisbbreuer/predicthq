@@ -74,6 +74,8 @@ export interface FeedBook {
   title: string
   /** The book's own timestamp for these prices. */
   lastUpdate: string
+  /** When this process successfully received the book's board. */
+  checkedAt?: string
   /** A cached response we did not recheck on this pass. */
   fromCache?: boolean
   markets: FeedMarket[]

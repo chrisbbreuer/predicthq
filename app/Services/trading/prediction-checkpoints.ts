@@ -73,18 +73,19 @@ export async function capturePredictionCheckpoint(
     JOIN odds o ON o.selection_id = s.id
     JOIN bookmakers b ON b.id = o.bookmaker_id
     WHERE m.market_event_id = ? AND m.market_type = 'h2h' AND m.period = 'full_game'
-      AND o.available = 1 AND b.kind = 'sportsbook' AND b.slug NOT IN ('kalshi', 'polymarket')
+      AND o.available = 1 AND b.kind = 'sportsbook' AND b.slug NOT IN ('kalshi', 'polymarket', 'betfair', 'smarkets', 'matchbook')
     ORDER BY b.slug, s.side
   `).all(eventId)
   const quote = await loadMarket(ticker).catch(() => undefined)
   const at = now()
-  const bid = quote?.yesBid
-  const ask = quote?.yesAsk
-  if (!inWindow(start, at) || !quote || !['open', 'active'].includes(quote.status))
+  if (!inWindow(start, at))
     return none
+  const active = quote && ['open', 'active'].includes(quote.status)
+  const bid = active ? quote.yesBid : null
+  const ask = active ? quote.yesAsk : null
   // Keep the venue's response for coverage auditing even if it has no
   // executable quote. Such captures are never scored or ranked.
-  const usable = bid != null && ask != null && bid > 0 && ask < 1 && ask >= bid && ask - bid <= 0.100000001
+  const usable = bid !== null && ask !== null && bid > 0 && ask < 1 && ask >= bid && ask - bid <= 0.100000001
   const observations = groupSportsbookQuotes(books, at)
   const consensus = observations.length >= 2
     ? observations.reduce((sum, book) => sum + book.probability, 0) / observations.length
@@ -96,7 +97,7 @@ export async function capturePredictionCheckpoint(
     league: game.league,
     start_at: new Date(start).toISOString(),
     captured_at: new Date(at).toISOString(),
-    payload: JSON.stringify({ bid, ask, usable, observations, consensus, context }),
+    payload: JSON.stringify({ bid, ask, usable, kalshiStatus: quote?.status ?? null, observations, consensus, context }),
     created_at: new Date(at).toISOString(),
   })
   return { captured: 1, paired: Number(usable && consensus !== null) }

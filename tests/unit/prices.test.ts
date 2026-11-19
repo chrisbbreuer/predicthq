@@ -1,6 +1,7 @@
 import { rmSync } from 'node:fs'
 import { afterEach, describe, expect, it } from 'bun:test'
 import { writeCoverage, writePrices } from '../../app/Services/ingest/prices'
+import { historicalBoard } from '../../app/Services/quant/history'
 import { schemaFor } from '../support/schema'
 
 /**
@@ -21,7 +22,7 @@ import { schemaFor } from '../support/schema'
 
 const TABLES = [
   'sports', 'sports_teams', 'market_events', 'markets', 'selections',
-  'bookmakers', 'odds', 'odds_snapshots', 'book_market_coverage',
+  'bookmakers', 'odds', 'odds_snapshots', 'sportsbook_quote_observations', 'book_market_coverage',
 ]
 
 const paths: string[] = []
@@ -66,6 +67,27 @@ async function tick(): Promise<void> {
 }
 
 describe('writePrices', () => {
+  it('keeps independently checked sportsbook offers at bounded intervals, including withdrawals', async () => {
+    const db = freshDb() as any
+    const quote = { selectionId: 1, bookmakerId: 1, price: 1.9123, historySource: 'native', observedAt: '2026-08-06T23:25:00.000Z' }
+    const confirm = (when: string, available = true) => writePrices(db, [{ ...quote, available }], `2026-08-06T${when}Z`)
+    const board = (when: string) => historicalBoard(db, { at: `2026-08-06T${when}Z`, sportSlug: 'nfl', limit: 10, maxAgeMinutes: 5 })
+
+    await confirm('23:30:00.010')
+    await confirm('23:32:00.000')
+    await confirm('23:35:00.020')
+    expect(countSnapshots(db)).toBe(1)
+    expect(await db.query('SELECT COUNT(*) AS n FROM sportsbook_quote_observations').get()).toEqual({ n: 2 })
+    expect((await board('23:36:00.000'))[0]).toMatchObject({ price: 1.9123, source: 'native', capturedAt: '2026-08-06T23:35:00.020Z' })
+    expect(await board('23:30:00.000')).toEqual([])
+    expect(await board('23:41:00.000')).toEqual([])
+
+    await confirm('23:37:00.030', false)
+    expect(await board('23:39:00.000')).toEqual([])
+    await confirm('23:38:00.040')
+    expect((await board('23:39:00.000'))[0]?.capturedAt).toBe('2026-08-06T23:38:00.040Z')
+  })
+
   it('records the first quote as an opening price', async () => {
     const db = freshDb()
 

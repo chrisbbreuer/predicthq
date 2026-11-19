@@ -175,14 +175,16 @@ export async function ingestOdds(db: Database, provider?: OddsProvider): Promise
       })
 
       for (const book of books) {
-        const bookmakerId = bookIndex.get(book.key.toLowerCase().replace(/[^a-z0-9]/g, ''))
-        if (bookmakerId === undefined) {
+        const bookmaker = bookIndex.get(book.key.toLowerCase().replace(/[^a-z0-9]/g, ''))
+        if (!bookmaker) {
           // A book we do not carry. Counted rather than logged per row —
           // an unseeded book produces one of these per event per pass, and
           // the count makes the gap visible without the noise.
           tracker.unmatchedCount++
           continue
         }
+        const bookmakerId = bookmaker.id
+        const sportsbook = bookmaker.kind === 'sportsbook' && !['kalshi', 'polymarket', 'betfair', 'smarkets', 'matchbook'].includes(bookmaker.slug)
 
         for (const market of book.markets) {
           const marketId = await resolveMarket(transaction, {
@@ -226,6 +228,8 @@ export async function ingestOdds(db: Database, provider?: OddsProvider): Promise
               sid: outcome.sid,
               tradedVolume: outcome.tradedVolume,
               observedAt: book.lastUpdate,
+              historySource: sportsbook ? active.name : undefined,
+              historyCheckedAt: sportsbook ? book.checkedAt : undefined,
             })
             tracker.rowsRead++
           }

@@ -35,6 +35,7 @@ export default {
     const at = params.instant('date')
     const sport = params.string('sport', { max: 40 })
     const limit = params.int('limit', { min: 1, max: 500, default: 100 })!
+    const maxAgeMinutes = params.int('maxAgeMinutes', { min: 1, max: 60 })
 
     const invalid = params.invalid()
     if (invalid)
@@ -53,7 +54,7 @@ export default {
 
     const db = openRead()
     try {
-      const rows = await historicalBoard(db, { at, sportSlug: sport, limit })
+      const rows = await historicalBoard(db, { at, sportSlug: sport, limit, maxAgeMinutes })
 
       return ok(rows, {
         request,
@@ -61,7 +62,9 @@ export default {
         cacheSeconds: 300,
         meta: {
           at,
-          note: 'Each row is the most recent quote at or before `at`. History is appended only when a price moves.',
+          note: maxAgeMinutes === undefined
+            ? 'Latest price change at or before `at`. A change alone cannot establish that a quote was still fresh.'
+            : 'Latest recorded sportsbook check at or before `at` within the requested age. Suspended and unobserved offers are omitted.',
         },
       })
     }

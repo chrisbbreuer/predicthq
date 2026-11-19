@@ -16,7 +16,7 @@ import { schemaFor } from '../support/schema'
 
 const TABLES = [
   'sports', 'sports_teams', 'market_events', 'event_sources', 'markets', 'selections',
-  'bookmakers', 'odds', 'odds_snapshots', 'book_market_coverage', 'ingest_runs',
+  'bookmakers', 'odds', 'odds_snapshots', 'sportsbook_quote_observations', 'book_market_coverage', 'ingest_runs',
 ]
 
 const paths: string[] = []

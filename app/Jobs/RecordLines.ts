@@ -21,7 +21,7 @@ export default new Job({
     try {
       const capture = await recordLines(db, undefined, true)
       if (capture.checkpoints)
-        log.info(`[PredictionCheckpoints] captured ${capture.checkpoints} Kalshi quotes, ${capture.paired} with at least two sportsbooks`)
+        log.info(`[PredictionCheckpoints] captured ${capture.checkpoints} checkpoints, ${capture.paired} with a usable Kalshi quote and at least two sportsbooks`)
       if (new Date().getUTCMinutes() < 10 && await settlePredictionCheckpoints(db) > 0) {
         const report = await auditRecordedCheckpoints(db)
         if (report.pairedSettled >= MIN_PAIRED_CHECKPOINTS || report.marketContext.context!.games >= 50)

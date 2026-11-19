@@ -154,7 +154,8 @@ export class NativeProvider {
       for (const adapter of adapters) {
         try {
           const events = await adapter.fetchSport(sport, this.contextFor(adapter, tracker))
-          collected.push(...events)
+          const checkedAt = new Date().toISOString()
+          collected.push(...events.map(event => ({ ...event, books: event.books.map(book => ({ ...book, checkedAt })) })))
         }
         catch (error) {
           // One book's bad afternoon is not the pass's failure. Naming

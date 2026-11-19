@@ -184,10 +184,11 @@ export class TheOddsApiProvider implements OddsProvider {
         continue
 
       const translatedEvents: FeedEvent[] = []
+      const checkedAt = new Date().toISOString()
       for (const event of payload) {
         const translated = translateTheOddsApiEvent(event, sport.slug)
         if (translated)
-          translatedEvents.push(translated)
+          translatedEvents.push({ ...translated, books: translated.books.map(book => ({ ...book, checkedAt })) })
       }
 
       fallbackCache.set(cacheKey, {

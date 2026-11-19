@@ -183,6 +183,11 @@ export default {
     default: 'meilisearch',
   },
 
+  ODDSPAPI_API_KEY: {
+    validation: schema.string(),
+    default: '',
+  },
+
   STRIPE_SECRET_KEY: {
     validation: schema.string(),
     default: '',

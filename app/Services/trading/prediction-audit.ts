@@ -20,7 +20,12 @@ const sigmoid = (x: number) => 1 / (1 + Math.exp(-x))
 const mid = (row: Pick<AuditGame, 'bid' | 'ask'>) => (row.bid + row.ask) / 2
 const minTraining = 100
 
-function fit(rows: AuditGame[], base: (row: AuditGame) => number): number[] {
+interface ContextOutcome {
+  outcome: 0 | 1
+  context: WinnerContext | null
+}
+
+function fit<T extends ContextOutcome>(rows: T[], base: (row: T) => number): number[] {
   const weights = [0, 0, 0, 0]
   for (let step = 0; step < 140; step++) {
     const gradient = weights.map(w => w * 0.025)
@@ -34,6 +39,12 @@ function fit(rows: AuditGame[], base: (row: AuditGame) => number): number[] {
       weights[i]! -= 0.5 * gradient[i]!
   }
   return weights
+}
+
+export function fitContextFromOutcomes(rows: Array<ContextOutcome & { context: WinnerContext }>): number[] {
+  if (rows.length < minTraining)
+    throw new Error(`Need ${minTraining} older finished games to fit context`)
+  return fit(rows, () => 0.5)
 }
 
 const addContext = (row: Pick<AuditGame, 'context'>, p: number, weights: number[]) =>

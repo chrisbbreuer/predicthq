@@ -54,7 +54,7 @@ export async function sportsbookConsensus(db: Database, game: LiveGame, asOf: nu
     JOIN odds_snapshots os ON os.selection_id = s.id
     JOIN bookmakers b ON b.id = os.bookmaker_id
     WHERE m.market_event_id = ? AND m.market_type = 'h2h' AND m.period = 'full_game'
-      AND b.kind = 'sportsbook' AND b.slug NOT IN ('kalshi', 'polymarket')
+      AND b.kind = 'sportsbook' AND b.slug NOT IN ('kalshi', 'polymarket', 'betfair', 'smarkets', 'matchbook')
       AND os.captured_at >= ?
       AND os.captured_at = (
         SELECT MAX(last_quote.captured_at)

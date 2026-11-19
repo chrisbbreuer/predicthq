@@ -21,6 +21,9 @@ export interface PriceWrite {
   available?: boolean
   /** Provider's own timestamp for the quote, if it publishes one. */
   observedAt?: string
+  /** Identifies the ingest source for an independently checked sportsbook offer. */
+  historySource?: string
+  historyCheckedAt?: string
   /** Deep link to this selection on the book's own site. */
   link?: string
   /** The book's own id for this outcome. */
@@ -44,6 +47,19 @@ export interface PriceWriteResult {
  * still turning a full board into a handful of round trips.
  */
 const PRICE_BATCH = 500
+const observationInterval = 5 * 60_000
+
+function instant(value: string): number {
+  const iso = /^\d{4}-\d{2}-\d{2} /.test(value) ? value.replace(' ', 'T') + 'Z' : value
+  return Date.parse(iso)
+}
+
+interface PriorPrice {
+  price: number
+  point: number | null
+  available: boolean
+  updatedAt: string
+}
 
 function chunk<T>(items: T[], size: number): T[][] {
   const out: T[][] = []
@@ -67,20 +83,22 @@ function priceKey(selectionId: number, bookmakerId: number): string {
 async function loadPriorPrices(
   db: Database,
   writes: PriceWrite[],
-): Promise<Map<string, { price: number, point: number | null }>> {
-  const prior = new Map<string, { price: number, point: number | null }>()
+): Promise<Map<string, PriorPrice>> {
+  const prior = new Map<string, PriorPrice>()
   const selectionIds = [...new Set(writes.map(w => w.selectionId))]
 
   for (const group of chunk(selectionIds, PRICE_BATCH)) {
     const placeholders = group.map(() => '?').join(', ')
-    const rows = await db.query<{ selection_id: number, bookmaker_id: number, price: number, point: number | null }>(
-      `SELECT selection_id, bookmaker_id, price, point FROM odds WHERE selection_id IN (${placeholders})`,
+    const rows = await db.query<{ selection_id: number, bookmaker_id: number, price: number, point: number | null, available: number, updated_at: string }>(
+      `SELECT selection_id, bookmaker_id, price, point, available, updated_at FROM odds WHERE selection_id IN (${placeholders})`,
     ).all(...group)
 
     for (const row of rows) {
       prior.set(priceKey(Number(row.selection_id), Number(row.bookmaker_id)), {
         price: Number(row.price),
         point: row.point === null || row.point === undefined ? null : Number(row.point),
+        available: Number(row.available) === 1,
+        updatedAt: row.updated_at,
       })
     }
   }
@@ -130,14 +148,13 @@ function toCents(value: number): number {
   return Math.round(value * 100) / 100
 }
 
-export async function writePrices(db: Database, writes: PriceWrite[]): Promise<PriceWriteResult> {
-  const now = nowIso()
+export async function writePrices(db: Database, writes: PriceWrite[], now = nowIso()): Promise<PriceWriteResult> {
 
   // Last quote wins. The same selection and book arriving twice in one
   // batch is a provider repeating an event, and carrying both into a
   // multi-row upsert is a portability trap: MySQL silently keeps the last
   // while Postgres and SQLite reject the whole statement.
-  const latest = new Map<string, PriceWrite>()
+  const latest = new Map<string, PriceWrite & { rawPrice: number }>()
   for (const w of writes) {
     if (!Number.isFinite(w.price))
       continue
@@ -147,7 +164,7 @@ export async function writePrices(db: Database, writes: PriceWrite[]): Promise<P
     const price = toCents(w.price)
     if (price <= 1)
       continue
-    latest.set(priceKey(w.selectionId, w.bookmakerId), { ...w, price, point: w.point === null || w.point === undefined ? w.point : toCents(w.point) })
+    latest.set(priceKey(w.selectionId, w.bookmakerId), { ...w, rawPrice: w.price, price, point: w.point === null || w.point === undefined ? w.point : toCents(w.point) })
   }
 
   const pending = [...latest.values()]
@@ -158,11 +175,18 @@ export async function writePrices(db: Database, writes: PriceWrite[]): Promise<P
 
   const oddsRows: Record<string, unknown>[] = []
   const snapshotRows: Record<string, unknown>[] = []
+  const observations: Record<string, unknown>[] = []
   let changed = 0
 
   for (const w of pending) {
     const point = w.point ?? null
     const implied = impliedProbability(w.price)
+    const was = prior.get(priceKey(w.selectionId, w.bookmakerId)) ?? null
+    const checkedAt = w.historyCheckedAt || now
+    const checkedAtMs = instant(checkedAt)
+    const priorCheck = was ? instant(was.updatedAt) : Number.NaN
+    if (w.historyCheckedAt && checkedAtMs < priorCheck)
+      continue
 
     oddsRows.push({
       selection_id: w.selectionId,
@@ -177,11 +201,24 @@ export async function writePrices(db: Database, writes: PriceWrite[]): Promise<P
       link: w.link ?? '',
       sid: w.sid ?? '',
       traded_volume: w.tradedVolume ?? 0,
-      updated_at: now,
+      updated_at: checkedAt,
     })
 
-    const was = prior.get(priceKey(w.selectionId, w.bookmakerId)) ?? null
     const moved = was === null || was.price !== w.price || was.point !== point
+    const available = w.available !== false
+    if (w.historySource && Number.isFinite(checkedAtMs)
+      && (moved || was?.available !== available || Math.floor(priorCheck / observationInterval) !== Math.floor(checkedAtMs / observationInterval))) {
+      observations.push({
+        selection_id: w.selectionId,
+        bookmaker_id: w.bookmakerId,
+        checked_at_ms: checkedAtMs,
+        observed_at: w.observedAt || null,
+        price: w.rawPrice,
+        point,
+        available: Number(available),
+        source: w.historySource,
+      })
+    }
     if (!moved)
       continue
 
@@ -208,6 +245,8 @@ export async function writePrices(db: Database, writes: PriceWrite[]): Promise<P
   let snapshots = 0
   for (const group of chunk(snapshotRows, PRICE_BATCH))
     snapshots += (await db.upsert('odds_snapshots', group, ['selection_id', 'bookmaker_id', 'captured_at'])).changes
+  for (const group of chunk(observations, PRICE_BATCH))
+    await db.upsert('sportsbook_quote_observations', group, ['selection_id', 'bookmaker_id', 'checked_at_ms'])
 
   return { written: oddsRows.length, changed, snapshots }
 }
@@ -284,18 +323,18 @@ export async function writeCoverage(db: Database, entries: CoverageWrite[]): Pro
  * that changes how it identifies a book keeps matching — the failure mode
  * this replaces silently dropped that book's prices entirely.
  */
-export async function loadBookmakerIndex(db: Database): Promise<Map<string, number>> {
+export async function loadBookmakerIndex(db: Database) {
   const rows = await db
-    .query<{ id: number, name: string, slug: string, provider_key: string }>('SELECT id, name, slug, provider_key FROM bookmakers WHERE active = 1')
+    .query<{ id: number, name: string, slug: string, provider_key: string, kind: string }>('SELECT id, name, slug, provider_key, kind FROM bookmakers WHERE active = 1')
     .all()
 
-  const index = new Map<string, number>()
+  const index = new Map<string, typeof rows[number]>()
   for (const row of rows) {
     for (const key of [row.provider_key, row.slug, row.name]) {
       if (key) {
         const k = key.toLowerCase().replace(/[^a-z0-9]/g, '')
         if (k && !index.has(k))
-          index.set(k, row.id)
+          index.set(k, row)
       }
     }
   }

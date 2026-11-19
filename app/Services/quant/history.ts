@@ -31,6 +31,8 @@ export interface HistoricalQuote {
   impliedProb: number
   point: number | null
   capturedAt: string
+  observedAt?: string | null
+  source?: string
 }
 
 export interface HistoricalQuery {
@@ -39,9 +41,13 @@ export interface HistoricalQuery {
   /** Optional league filter, by our slug. */
   sportSlug?: string
   limit: number
+  /** Return independently checked sportsbook quotes inside this age limit. */
+  maxAgeMinutes?: number
 }
 
 export async function historicalBoard(db: Database, query: HistoricalQuery): Promise<HistoricalQuote[]> {
+  if (query.maxAgeMinutes !== undefined)
+    return confirmedSportsbookBoard(db, query, query.maxAgeMinutes)
   const params: Array<string | number> = [query.at]
 
   let sportFilter = ''
@@ -91,6 +97,39 @@ export async function historicalBoard(db: Database, query: HistoricalQuery): Pro
     ORDER BY e.commence_at ASC, e.id ASC, m.id ASC, s.position ASC
     LIMIT ?
   `).all(...params)
+}
+
+async function confirmedSportsbookBoard(db: Database, query: HistoricalQuery, maxAgeMinutes: number): Promise<HistoricalQuote[]> {
+  const at = Date.parse(query.at)
+  const params: Array<string | number> = [at - maxAgeMinutes * 60_000, at, at]
+  const sportFilter = query.sportSlug ? 'AND sp.slug = ?' : ''
+  if (query.sportSlug)
+    params.push(query.sportSlug)
+  params.push(query.limit)
+
+  const rows = await db.query<Omit<HistoricalQuote, 'capturedAt'> & { checkedAtMs: number | string }>(`
+    SELECT e.id AS eventId, e.title AS eventTitle, sp.slug AS sportSlug, e.commence_at AS commenceAt,
+      m.market_type AS marketType, m.line, m.player_name AS playerName,
+      s.id AS selectionId, s.label AS selectionLabel, s.side, b.slug AS bookmaker,
+      q.price, 1.0 / q.price AS impliedProb, q.point, q.checked_at_ms AS checkedAtMs,
+      q.observed_at AS observedAt, q.source
+    FROM sportsbook_quote_observations q
+    JOIN selections s ON s.id = q.selection_id
+    JOIN markets m ON m.id = s.market_id
+    JOIN market_events e ON e.id = m.market_event_id
+    JOIN sports sp ON sp.id = e.sport_id
+    JOIN bookmakers b ON b.id = q.bookmaker_id
+    WHERE q.checked_at_ms BETWEEN ? AND ? AND q.available = 1
+      AND NOT EXISTS (
+        SELECT 1 FROM sportsbook_quote_observations newer
+        WHERE newer.selection_id = q.selection_id AND newer.bookmaker_id = q.bookmaker_id
+          AND newer.checked_at_ms > q.checked_at_ms AND newer.checked_at_ms <= ?
+      )
+      ${sportFilter}
+    ORDER BY e.commence_at ASC, e.id ASC, m.id ASC, s.position ASC, b.id ASC
+    LIMIT ?
+  `).all(...params)
+  return rows.map(({ checkedAtMs, ...row }) => ({ ...row, capturedAt: new Date(Number(checkedAtMs)).toISOString() }))
 }
 
 export interface BookCoverage {

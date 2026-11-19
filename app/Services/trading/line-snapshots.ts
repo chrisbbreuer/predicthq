@@ -115,7 +115,8 @@ export async function liveLines(deps: RecordDeps = defaultDeps, windowMinutes = 
     const markets = await deps.openMarkets(series).catch(() => [] as KalshiMarketInfo[])
     for (const market of markets) {
       const { yesBid: bid, yesAsk: ask } = market
-      if (bid === null || ask === null || ask <= 0 || ask - bid > 0.1)
+      const tight = bid !== null && ask !== null && ask > 0 && ask - bid <= 0.1
+      if (!tight && !options.onPregame)
         continue
       const game = await deps.gameFor(market.ticker, market.yesSubTitle).catch(() => null)
       // A soccer tie market names no team; it pays on the draw.
@@ -126,6 +127,10 @@ export async function liveLines(deps: RecordDeps = defaultDeps, windowMinutes = 
       if (game.state !== 'pre' && !(live && options.includeLive))
         continue
       const minutes = Math.round((Date.parse(game.startsAt) - now) / 60_000)
+      if (!live && minutes >= 0 && minutes <= windowMinutes)
+        await options.onPregame?.(market.ticker, game)
+      if (!tight)
+        continue
       const opponent = side === 'draw' ? '' : teamName(side === 'home' ? game.away : game.home)
       if (live) {
         out.push({
@@ -148,7 +153,6 @@ export async function liveLines(deps: RecordDeps = defaultDeps, windowMinutes = 
       if (!(minutes >= 0 && minutes <= windowMinutes))
         continue
 
-      await options.onPregame?.(market.ticker, game)
       const key = `${game.league}:${game.gameId}`
       if (!details.has(key))
         details.set(key, deps.detailFor(game.league, game.gameId).catch(() => null))

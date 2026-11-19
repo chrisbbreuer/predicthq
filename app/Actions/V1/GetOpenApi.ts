@@ -174,6 +174,7 @@ const SPEC = {
         parameters: [
           { name: 'date', in: 'query', required: true, description: 'ISO-8601 instant to reconstruct at.', schema: { type: 'string', format: 'date-time' } },
           COMMON_PARAMS.sport,
+          { name: 'maxAgeMinutes', in: 'query', description: 'Return recorded sportsbook observations within this age, including unchanged quotes.', schema: { type: 'integer', minimum: 1, maximum: 60 } },
           { name: 'limit', in: 'query', schema: { type: 'integer', default: 100, maximum: 500 } },
         ],
         responses: {

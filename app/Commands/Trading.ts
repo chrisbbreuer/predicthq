@@ -10,6 +10,7 @@ import { linesReport, liveLines } from '../Services/trading/line-snapshots'
 import { auditRecordedCheckpoints, MIN_PAIRED_CHECKPOINTS } from '../Services/trading/prediction-checkpoints'
 import { draftSlate, explicitPicks, MIN_PARLAY_PAYOUT, parlayExpectedReturn, placeSlate } from '../Services/trading/slate'
 import { generateSuggestions, saveSuggestions } from '../Services/trading/suggestions'
+import { archiveSportsbookConsensus, importWinnerQuoteArchive, readWinnerQuoteArchive } from '../Services/trading/winner-quote-archive'
 
 /**
  * `buddy trading:halt` — stop every strategy from placing orders.
@@ -193,6 +194,34 @@ export default function (cli: CLI) {
         const report = await auditRecordedCheckpoints(db)
         log.info(`${report.capturedGames} captured games, ${report.settled} settled, ${report.pairedSettled} paired, ${report.prospectiveContext.eligible}/${MIN_PAIRED_CHECKPOINTS} with context for the prospective review`)
         console.log(JSON.stringify(report, null, 2))
+      }
+      finally {
+        db.close()
+      }
+    })
+
+  cli
+    .command('trading:winner-quote-archive', 'Import or read timestamped sportsbook research evidence')
+    .option('--import-file <path>', 'Import an OddsPapi evidence JSON array')
+    .option('--from <instant>', 'Inclusive start of the cutoff range in UTC')
+    .option('--to <instant>', 'Exclusive end of the cutoff range in UTC')
+    .action(async (options: { importFile?: string, from?: string, to?: string }) => {
+      const db = new Database()
+      try {
+        if (options.importFile) {
+          const entries = await Bun.file(options.importFile).json()
+          if (!Array.isArray(entries))
+            throw new TypeError('Archive evidence must be a JSON array')
+          await importWinnerQuoteArchive(db, entries)
+          log.info(`Saved evidence for ${entries.length} historical games`)
+          return
+        }
+        const from = Date.parse(options.from ?? '')
+        const to = Date.parse(options.to ?? '')
+        if (!Number.isFinite(from) || !Number.isFinite(to) || from >= to)
+          throw new Error('Supply an import file or an ordered --from and --to range')
+        const rows = await readWinnerQuoteArchive(db, from, to)
+        console.log(JSON.stringify(rows.map(entry => ({ ...entry, consensus: archiveSportsbookConsensus(entry) })), null, 2))
       }
       finally {
         db.close()
