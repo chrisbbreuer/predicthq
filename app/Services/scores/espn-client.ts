@@ -1,6 +1,7 @@
 import { Database } from 'bun:sqlite'
+import { mkdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 
 /** One cache, request budget and refusal cooldown shared by web, watcher and jobs. */
 export function createEspnClient(options: {
@@ -9,7 +10,9 @@ export function createEspnClient(options: {
   now?: () => number
   budget?: number
 } = {}) {
-  const store = new Database(options.path ?? process.env.ESPN_CACHE_PATH ?? join(tmpdir(), 'predicthq-espn-cache.sqlite'), { create: true })
+  const path = options.path ?? process.env.ESPN_CACHE_PATH ?? join(tmpdir(), 'predicthq-espn-cache.sqlite')
+  mkdirSync(dirname(path), { recursive: true })
+  const store = new Database(path, { create: true })
   store.exec(`PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL;
     CREATE TABLE IF NOT EXISTS responses (url TEXT PRIMARY KEY, body TEXT NOT NULL, expires INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS budget (id INTEGER PRIMARY KEY, window INTEGER NOT NULL, used INTEGER NOT NULL, blocked INTEGER NOT NULL);

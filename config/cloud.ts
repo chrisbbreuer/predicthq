@@ -22,6 +22,8 @@ const productionRuntimeEnv = {
   // Outside any one site's directory: each site's `storage/ingest` is its own
   // shared copy, and the scheduler has to see the odds watcher's heartbeat.
   ODDS_WATCH_HEARTBEAT_PATH: '/var/lib/predicthq/odds-watch.heartbeat',
+  // systemd gives each role a private /tmp; the ESPN budget must span roles.
+  ESPN_CACHE_PATH: '/var/lib/predicthq/espn-cache.sqlite',
   QUEUE_FAILED_DRIVER: 'database',
 }
 
