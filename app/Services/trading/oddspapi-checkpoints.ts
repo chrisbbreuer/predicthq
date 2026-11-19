@@ -116,9 +116,16 @@ export async function loadOddsPapiBoards(db: Database, leagues: string[], apiKey
   if (groups.length === 0)
     return []
 
-  const claimed = await db.upsert('sportsbook_capture_budget', [{ bucket_ms: slot, requests: groups.length * sportsbooks.length }], ['bucket_ms'])
-  if (claimed.changes === 0)
-    return []
+  try {
+    // A plain insert makes the unique key authoritative. Vitess may omit the
+    // affected-row count from Stacks' bulk upsert result even on success.
+    await db.query('INSERT INTO sportsbook_capture_budget (bucket_ms, requests) VALUES (?, ?)').run(slot, groups.length * sportsbooks.length)
+  }
+  catch (error) {
+    if (await db.query('SELECT bucket_ms FROM sportsbook_capture_budget WHERE bucket_ms = ?').get(slot))
+      return []
+    throw error
+  }
 
   const boards: OddsPapiBoard[] = []
   for (const group of groups) {
@@ -213,5 +220,6 @@ export async function saveOddsPapiQuotes(db: Database, eventId: number, game: Li
     }
     rows.push({ selection_id: selectionId, bookmaker_id: bookmaker.id, checked_at_ms: utcTime(quote.updated_at), observed_at: quote.observed_at || null, price: quote.price, point: null, available: 1, source: quote.source })
   }
-  return (await db.upsert('sportsbook_quote_observations', rows, ['selection_id', 'bookmaker_id', 'checked_at_ms'])).changes
+  await db.upsert('sportsbook_quote_observations', rows, ['selection_id', 'bookmaker_id', 'checked_at_ms'])
+  return rows.length
 }

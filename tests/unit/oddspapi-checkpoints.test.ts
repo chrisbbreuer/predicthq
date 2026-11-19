@@ -1,8 +1,8 @@
 import type { LiveGame } from '../../app/Services/trading/live-games'
 import type { OddsPapiBoard } from '../../app/Services/trading/oddspapi-checkpoints'
 import type { Database } from '../../app/Support/db'
-import { expect, it } from 'bun:test'
-import { matchOddsPapiQuotes, oddsPapiAllowance, saveOddsPapiQuotes } from '../../app/Services/trading/oddspapi-checkpoints'
+import { expect, it, spyOn } from 'bun:test'
+import { loadOddsPapiBoards, matchOddsPapiQuotes, oddsPapiAllowance, saveOddsPapiQuotes } from '../../app/Services/trading/oddspapi-checkpoints'
 import { schemaFor } from '../support/schema'
 
 it('saves active offers with their receipt time and leaves the live trading board alone', async () => {
@@ -36,8 +36,8 @@ it('saves active offers with their receipt time and leaves the live trading boar
     expect(quotes).toHaveLength(4)
     expect(quotes[0]).toMatchObject({ side: 'away', price: 1.62, updated_at: new Date(checkedAt).toISOString(), source: 'oddspapi' })
     expect(await saveOddsPapiQuotes(db, 1, game, quotes)).toBe(4)
-    expect(await saveOddsPapiQuotes(db, 1, game, quotes)).toBe(0)
-    expect(raw.query('SELECT COUNT(*) AS n FROM sportsBook_quote_observations WHERE checked_at_ms = ? AND source = ?').get(checkedAt, 'oddspapi')).toEqual({ n: 4 })
+    await saveOddsPapiQuotes(db, 1, game, quotes)
+    expect(raw.query('SELECT COUNT(*) AS n FROM sportsbook_quote_observations WHERE checked_at_ms = ? AND source = ?').get(checkedAt, 'oddspapi')).toEqual({ n: 4 })
     expect(raw.query('SELECT COUNT(*) AS n FROM odds').get()).toEqual({ n: 0 })
   }
   finally {
@@ -50,4 +50,26 @@ it('spreads the quota across the remaining days and leaves a credit for archives
   expect(oddsPapiAllowance(now, 250, 15, 0)).toBe(20)
   expect(oddsPapiAllowance(now, 250, 19, 4)).toBe(16)
   expect(oddsPapiAllowance(now, 250, 249, 0)).toBe(0)
+})
+
+it('uses the persisted slot claim to avoid paying twice for the same board', async () => {
+  const raw = schemaFor(':memory:', ['sportsbook_capture_budget'])
+  const db = raw as unknown as Database
+  const fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+    const url = new URL(String(input))
+    const response = url.pathname.endsWith('/account')
+      ? { current_subscription_id: 'free', subscriptions: [{ subscription_id: 'free', request_limit: 250, request_count: 0 }] }
+      : { fixture: { fixtureId: 'fixture' } }
+    return Response.json(response)
+  })
+  try {
+    expect((await loadOddsPapiBoards(db, ['nba'], 'test')).map(row => row.book)).toEqual(['pinnacle', 'draftkings'])
+    expect(await loadOddsPapiBoards(db, ['nba'], 'test')).toEqual([])
+    expect(fetchSpy).toHaveBeenCalledTimes(3)
+    expect(raw.query('SELECT requests FROM sportsbook_capture_budget').get()).toEqual({ requests: 2 })
+  }
+  finally {
+    fetchSpy.mockRestore()
+    raw.close()
+  }
 })
