@@ -5,9 +5,10 @@ import type { AuditGame } from './prediction-audit'
 import type { WinnerContext } from './winner-context'
 import { kalshiMarkets } from '../prediction-markets/kalshi-public'
 import { parseGameTicker } from './live-games'
-import { predictionAudit, rankCapturedWinners } from './prediction-audit'
+import { predictionAudit, prospectiveWinnerAudit, rankCapturedWinners } from './prediction-audit'
 import { matchEvent } from './sportsbook-consensus'
 import { captureWinnerContext, utcTime } from './winner-context'
+import frozenWinnerContext from './winner-context-fit.json'
 
 const leagues = new Set(['nba', 'wnba', 'nhl', 'nfl', 'ncaaf', 'ncaab', 'ncaaw', 'mlb'])
 const maxAgeMs = 10 * 60_000
@@ -174,6 +175,7 @@ export async function auditRecordedCheckpoints(db: Database, now = Date.now()) {
     quotedBySportsbooks,
     capturedWithConsensus,
     pairedSettled: settled.filter(row => row.consensus !== null).length,
+    prospectiveContext: prospectiveWinnerAudit(settled, frozenWinnerContext, MIN_PAIRED_CHECKPOINTS),
     upcoming: rankCapturedWinners(upcoming, settled, now),
     ...predictionAudit(settled),
   }

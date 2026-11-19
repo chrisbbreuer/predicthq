@@ -98,6 +98,29 @@ describe('a game seen by polling, then by the stream', () => {
   })
 })
 
+describe('bookmaker quote freshness', () => {
+  it('refreshes unchanged quotes only when the provider checks them again', async () => {
+    const db = freshDb() as any
+    db.exec("INSERT INTO bookmakers (id, name, slug, provider_key) VALUES (3, 'DraftKings', 'draftkings', 'draftkings')")
+    const event = game('draftkings', 'book-game', 2.6)
+    const ingest = (cached: boolean) => ingestOdds(db, {
+      name: 'composite',
+      fetchEvents: async () => [{ ...event, books: [{ ...event.books[0]!, fromCache: cached }] }],
+    })
+    const lastChecked = () => db.query('SELECT updated_at FROM odds WHERE bookmaker_id = 3 LIMIT 1').get().updated_at
+
+    await ingest(false)
+    db.exec("UPDATE odds SET updated_at = '2026-11-17T21:00:00.000Z' WHERE bookmaker_id = 3")
+    expect((await ingest(true)).pricesWritten).toBe(0)
+    expect(lastChecked()).toBe(event.books[0]!.lastUpdate)
+
+    const checked = await ingest(false)
+    expect(checked.pricesWritten).toBe(2)
+    expect(checked.snapshots).toBe(0)
+    expect(lastChecked()).not.toBe(event.books[0]!.lastUpdate)
+  })
+})
+
 describe('resolveEvent through the database layer', () => {
   it('matches an ESPN-format start time against a full ISO one', async () => {
     const { Database } = await import('../../app/Support/db')

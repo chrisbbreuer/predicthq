@@ -190,7 +190,10 @@ export class TheOddsApiProvider implements OddsProvider {
           translatedEvents.push(translated)
       }
 
-      fallbackCache.set(cacheKey, { attemptedAt: now, events: translatedEvents })
+      fallbackCache.set(cacheKey, {
+        attemptedAt: now,
+        events: translatedEvents.map(event => ({ ...event, books: event.books.map(book => ({ ...book, fromCache: true })) })),
+      })
       out.push(...translatedEvents)
     }
 

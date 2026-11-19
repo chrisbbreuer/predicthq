@@ -39,6 +39,20 @@ function fit(rows: AuditGame[], base: (row: AuditGame) => number): number[] {
 const addContext = (row: Pick<AuditGame, 'context'>, p: number, weights: number[]) =>
   sigmoid(logit(p) + (row.context?.reduce((sum, x, i) => sum + x * weights[i]!, 0) ?? 0))
 
+export interface FrozenWinnerContext {
+  trainBefore: string
+  trainingGames: number
+  weights: number[]
+}
+
+export function fitHistoricalWinnerContext(rows: AuditGame[], trainBefore: string): FrozenWinnerContext {
+  const cutoff = Date.parse(trainBefore)
+  const training = rows.filter(row => row.context && row.at < cutoff && row.settledAt < cutoff)
+  if (training.length < minTraining)
+    throw new Error(`Need ${minTraining} resolved historical games before ${trainBefore}`)
+  return { trainBefore, trainingGames: training.length, weights: fit(training, mid) }
+}
+
 interface ScoredGame { row: AuditGame, forecasts: Record<string, number> }
 
 function summarize(rows: ScoredGame[], variants: string[]) {
@@ -63,6 +77,27 @@ function summarize(rows: ScoredGame[], variants: string[]) {
       topThree: { picks: top.length, wins, hitRate: top.length ? wins / top.length : null },
     }]
   }))
+}
+
+/** Score the first complete paired settlements using weights frozen before capture began. */
+export function prospectiveWinnerAudit(rows: AuditGame[], model: FrozenWinnerContext, games: number) {
+  const cutoff = Date.parse(model.trainBefore)
+  const eligible = rows.filter(row => row.at >= cutoff && row.consensus !== null && row.context)
+  if (eligible.length < games)
+    return { eligible: eligible.length, required: games, scores: null }
+
+  const sample = eligible.sort((a, b) => a.settledAt - b.settledAt || a.ticker.localeCompare(b.ticker)).slice(0, games)
+  const scored = sample.map(row => {
+    const market = mid(row)
+    const books = row.consensus!
+    const blend = (market + books) / 2
+    return { row, forecasts: { market, books, blend, context: addContext(row, blend, model.weights) } }
+  })
+  return {
+    eligible: eligible.length,
+    required: games,
+    scores: summarize(scored, ['market', 'books', 'blend', 'context']),
+  }
 }
 
 /** Compare the Kalshi ranking with research probabilities for currently captured games. */

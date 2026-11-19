@@ -143,6 +143,9 @@ export async function ingestOdds(db: Database, provider?: OddsProvider): Promise
   try {
     const result = await db.transaction(async (transaction) => {
       for (const event of feed) {
+      const books = event.books.filter(book => !book.fromCache)
+      if (books.length === 0)
+        continue
       const sport = sportBySlug.get(event.sportSlug)
       if (!sport) {
         tracker.unmatchedCount++
@@ -171,7 +174,7 @@ export async function ingestOdds(db: Database, provider?: OddsProvider): Promise
         league: sport.title,
       })
 
-      for (const book of event.books) {
+      for (const book of books) {
         const bookmakerId = bookIndex.get(book.key.toLowerCase().replace(/[^a-z0-9]/g, ''))
         if (bookmakerId === undefined) {
           // A book we do not carry. Counted rather than logged per row —

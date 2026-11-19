@@ -101,9 +101,14 @@ describe('The Odds API quota guard', () => {
       },
     })
 
-    expect(await provider.fetchEvents(tracker())).toHaveLength(1)
+    const checked = await provider.fetchEvents(tracker())
     now += 1_000
-    expect(await provider.fetchEvents(tracker())).toHaveLength(1)
+    const cached = await provider.fetchEvents(tracker())
+
+    expect(checked).toHaveLength(1)
+    expect(cached).toHaveLength(1)
+    expect(checked[0]!.books[0]!.fromCache).toBeUndefined()
+    expect(cached[0]!.books[0]!.fromCache).toBe(true)
 
     expect(urls).toHaveLength(1)
     const request = new URL(urls[0]!)

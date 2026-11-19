@@ -1,19 +1,19 @@
 /** Score archived game results against actual Kalshi bid/ask candles at T-30.
- * Usage: bun tools/audit-winner-context.ts games.json results.json candles-by-ticker.json
+ * Usage: bun tools/audit-winner-context.ts games.json results.json candles-by-ticker.json [train-before]
  */
 import type { KalshiCandle } from '../app/Services/prediction-markets/kalshi-public'
 import type { AuditGame } from '../app/Services/trading/prediction-audit'
 import type { TeamGame } from '../app/Services/trading/winner-context'
 import { quoteAt } from '../app/Services/trading/backtest'
-import { predictionAudit } from '../app/Services/trading/prediction-audit'
+import { fitHistoricalWinnerContext, predictionAudit } from '../app/Services/trading/prediction-audit'
 import { winnerContext } from '../app/Services/trading/winner-context'
 
 interface Game { ticker: string, league: string, gameId: string, date: string, startsAt: string, selected: 'home' | 'away', outcome: 0 | 1 }
 interface Result { league: string, id: string, date: string, home: string, away: string, hs: number, as: number }
 
-const [gamesFile, resultsFile, quotesFile] = process.argv.slice(2)
+const [gamesFile, resultsFile, quotesFile, trainBefore] = process.argv.slice(2)
 if (!gamesFile || !resultsFile || !quotesFile)
-  throw new Error('Usage: bun tools/audit-winner-context.ts games.json results.json candles-by-ticker.json')
+  throw new Error('Usage: bun tools/audit-winner-context.ts games.json results.json candles-by-ticker.json [train-before]')
 
 const [games, results, candles] = await Promise.all([
   Bun.file(gamesFile).json() as Promise<Game[]>,
@@ -65,4 +65,7 @@ for (const game of games) {
   rows.push({ ticker: game.ticker, league: game.league, day: game.date, at: quote.ts * 1000, settledAt: startsAt + resultDelay, bid: quote.bid, ask: quote.ask, outcome: game.outcome, context, consensus: null })
   seen.add(id)
 }
-console.log(JSON.stringify({ archiveGames: games.length, historicalResults: gamesById.size, ...predictionAudit(rows) }, null, 2))
+const report = trainBefore
+  ? fitHistoricalWinnerContext(rows, trainBefore)
+  : { archiveGames: games.length, historicalResults: gamesById.size, ...predictionAudit(rows) }
+console.log(JSON.stringify(report, null, 2))
