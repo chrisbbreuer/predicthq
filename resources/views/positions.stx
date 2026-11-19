@@ -62,7 +62,15 @@ const orders = state<any[]>([])
 const pending = state<any[]>([])
 const suggestions = state<any[]>([])
 const selectedSlate = state<any>(null)
-const slateTickets = derived(() => selectedSlate()?.tickets ?? [])
+const slateGroups = derived(() => {
+  const slate = selectedSlate()
+  if (!slate)
+    return []
+  const groups = [{ title: '', tickets: slate.tickets }]
+  if (slate.alternatives.length)
+    groups.push({ title: 'Parlay alternatives', tickets: slate.alternatives })
+  return groups
+})
 const suggestionBusy = state(0)
 const settled = state<any[]>([])
 const paperSettled = state<any[]>([])
@@ -637,7 +645,7 @@ async function load(fromVenue = false): Promise<void> {
 }
 
 /** A suggestion as the card draws it. */
-function suggestionView(row: any): any {
+function suggestionView(row: any, alternative = false): any {
   const legs = (row.legs || []).map((leg: any) => {
     const confidence = Number(leg.confidence ?? (leg.side === 'yes' ? leg.yesMid : 1 - leg.yesMid))
     return {
@@ -667,8 +675,12 @@ function suggestionView(row: any): any {
     canApprove: Boolean(row.canApprove),
     approved: row.status === 'approved',
     kalshiOrderUrl: row.kalshiOrderUrl || '',
-    comboOpen: row.kind === 'parlay' && row.paperResult === 'pending' && Date.parse(row.expiresAt) > Date.now() && row.status !== 'dismissed',
-    result: row.paperResult === 'won' ? 'Won' : row.paperResult === 'lost' ? 'Lost' : row.paperResult === 'partial' ? 'Partial settlement' : row.paperResult === 'pending' ? 'Awaiting result' : 'Result unavailable',
+    paperPayout: row.paperPayout == null ? '' : usd(row.paperPayout),
+    comboOpen: row.kind === 'parlay' && (row.paperResult === 'pending' || alternative && row.status === 'pending')
+      && Date.parse(row.expiresAt) > Date.now() && row.status !== 'dismissed',
+    result: row.paperResult === 'won' ? 'Won' : row.paperResult === 'lost' ? 'Lost' : row.paperResult === 'partial' ? 'Partial settlement'
+      : row.paperResult === 'pending' ? 'Awaiting result' : alternative && row.status === 'pending' ? 'Ready to review'
+        : row.status === 'expired' ? 'Expired' : 'Result unavailable',
     resultTone: row.paperResult === 'won' ? 'pos' : row.paperResult === 'lost' ? 'neg' : '',
   }
 }
@@ -679,12 +691,13 @@ async function loadSuggestions(): Promise<void> {
     if (!response.ok)
       return
     const data = await response.json()
-    suggestions.set((data.pending || []).map(suggestionView))
+    suggestions.set((data.pending || []).map((ticket: any) => suggestionView(ticket)))
     const slate = data.slate
     const summary = slate ? ['won', 'lost', 'pending', 'partial'].map(status => slate.tickets.filter((ticket: any) => ticket.paperResult === status).length) : []
     selectedSlate.set(slate ? {
       name: slate.name,
-      tickets: slate.tickets.map(suggestionView),
+      tickets: slate.tickets.map((ticket: any) => suggestionView(ticket)),
+      alternatives: (slate.alternatives || []).map((ticket: any) => suggestionView(ticket, true)),
       stake: usd(slate.tickets.reduce((total: number, ticket: any) => total + Number(ticket.stake), 0)),
       summary: summary[0] + ' won · ' + summary[1] + ' lost · ' + summary[2] + ' awaiting results' + (summary[3] ? ' · ' + summary[3] + ' partial' : ''),
     } : null)
@@ -900,37 +913,46 @@ onMount(start)
               <p class="font-semibold text-sm" x-text="selectedSlate()?.summary"></p>
               <p class="mt-1 text-xs muted">Approve tickets in PredictHQ to mark them on paper. Place real orders on Kalshi. Percentages are the Kalshi-implied probabilities at selection.</p>
             </div>
-            <div class="grid gap-3 grid-cols-1 lg:grid-cols-2">
-              <template :for="ticket in slateTickets">
-                <article class="grid content-start gap-3 p-4 card">
-                  <div class="flex flex-wrap gap-2 items-center justify-between">
-                    <div class="flex gap-2 items-center">
-                      <span class="pill" x-text="ticket.kind"></span>
-                      <span class="font-bold text-sm num" x-text="ticket.stake + ' planned stake'"></span>
-                    </div>
-                    <span class="font-semibold text-xs" :class="ticket.resultTone" x-text="ticket.result"></span>
-                  </div>
-                  <div class="suggestion-legs">
-                    <template :for="leg in ticket.legs">
-                      <a :href="leg.href" data-no-router class="suggestion-leg">
-                        <span class="min-w-0 font-semibold text-sm" x-text="leg.label"></span>
-                        <span class="shrink-0 ml-auto text-right">
-                          <span class="block font-semibold text-sm num" x-text="leg.confidence"></span>
-                          <span class="block text-xs muted" x-text="leg.side + ' · ' + leg.starts"></span>
-                        </span>
-                      </a>
-                    </template>
-                  </div>
-                  <div class="flex flex-wrap gap-2 items-center justify-end">
-                    <span x-show="ticket.approved" class="font-semibold text-xs pos">Approved on paper</span>
-                    <a x-show="ticket.kalshiOrderUrl" :href="ticket.kalshiOrderUrl" target="_blank" rel="noopener noreferrer" class="inline-flex items-center px-4 h-9 font-bold text-sm rounded-full btn">Open on Kalshi</a>
-                    <a x-show="ticket.single && !ticket.kalshiOrderUrl" :href="ticket.betHref" data-no-router class="inline-flex items-center px-4 h-9 font-bold text-sm rounded-full btn">Review market</a>
-                    <a x-show="ticket.comboOpen" href="https://kalshi.com/combos" target="_blank" rel="noopener noreferrer" class="inline-flex items-center px-4 h-9 font-bold text-sm rounded-full btn">Open Kalshi combo builder</a>
-                    <button x-show="ticket.canApprove" type="button" class="px-4 h-9 font-bold text-sm rounded-full btn btn-primary" :disabled="suggestionBusy() !== 0" @click="decide(ticket.id, true)">Approve on paper</button>
-                  </div>
-                </article>
-              </template>
-            </div>
+            <template :for="group in slateGroups">
+              <div>
+                <div x-show="group.title" class="flex-wrap gap-2 section-head">
+                  <h3 class="section-title" x-text="group.title"></h3>
+                  <span class="text-xs faint">Check the live combo payout on Kalshi before placing an order.</span>
+                </div>
+                <div class="grid gap-3 grid-cols-1 lg:grid-cols-2">
+                  <template :for="ticket in group.tickets">
+                    <article class="grid content-start gap-3 p-4 card">
+                      <div class="flex flex-wrap gap-2 items-center justify-between">
+                        <div class="flex gap-2 items-center">
+                          <span class="pill" x-text="ticket.kind"></span>
+                          <span class="font-bold text-sm num" x-text="ticket.stake + ' planned stake'"></span>
+                        </div>
+                        <span class="font-semibold text-xs" :class="ticket.resultTone" x-text="ticket.result"></span>
+                      </div>
+                      <div class="suggestion-legs">
+                        <template :for="leg in ticket.legs">
+                          <a :href="leg.href" data-no-router class="suggestion-leg">
+                            <span class="min-w-0 font-semibold text-sm" x-text="leg.label"></span>
+                            <span class="shrink-0 ml-auto text-right">
+                              <span class="block font-semibold text-sm num" x-text="leg.confidence"></span>
+                              <span class="block text-xs muted" x-text="leg.side + ' · ' + leg.starts"></span>
+                            </span>
+                          </a>
+                        </template>
+                      </div>
+                      <p x-show="ticket.paperPayout" class="text-xs muted" x-text="'Paper payout at selection · ' + ticket.paperPayout"></p>
+                      <div class="flex flex-wrap gap-2 items-center justify-end">
+                        <span x-show="ticket.approved" class="font-semibold text-xs pos">Approved on paper</span>
+                        <a x-show="ticket.kalshiOrderUrl" :href="ticket.kalshiOrderUrl" target="_blank" rel="noopener noreferrer" class="inline-flex items-center px-4 h-9 font-bold text-sm rounded-full btn">Open on Kalshi</a>
+                        <a x-show="ticket.single && !ticket.kalshiOrderUrl" :href="ticket.betHref" data-no-router class="inline-flex items-center px-4 h-9 font-bold text-sm rounded-full btn">Review market</a>
+                        <a x-show="ticket.comboOpen" href="https://kalshi.com/combos" target="_blank" rel="noopener noreferrer" class="inline-flex items-center px-4 h-9 font-bold text-sm rounded-full btn">Open Kalshi combo builder</a>
+                        <button x-show="ticket.canApprove" type="button" class="px-4 h-9 font-bold text-sm rounded-full btn btn-primary" :disabled="suggestionBusy() !== 0" @click="decide(ticket.id, true)">Approve on paper</button>
+                      </div>
+                    </article>
+                  </template>
+                </div>
+              </div>
+            </template>
           </section>
 
           {{-- Connected venues, with whatever the venue last said. --}}

@@ -100,6 +100,7 @@ describe('suggestions', () => {
     const { pending } = await listSuggestions(db, 1, NOW)
     const single = pending.find(s => s.kind === 'single')!
     const parlay = pending.find(s => s.kind === 'parlay')!
+    const alternative = pending.find(s => s.kind === 'parlay' && s.id !== parlay.id)!
     await approveSuggestion(db, 1, single.id, NOW)
     await approveSuggestion(db, 1, parlay.id, NOW)
     const position = (await db.query<{ id: number }>('SELECT id FROM exchange_positions').get())!
@@ -108,6 +109,7 @@ describe('suggestions', () => {
     await db.query('INSERT INTO suggestion_slates (user_id, name, tickets) VALUES (?, ?, ?)').run(1, 'Evening slate', JSON.stringify([
       { suggestionId: parlay.id, paperId: combo.id },
       { suggestionId: single.id, paperId: position.id, kalshiEventUrl: 'https://kalshi.com/markets/kxnbagame/nba-game/event' },
+      { suggestionId: alternative.id },
     ]))
 
     const saved = await listSuggestions(db, 1, NOW)
@@ -118,6 +120,8 @@ describe('suggestions', () => {
     expect(orderUrl.searchParams.get('op_market_ticker')).toBe(single.legs[0]!.ticker)
     expect(orderUrl.searchParams.get('op_order_side')).toBe(single.legs[0]!.side)
     expect(saved.pending.map(suggestion => suggestion.id)).not.toContain(single.id)
+    expect(saved.pending.map(suggestion => suggestion.id)).not.toContain(alternative.id)
+    expect(saved.slate?.alternatives).toMatchObject([{ id: alternative.id, canApprove: true, paperResult: null }])
     expect((await listSuggestions(db, 2, NOW)).slate).toBeNull()
     await expect(approveSuggestion(db, 2, single.id, NOW)).rejects.toThrow('not yours')
 
@@ -126,6 +130,13 @@ describe('suggestions', () => {
     await expect(approveSuggestion(db, 1, single.id, NOW)).rejects.toThrow('already approved')
     expect(await db.query('SELECT id FROM exchange_positions').all()).toHaveLength(1)
     expect(await db.query('SELECT id FROM paper_parlays').all()).toHaveLength(1)
+
+    expect((await approveSuggestion(db, 1, alternative.id, NOW)).outcome).toMatch(/^paper parlay #\d+$/)
+    await expect(approveSuggestion(db, 1, alternative.id, NOW)).rejects.toThrow('already approved')
+    expect(await db.query('SELECT id FROM paper_parlays').all()).toHaveLength(2)
+    expect((await listSuggestions(db, 1, NOW)).slate?.alternatives).toMatchObject([
+      { id: alternative.id, canApprove: false, paperResult: 'pending', paperPayout: parlayPayout(1, alternative.price) },
+    ])
 
     await db.query("UPDATE exchange_positions SET status = 'settled', settlement_price = 1 WHERE id = ?").run(position.id)
     await db.query("UPDATE paper_parlays SET status = 'lost' WHERE id = ?").run(combo.id)
