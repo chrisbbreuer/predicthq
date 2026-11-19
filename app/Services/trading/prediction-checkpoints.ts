@@ -79,8 +79,11 @@ export async function capturePredictionCheckpoint(
   const at = now()
   const bid = quote?.yesBid
   const ask = quote?.yesAsk
-  if (!inWindow(start, at) || !quote || !['open', 'active'].includes(quote.status) || bid == null || ask == null || bid <= 0 || ask >= 1 || ask < bid || ask - bid > 0.100000001)
+  if (!inWindow(start, at) || !quote || !['open', 'active'].includes(quote.status))
     return none
+  // Keep the venue's response for coverage auditing even if it has no
+  // executable quote. Such captures are never scored or ranked.
+  const usable = bid != null && ask != null && bid > 0 && ask < 1 && ask >= bid && ask - bid <= 0.100000001
   const observations = groupSportsbookQuotes(books, at)
   const consensus = observations.length >= 2
     ? observations.reduce((sum, book) => sum + book.probability, 0) / observations.length
@@ -92,10 +95,10 @@ export async function capturePredictionCheckpoint(
     league: game.league,
     start_at: new Date(start).toISOString(),
     captured_at: new Date(at).toISOString(),
-    payload: JSON.stringify({ bid, ask, observations, consensus, context }),
+    payload: JSON.stringify({ bid, ask, usable, observations, consensus, context }),
     created_at: new Date(at).toISOString(),
   })
-  return { captured: 1, paired: Number(consensus !== null) }
+  return { captured: 1, paired: Number(usable && consensus !== null) }
 }
 
 interface CheckpointRow {
@@ -147,15 +150,18 @@ export async function auditRecordedCheckpoints(db: Database, now = Date.now()) {
   }
   const settled: AuditGame[] = []
   const upcoming: Array<Omit<AuditGame, 'settledAt' | 'outcome'>> = []
+  let usableKalshiQuotes = 0
   let quotedBySportsbooks = 0
   let capturedWithConsensus = 0
   for (const row of latest.values()) {
-    const payload = JSON.parse(row.payload) as { bid: number, ask: number, consensus: number | null, context: WinnerContext | null, observations: unknown[] }
+    const payload = JSON.parse(row.payload) as { bid: number | null, ask: number | null, usable?: boolean, consensus: number | null, context: WinnerContext | null, observations: unknown[] }
+    if (payload.observations.length > 0) quotedBySportsbooks++
+    if (payload.usable === false || payload.bid === null || payload.ask === null) continue
+    usableKalshiQuotes++
     const sample = {
       ticker: row.ticker, league: row.league, day: sqlDay(row.start_at), at: utcTime(row.captured_at),
       bid: payload.bid, ask: payload.ask, consensus: payload.consensus, context: payload.context,
     }
-    if (payload.observations.length > 0) quotedBySportsbooks++
     if (payload.consensus !== null) capturedWithConsensus++
     if (row.result === 'yes' || row.result === 'no')
       settled.push({ ...sample, settledAt: utcTime(row.settled_at), outcome: row.result === 'yes' ? 1 : 0 })
@@ -164,6 +170,7 @@ export async function auditRecordedCheckpoints(db: Database, now = Date.now()) {
   }
   return {
     capturedGames: latest.size,
+    usableKalshiQuotes,
     quotedBySportsbooks,
     capturedWithConsensus,
     pairedSettled: settled.filter(row => row.consensus !== null).length,

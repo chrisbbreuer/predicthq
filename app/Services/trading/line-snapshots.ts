@@ -60,14 +60,14 @@ export function bookProbability(home: number | null, away: number | null, side: 
 
 export interface RecordDeps {
   openMarkets: (series: string) => Promise<KalshiMarketInfo[]>
-  gameFor: (ticker: string) => Promise<LiveGame | null>
+  gameFor: (ticker: string, hint?: string) => Promise<LiveGame | null>
   detailFor: (league: string, gameId: string) => Promise<GameDetail | null>
   now: () => number
 }
 
 export const defaultDeps: RecordDeps = {
   openMarkets: series => kalshiSeriesOpenMarkets(series),
-  gameFor: ticker => liveGameFor(ticker, 'yes'),
+  gameFor: (ticker, hint) => liveGameFor(ticker, 'yes', undefined, hint),
   detailFor: fetchGame,
   now: () => Date.now(),
 }
@@ -117,7 +117,7 @@ export async function liveLines(deps: RecordDeps = defaultDeps, windowMinutes = 
       const { yesBid: bid, yesAsk: ask } = market
       if (bid === null || ask === null || ask <= 0 || ask - bid > 0.1)
         continue
-      const game = await deps.gameFor(market.ticker).catch(() => null)
+      const game = await deps.gameFor(market.ticker, market.yesSubTitle).catch(() => null)
       // A soccer tie market names no team; it pays on the draw.
       const side: LineSide | null = game?.selected ?? (parseGameTicker(market.ticker)?.outcome === 'TIE' ? 'draw' : null)
       if (!game || !side)

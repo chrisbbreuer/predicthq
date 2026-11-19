@@ -30,9 +30,15 @@ describe('T-30 winner checkpoints', () => {
         for (const [selection, price] of [[1, 1.8], [2, 2.04]])
           raw.run('INSERT INTO odds (selection_id, bookmaker_id, price, available, observed_at, updated_at) VALUES (?, ?, ?, 1, ?, ?)', [selection, id, price, olderStamp, updated])
       }
+      const oneSided = { ...market, yesBid: 0.99, yesAsk: 1 }
+      expect(await capturePredictionCheckpoint(db, ticker, game, () => now - 30_000, async () => oneSided)).toEqual({ captured: 1, paired: 0 })
+      const coverage = await auditRecordedCheckpoints(db, now)
+      expect(coverage.quotedBySportsbooks).toBe(1)
+      expect(coverage.usableKalshiQuotes).toBe(0)
+      expect(coverage.upcoming).toHaveLength(0)
       expect(await capturePredictionCheckpoint(db, ticker, game, () => now, async () => market)).toEqual({ captured: 1, paired: 1 })
       expect((await auditRecordedCheckpoints(db, now)).capturedWithConsensus).toBe(1)
-      const row = await db.query<{ payload: string }>('SELECT payload FROM prediction_checkpoints').get()
+      const row = await db.query<{ payload: string }>('SELECT payload FROM prediction_checkpoints ORDER BY captured_at DESC').get()
       const payload = JSON.parse(row!.payload)
       expect(payload.observations.map((b: { book: string }) => b.book)).toEqual(['draftkings', 'pinnacle'])
       expect(payload.observations[0].home.price).toBe(1.8)
