@@ -11,7 +11,7 @@ export interface SportsbookForecast {
   books: string[]
 }
 
-async function matchEvent(db: Database, game: LiveGame): Promise<number | null> {
+export async function matchEvent(db: Database, game: LiveGame): Promise<number | null> {
   if (/^\d+$/.test(game.gameId)) {
     const source = await db.query<{ market_event_id: number }>(`
       SELECT market_event_id FROM event_sources WHERE provider = 'espn' AND external_id = ?

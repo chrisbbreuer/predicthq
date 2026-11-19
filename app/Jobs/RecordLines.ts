@@ -1,7 +1,9 @@
+import { log } from '@stacksjs/logging'
 import { Job } from '@stacksjs/queue'
 import { Database } from '../Support/db'
 import { monitored } from '../Services/monitoring'
 import { recordLines } from '../Services/trading/line-snapshots'
+import { auditRecordedCheckpoints, MIN_PAIRED_CHECKPOINTS, settlePredictionCheckpoints } from '../Services/trading/prediction-checkpoints'
 
 /**
  * Record Kalshi's quote beside the sportsbook line for games starting within
@@ -17,7 +19,15 @@ export default new Job({
   handle: monitored('RecordLines', async () => {
     const db = new Database()
     try {
-      return await recordLines(db)
+      const capture = await recordLines(db, undefined, true)
+      if (capture.checkpoints)
+        log.info(`[PredictionCheckpoints] captured ${capture.checkpoints} Kalshi quotes, ${capture.paired} with at least two sportsbooks`)
+      if (new Date().getUTCMinutes() < 10 && await settlePredictionCheckpoints(db) > 0) {
+        const report = await auditRecordedCheckpoints(db)
+        if (report.pairedSettled >= MIN_PAIRED_CHECKPOINTS || report.marketContext.context!.games >= 50)
+          log.info(`[PredictionCheckpoints] settled audit ${JSON.stringify(report)}`)
+      }
+      return capture
     }
     finally {
       db.close()

@@ -8,6 +8,7 @@ import { SERIES } from '../odds/books/kalshi'
 import { kalshiFee } from './backtest'
 import { tradablePrice } from './evidence'
 import { liveGameFor, parseGameTicker } from './live-games'
+import { capturePredictionCheckpoint } from './prediction-checkpoints'
 
 /**
  * Kalshi against the sportsbook line, recorded going forward.
@@ -105,7 +106,7 @@ function teamName(team: { location?: string, name?: string } | undefined): strin
  * quote and a book line, read now. Shared by the recorder and the slate.
  * With `includeLive`, games under way are included too, at Kalshi's mid.
  */
-export async function liveLines(deps: RecordDeps = defaultDeps, windowMinutes = WINDOW_MINUTES, options: { includeLive?: boolean } = {}): Promise<LiveLine[]> {
+export async function liveLines(deps: RecordDeps = defaultDeps, windowMinutes = WINDOW_MINUTES, options: { includeLive?: boolean, onPregame?: (ticker: string, game: LiveGame) => Promise<void> } = {}): Promise<LiveLine[]> {
   const now = deps.now()
   const details = new Map<string, Promise<GameDetail | null>>()
   const out: LiveLine[] = []
@@ -147,6 +148,7 @@ export async function liveLines(deps: RecordDeps = defaultDeps, windowMinutes = 
       if (!(minutes >= 0 && minutes <= windowMinutes))
         continue
 
+      await options.onPregame?.(market.ticker, game)
       const key = `${game.league}:${game.gameId}`
       if (!details.has(key))
         details.set(key, deps.detailFor(game.league, game.gameId).catch(() => null))
@@ -175,8 +177,16 @@ export async function liveLines(deps: RecordDeps = defaultDeps, windowMinutes = 
   return out
 }
 
-export async function recordLines(db: Database, deps: RecordDeps = defaultDeps): Promise<{ recorded: number, games: number }> {
-  const lines = await liveLines(deps)
+export async function recordLines(db: Database, deps: RecordDeps = defaultDeps, capture = false) {
+  let checkpoints = 0
+  let paired = 0
+  const lines = await liveLines(deps, WINDOW_MINUTES, {
+    onPregame: capture ? async (ticker, game) => {
+      const observation = await capturePredictionCheckpoint(db, ticker, game, deps.now)
+      checkpoints += observation.captured
+      paired += observation.paired
+    } : undefined,
+  })
   const stamp = new Date(deps.now()).toISOString()
   for (const line of lines) {
     await db.query(`
@@ -184,7 +194,7 @@ export async function recordLines(db: Database, deps: RecordDeps = defaultDeps):
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(line.ticker, line.league, line.gameId, line.side, line.provider, line.bookProb, line.bid, line.ask, line.minutes, line.startsAt, stamp, stamp, stamp)
   }
-  return { recorded: lines.length, games: new Set(lines.map(line => `${line.league}:${line.gameId}`)).size }
+  return { recorded: lines.length, checkpoints, paired, games: new Set(lines.map(line => `${line.league}:${line.gameId}`)).size }
 }
 
 export interface LineBet {

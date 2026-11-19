@@ -7,6 +7,7 @@ import type { BacktestReport } from '../Services/trading/backtest'
 import { backtestGames, summarizeBets, summarizeConsensus } from '../Services/trading/backtest'
 import { haltState, setHalt } from '../Services/trading/halt'
 import { linesReport, liveLines } from '../Services/trading/line-snapshots'
+import { auditRecordedCheckpoints, MIN_PAIRED_CHECKPOINTS } from '../Services/trading/prediction-checkpoints'
 import { draftSlate, explicitPicks, MIN_PARLAY_PAYOUT, parlayExpectedReturn, placeSlate } from '../Services/trading/slate'
 import { generateSuggestions, saveSuggestions } from '../Services/trading/suggestions'
 
@@ -183,6 +184,20 @@ export default function (cli: CLI) {
       }
     })
 
+
+  cli
+    .command('trading:prediction-audit', 'Review ranked winner picks and settled T-30 forecasts')
+    .action(async () => {
+      const db = new Database()
+      try {
+        const report = await auditRecordedCheckpoints(db)
+        log.info(`${report.capturedGames} captured games, ${report.settled} settled, ${report.pairedSettled}/${MIN_PAIRED_CHECKPOINTS} paired settlements for the scheduled review`)
+        console.log(JSON.stringify(report, null, 2))
+      }
+      finally {
+        db.close()
+      }
+    })
 
   cli
     .command('trading:lines', 'Score Kalshi against the recorded sportsbook lines, game by game')
