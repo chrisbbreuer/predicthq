@@ -1,16 +1,19 @@
 import type { Database } from '../../Support/db'
 import type { KalshiMarketInfo } from '../prediction-markets/kalshi-public'
 import type { LiveGame } from './live-games'
+import type { OddsPapiQuote } from './oddspapi-checkpoints'
 import type { AuditGame } from './prediction-audit'
 import type { WinnerContext } from './winner-context'
 import { kalshiMarkets } from '../prediction-markets/kalshi-public'
 import { parseGameTicker } from './live-games'
-import { predictionAudit, prospectiveWinnerAudit, rankCapturedWinners } from './prediction-audit'
+import { saveOddsPapiQuotes } from './oddspapi-checkpoints'
+import { predictionAudit, prospectiveSportsbookAudit, prospectiveWinnerAudit, rankCapturedWinners } from './prediction-audit'
 import { matchEvent } from './sportsbook-consensus'
 import { captureWinnerContext, utcTime } from './winner-context'
 import frozenWinnerContext from './winner-context-fit.json'
+import outcomeWinnerContext from './winner-context-outcomes.json'
 
-const leagues = new Set(['nba', 'wnba', 'nhl', 'nfl', 'ncaaf', 'ncaab', 'ncaaw', 'mlb'])
+export const winnerCheckpointLeagues = new Set(['nba', 'wnba', 'nhl', 'nfl', 'ncaaf', 'ncaab', 'ncaaw', 'mlb'])
 const maxAgeMs = 10 * 60_000
 export const MIN_PAIRED_CHECKPOINTS = 50
 
@@ -20,6 +23,7 @@ interface QuoteRow {
   price: number | string
   observed_at: string
   updated_at: string
+  source?: string
 }
 
 export function groupSportsbookQuotes(rows: QuoteRow[], at: number) {
@@ -49,6 +53,12 @@ function inWindow(start: number, at: number): boolean {
   return start - at >= 30 * 60_000 && start - at <= 40 * 60_000
 }
 
+export function winnerCheckpointDue(ticker: string, game: LiveGame, at: number): boolean {
+  const startsAt = utcTime(game.startsAt)
+  return game.state === 'pre' && game.selected === 'home' && winnerCheckpointLeagues.has(game.league)
+    && parseGameTicker(ticker)?.winner === true && inWindow(startsAt, at)
+}
+
 /** Freeze newly checked Kalshi quotes and complete sportsbook pairs
  * from the live odds table, whose ingestion refreshes updated_at even
  * on unchanged prices. Nothing is taken from the historical change log.
@@ -59,11 +69,12 @@ export async function capturePredictionCheckpoint(
   game: LiveGame,
   now = Date.now,
   loadMarket = async (ticker: string) => (await kalshiMarkets([ticker], 0)).get(ticker),
-): Promise<{ captured: number, paired: number }> {
+  externalQuotes: OddsPapiQuote[] = [],
+): Promise<{ captured: number, paired: number, oddsPapiObservations?: number }> {
   const none = { captured: 0, paired: 0 }
   const start = Date.parse(game.startsAt)
   const ref = parseGameTicker(ticker)
-  if (game.state !== 'pre' || game.selected !== 'home' || !leagues.has(game.league) || !ref?.winner || !inWindow(start, now()))
+  if (!ref || !winnerCheckpointDue(ticker, game, now()))
     return none
   const eventId = await matchEvent(db, game)
   const books = eventId === null ? [] : await db.query<QuoteRow>(`
@@ -86,21 +97,32 @@ export async function capturePredictionCheckpoint(
   // Keep the venue's response for coverage auditing even if it has no
   // executable quote. Such captures are never scored or ranked.
   const usable = bid !== null && ask !== null && bid > 0 && ask < 1 && ask >= bid && ask - bid <= 0.100000001
-  const observations = groupSportsbookQuotes(books, at)
+  const freshOddsPapi = externalQuotes.filter(quote => inWindow(start, utcTime(quote.updated_at)) && utcTime(quote.updated_at) <= at)
+  const observationsByBook = new Map(groupSportsbookQuotes(books, at).map(observation => [observation.book, observation]))
+  for (const observation of groupSportsbookQuotes(freshOddsPapi, at))
+    observationsByBook.set(observation.book, observation)
+  const observations = [...observationsByBook.values()]
   const consensus = observations.length >= 2
     ? observations.reduce((sum, book) => sum + book.probability, 0) / observations.length
     : null
   const context = eventId === null ? null : await captureWinnerContext(db, eventId, game.league, start, at)
-  await db.insertOrIgnore('prediction_checkpoints', {
+  const checkpoint = {
     event_ticker: ref.eventTicker,
     ticker,
     league: game.league,
     start_at: new Date(start).toISOString(),
     captured_at: new Date(at).toISOString(),
-    payload: JSON.stringify({ bid, ask, usable, kalshiStatus: quote?.status ?? null, observations, consensus, context }),
+    payload: JSON.stringify({ bid, ask, usable, kalshiStatus: quote?.status ?? null, observations, consensus, context, oddsPapiQuotes: freshOddsPapi }),
     created_at: new Date(at).toISOString(),
+  }
+  const oddsPapiObservations = eventId === null || freshOddsPapi.length === 0 ? 0 : await db.transaction(async (tx) => {
+    const saved = await saveOddsPapiQuotes(tx, eventId, game, freshOddsPapi)
+    await tx.insertOrIgnore('prediction_checkpoints', checkpoint)
+    return saved
   })
-  return { captured: 1, paired: Number(usable && consensus !== null) }
+  if (eventId === null || freshOddsPapi.length === 0)
+    await db.insertOrIgnore('prediction_checkpoints', checkpoint)
+  return { captured: 1, paired: Number(usable && consensus !== null), ...(oddsPapiObservations ? { oddsPapiObservations } : {}) }
 }
 
 interface CheckpointRow {
@@ -151,22 +173,31 @@ export async function auditRecordedCheckpoints(db: Database, now = Date.now()) {
       latest.set(row.event_ticker, row)
   }
   const settled: AuditGame[] = []
+  const sportsbookSettled: Array<Omit<AuditGame, 'bid' | 'ask' | 'consensus'> & { consensus: number }> = []
   const upcoming: Array<Omit<AuditGame, 'settledAt' | 'outcome'>> = []
   let usableKalshiQuotes = 0
   let quotedBySportsbooks = 0
   let capturedWithConsensus = 0
+  let oddsPapiGames = 0
   for (const row of latest.values()) {
-    const payload = JSON.parse(row.payload) as { bid: number | null, ask: number | null, usable?: boolean, consensus: number | null, context: WinnerContext | null, observations: unknown[] }
+    const payload = JSON.parse(row.payload) as { bid: number | null, ask: number | null, usable?: boolean, consensus: number | null, context: WinnerContext | null, observations: unknown[], oddsPapiQuotes?: OddsPapiQuote[] }
     if (payload.observations.length > 0) quotedBySportsbooks++
+    if (payload.oddsPapiQuotes?.length) oddsPapiGames++
+    const winner = {
+      ticker: row.ticker, league: row.league, day: sqlDay(row.start_at), at: utcTime(row.captured_at),
+      context: payload.context,
+    }
+    const final = row.result === 'yes' || row.result === 'no'
+      ? { settledAt: utcTime(row.settled_at), outcome: (row.result === 'yes' ? 1 : 0) as 0 | 1 }
+      : null
+    if (final && payload.consensus !== null)
+      sportsbookSettled.push({ ...winner, ...final, consensus: payload.consensus })
     if (payload.usable === false || payload.bid === null || payload.ask === null) continue
     usableKalshiQuotes++
-    const sample = {
-      ticker: row.ticker, league: row.league, day: sqlDay(row.start_at), at: utcTime(row.captured_at),
-      bid: payload.bid, ask: payload.ask, consensus: payload.consensus, context: payload.context,
-    }
+    const sample = { ...winner, bid: payload.bid, ask: payload.ask, consensus: payload.consensus }
     if (payload.consensus !== null) capturedWithConsensus++
-    if (row.result === 'yes' || row.result === 'no')
-      settled.push({ ...sample, settledAt: utcTime(row.settled_at), outcome: row.result === 'yes' ? 1 : 0 })
+    if (final)
+      settled.push({ ...sample, ...final })
     else if (utcTime(row.start_at) > now)
       upcoming.push(sample)
   }
@@ -175,7 +206,9 @@ export async function auditRecordedCheckpoints(db: Database, now = Date.now()) {
     usableKalshiQuotes,
     quotedBySportsbooks,
     capturedWithConsensus,
+    oddsPapiGames,
     pairedSettled: settled.filter(row => row.consensus !== null).length,
+    sportsbookOnlyContext: prospectiveSportsbookAudit(sportsbookSettled, outcomeWinnerContext, MIN_PAIRED_CHECKPOINTS),
     prospectiveContext: prospectiveWinnerAudit(settled, frozenWinnerContext, MIN_PAIRED_CHECKPOINTS),
     upcoming: rankCapturedWinners(upcoming, settled, now),
     ...predictionAudit(settled),

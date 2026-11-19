@@ -1,8 +1,23 @@
 import type { AuditGame, FrozenWinnerContext } from '../../app/Services/trading/prediction-audit'
 import { describe, expect, it } from 'bun:test'
-import { prospectiveWinnerAudit } from '../../app/Services/trading/prediction-audit'
+import { prospectiveSportsbookAudit, prospectiveWinnerAudit } from '../../app/Services/trading/prediction-audit'
 
 describe('prospective winner audit', () => {
+  it('runs the sportsbook-only audit at 50 settled forecasts even for games without team history', () => {
+    const model = { trainBefore: '2026-11-19T02:00:00Z', trainingGames: 200, weights: [2, 0, 0, 0], weight: 1 }
+    const at = Date.parse(model.trainBefore) + 60_000
+    const rows = Array.from({ length: 50 }, (_, i) => ({
+      ticker: `game-${i}`, day: '2026-11-19', league: 'nba', at, settledAt: at + 500_000 + i,
+      consensus: 0.49, outcome: 1 as const,
+      context: i === 0 ? null : [1, 0, 0, 0] as [number, number, number, number],
+    }))
+    expect(prospectiveSportsbookAudit(rows.slice(0, -1), model, 50).scores).toBeNull()
+    const report = prospectiveSportsbookAudit(rows, model, 50)
+    expect(report.withContext).toBe(49)
+    expect(report.scores?.books?.topThree.wins).toBe(0)
+    expect(report.scores?.context?.topThree.wins).toBe(3)
+  })
+
   it('compares the same first 50 paired settlements with a frozen model', () => {
     const model: FrozenWinnerContext = { trainBefore: '2026-11-19T02:00:00Z', trainingGames: 849, weights: [1, 0, 0, 0] }
     const cutoff = Date.parse(model.trainBefore)

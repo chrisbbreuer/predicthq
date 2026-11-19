@@ -192,7 +192,7 @@ export default function (cli: CLI) {
       const db = new Database()
       try {
         const report = await auditRecordedCheckpoints(db)
-        log.info(`${report.capturedGames} captured games, ${report.settled} settled, ${report.pairedSettled} paired, ${report.prospectiveContext.eligible}/${MIN_PAIRED_CHECKPOINTS} with context for the prospective review`)
+        log.info(`${report.capturedGames} captured games, ${report.oddsPapiGames} with OddsPapi, ${report.pairedSettled} paired with Kalshi, ${report.sportsbookOnlyContext.eligible}/${MIN_PAIRED_CHECKPOINTS} sportsbook-only review`)
         console.log(JSON.stringify(report, null, 2))
       }
       finally {

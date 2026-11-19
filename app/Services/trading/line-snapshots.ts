@@ -7,8 +7,10 @@ import { kalshiMarkets, kalshiSeriesOpenMarkets } from '../prediction-markets/ka
 import { SERIES } from '../odds/books/kalshi'
 import { kalshiFee } from './backtest'
 import { tradablePrice } from './evidence'
-import { liveGameFor, parseGameTicker } from './live-games'
-import { capturePredictionCheckpoint } from './prediction-checkpoints'
+import { LEAGUE_PREFIXES, liveGameFor, parseGameTicker } from './live-games'
+import { loadOddsPapiBoards, matchOddsPapiQuotes } from './oddspapi-checkpoints'
+import { capturePredictionCheckpoint, winnerCheckpointDue, winnerCheckpointLeagues } from './prediction-checkpoints'
+import { utcTime } from './winner-context'
 
 /**
  * Kalshi against the sportsbook line, recorded going forward.
@@ -27,6 +29,7 @@ import { capturePredictionCheckpoint } from './prediction-checkpoints'
 
 /** Every game-winner series we price, soccer included, plus women's college basketball. */
 export const LINE_SERIES = [...new Set([...Object.values(SERIES), 'KXNCAAWBGAME'])]
+const checkpointSeries = LINE_SERIES.filter(series => LEAGUE_PREFIXES.some(([prefix, league]) => series.startsWith(prefix) && winnerCheckpointLeagues.has(league)))
 
 export type LineSide = 'home' | 'away' | 'draw'
 
@@ -106,7 +109,7 @@ function teamName(team: { location?: string, name?: string } | undefined): strin
  * quote and a book line, read now. Shared by the recorder and the slate.
  * With `includeLive`, games under way are included too, at Kalshi's mid.
  */
-export async function liveLines(deps: RecordDeps = defaultDeps, windowMinutes = WINDOW_MINUTES, options: { includeLive?: boolean, onPregame?: (ticker: string, game: LiveGame) => Promise<void> } = {}): Promise<LiveLine[]> {
+export async function liveLines(deps: RecordDeps = defaultDeps, windowMinutes = WINDOW_MINUTES, options: { includeLive?: boolean } = {}): Promise<LiveLine[]> {
   const now = deps.now()
   const details = new Map<string, Promise<GameDetail | null>>()
   const out: LiveLine[] = []
@@ -115,8 +118,7 @@ export async function liveLines(deps: RecordDeps = defaultDeps, windowMinutes = 
     const markets = await deps.openMarkets(series).catch(() => [] as KalshiMarketInfo[])
     for (const market of markets) {
       const { yesBid: bid, yesAsk: ask } = market
-      const tight = bid !== null && ask !== null && ask > 0 && ask - bid <= 0.1
-      if (!tight && !options.onPregame)
+      if (bid === null || ask === null || ask <= 0 || ask - bid > 0.1)
         continue
       const game = await deps.gameFor(market.ticker, market.yesSubTitle).catch(() => null)
       // A soccer tie market names no team; it pays on the draw.
@@ -127,10 +129,6 @@ export async function liveLines(deps: RecordDeps = defaultDeps, windowMinutes = 
       if (game.state !== 'pre' && !(live && options.includeLive))
         continue
       const minutes = Math.round((Date.parse(game.startsAt) - now) / 60_000)
-      if (!live && minutes >= 0 && minutes <= windowMinutes)
-        await options.onPregame?.(market.ticker, game)
-      if (!tight)
-        continue
       const opponent = side === 'draw' ? '' : teamName(side === 'home' ? game.away : game.home)
       if (live) {
         out.push({
@@ -182,15 +180,8 @@ export async function liveLines(deps: RecordDeps = defaultDeps, windowMinutes = 
 }
 
 export async function recordLines(db: Database, deps: RecordDeps = defaultDeps, capture = false) {
-  let checkpoints = 0
-  let paired = 0
-  const lines = await liveLines(deps, WINDOW_MINUTES, {
-    onPregame: capture ? async (ticker, game) => {
-      const observation = await capturePredictionCheckpoint(db, ticker, game, deps.now)
-      checkpoints += observation.captured
-      paired += observation.paired
-    } : undefined,
-  })
+  const saved = capture ? await recordWinnerCheckpoints(db, deps) : { checkpoints: 0, paired: 0, oddsPapiObservations: 0 }
+  const lines = await liveLines(deps, WINDOW_MINUTES)
   const stamp = new Date(deps.now()).toISOString()
   for (const line of lines) {
     await db.query(`
@@ -198,7 +189,52 @@ export async function recordLines(db: Database, deps: RecordDeps = defaultDeps, 
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(line.ticker, line.league, line.gameId, line.side, line.provider, line.bookProb, line.bid, line.ask, line.minutes, line.startsAt, stamp, stamp, stamp)
   }
-  return { recorded: lines.length, checkpoints, paired, games: new Set(lines.map(line => `${line.league}:${line.gameId}`)).size }
+  return { recorded: lines.length, ...saved, games: new Set(lines.map(line => `${line.league}:${line.gameId}`)).size }
+}
+
+/** Discover the cutoff cohort before the legacy recorder reads game details. */
+async function recordWinnerCheckpoints(db: Database, deps: RecordDeps) {
+  const at = deps.now()
+  const dates = new Set([-1, 0, 1].map(offset => new Date(at + offset * 86_400_000).toISOString().slice(0, 10).replace(/-/g, '')))
+  const boards = await Promise.all(checkpointSeries.map(series => deps.openMarkets(series).catch(() => [])))
+  const markets = boards.flat().filter(market => {
+    const ref = parseGameTicker(market.ticker)
+    return ref?.winner && dates.has(ref.date)
+  })
+  const candidates = new Map<string, { ticker: string, game: LiveGame }>()
+  for (let i = 0; i < markets.length; i += 30) {
+    await Promise.all(markets.slice(i, i + 30).map(async (market) => {
+      const game = await deps.gameFor(market.ticker, market.yesSubTitle).catch(() => null)
+      if (game && winnerCheckpointDue(market.ticker, game, deps.now()))
+        candidates.set(`${game.league}:${game.gameId}`, { ticker: market.ticker, game })
+    }))
+  }
+  if (candidates.size === 0)
+    return { checkpoints: 0, paired: 0, oddsPapiObservations: 0 }
+
+  const cohort = [...candidates.values()]
+  const dueLeagues = new Map<string, number>()
+  for (const { game } of cohort) {
+    const remaining = utcTime(game.startsAt) - deps.now()
+    if (remaining >= 30 * 60_000 && remaining <= 35 * 60_000)
+      dueLeagues.set(game.league, (dueLeagues.get(game.league) ?? 0) + 1)
+  }
+  const leaguesByGames = [...dueLeagues].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([league]) => league)
+  const [sportsBooks, kalshi] = await Promise.all([
+    loadOddsPapiBoards(db, leaguesByGames),
+    kalshiMarkets(cohort.map(row => row.ticker), 0).catch(() => new Map<string, KalshiMarketInfo>()),
+  ])
+  let checkpoints = 0
+  let paired = 0
+  let oddsPapiObservations = 0
+  for (const { ticker, game } of cohort) {
+    const quotes = matchOddsPapiQuotes(game, sportsBooks, utcTime(game.startsAt) - 30 * 60_000)
+    const observation = await capturePredictionCheckpoint(db, ticker, game, deps.now, async () => kalshi.get(ticker), quotes)
+    checkpoints += observation.captured
+    paired += observation.paired
+    oddsPapiObservations += observation.oddsPapiObservations ?? 0
+  }
+  return { checkpoints, paired, oddsPapiObservations }
 }
 
 export interface LineBet {

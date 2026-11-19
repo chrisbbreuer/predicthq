@@ -21,9 +21,11 @@ export default new Job({
     try {
       const capture = await recordLines(db, undefined, true)
       if (capture.checkpoints)
-        log.info(`[PredictionCheckpoints] captured ${capture.checkpoints} checkpoints, ${capture.paired} with a usable Kalshi quote and at least two sportsbooks`)
+        log.info(`[PredictionCheckpoints] captured ${capture.checkpoints} checkpoints, ${capture.paired} paired, ${capture.oddsPapiObservations} OddsPapi offers saved`)
       if (new Date().getUTCMinutes() < 10 && await settlePredictionCheckpoints(db) > 0) {
         const report = await auditRecordedCheckpoints(db)
+        if (report.sportsbookOnlyContext.scores)
+          log.info(`[PredictionCheckpoints] sportsbook-only audit ${JSON.stringify(report.sportsbookOnlyContext)}`)
         if (report.pairedSettled >= MIN_PAIRED_CHECKPOINTS || report.marketContext.context!.games >= 50)
           log.info(`[PredictionCheckpoints] settled audit ${JSON.stringify(report)}`)
       }

@@ -14,6 +14,7 @@ export interface AuditGame {
 }
 
 type UnsettledGame = Omit<AuditGame, 'outcome' | 'settledAt'>
+type SportsbookAuditGame = Omit<AuditGame, 'bid' | 'ask' | 'consensus'> & { consensus: number }
 
 const logit = (p: number) => Math.log(p / (1 - p))
 const sigmoid = (x: number) => 1 / (1 + Math.exp(-x))
@@ -64,7 +65,7 @@ export function fitHistoricalWinnerContext(rows: AuditGame[], trainBefore: strin
   return { trainBefore, trainingGames: training.length, weights: fit(training, mid) }
 }
 
-interface ScoredGame { row: AuditGame, forecasts: Record<string, number> }
+interface ScoredGame { row: Pick<AuditGame, 'ticker' | 'day' | 'outcome'>, forecasts: Record<string, number> }
 
 function summarize(rows: ScoredGame[], variants: string[]) {
   return Object.fromEntries(variants.map(name => {
@@ -109,6 +110,20 @@ export function prospectiveWinnerAudit(rows: AuditGame[], model: FrozenWinnerCon
     required: games,
     scores: summarize(scored, ['market', 'books', 'blend', 'context']),
   }
+}
+
+/** Use the first 50 settled sportsbook forecasts. A missing team history leaves the price forecast untouched. */
+export function prospectiveSportsbookAudit(rows: SportsbookAuditGame[], model: FrozenWinnerContext & { weight: number }, games: number) {
+  const cutoff = Date.parse(model.trainBefore)
+  const eligible = rows.filter(row => row.at >= cutoff && Number.isFinite(row.settledAt) && row.consensus > 0 && row.consensus < 1)
+  const sample = eligible.sort((a, b) => a.settledAt - b.settledAt || a.ticker.localeCompare(b.ticker)).slice(0, games)
+  const weights = model.weights.map(w => w * model.weight)
+  const withContext = sample.filter(row => row.context !== null).length
+  const scores = sample.length < games ? null : summarize(sample.map(row => ({
+    row,
+    forecasts: { books: row.consensus, context: addContext(row, row.consensus, weights) },
+  })), ['books', 'context'])
+  return { eligible: eligible.length, required: games, withContext, scores }
 }
 
 /** Compare the Kalshi ranking with research probabilities for currently captured games. */
