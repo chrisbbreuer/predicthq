@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'bun:test'
 import { rmSync } from 'node:fs'
 import type { Database } from '../../app/Support/db'
-import { bookProbability, impliedFromAmerican, linesReport, recordLines } from '../../app/Services/trading/line-snapshots'
+import { bookProbability, impliedFromAmerican, linesReport, liveLines, recordLines } from '../../app/Services/trading/line-snapshots'
 import { schemaFor } from '../support/schema'
 
 const paths: string[] = []
@@ -46,6 +46,21 @@ describe('book probability', () => {
 describe('recording and scoring lines', () => {
   const NOW = Date.parse('2026-11-18T23:30:00Z')
   const game = (selected: 'home' | 'away' | null, startsAt = '2026-11-19T00:00:00Z') => ({ league: 'nba', gameId: '1', state: 'pre', selected, startsAt } as any)
+
+  it('can quote a pre-game winner for suggestions while the sportsbook is unavailable', async () => {
+    const deps = {
+      openMarkets: async (series: string) => series === 'KXNBAGAME'
+        ? [{ ticker: 'KXNBAGAME-26NOV18MEMCLE-CLE', yesBid: 0.74, yesAsk: 0.76 }] as any[]
+        : [],
+      gameFor: async () => game('home'),
+      detailFor: async () => null,
+      now: () => NOW,
+    }
+    expect(await liveLines(deps)).toEqual([])
+    expect(await liveLines(deps, 180, { allowKalshiOnly: true })).toMatchObject([
+      { provider: 'Kalshi', bookProb: 0.75, bid: 0.74, ask: 0.76, live: false },
+    ])
+  })
 
   it('records games within three hours, soccer ties against the draw, and scores them once settled', async () => {
     const db = freshDb()

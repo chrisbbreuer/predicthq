@@ -25,14 +25,13 @@ const NOW = Date.parse('2026-11-18T17:00:00Z')
 const soon = new Date(NOW + 3 * 3_600_000).toISOString()
 const line = (i: number, over: Partial<LiveLine> = {}): LiveLine => ({
   ticker: `KXNBAGAME-26NOV18G${i}-T${i}`, title: `Team ${i}`, league: 'nba', gameId: String(i), side: 'home', provider: 'DraftKings',
-  // The book likes each team a little more than Kalshi does, by a shrinking margin.
-  bookProb: 0.6 + 0.03 - i * 0.002, bid: 0.59, ask: 0.6, minutes: 180, startsAt: soon, live: false, ...over,
+  bookProb: 0.74, bid: 0.7, ask: 0.71, minutes: 180, startsAt: soon, live: false, ...over,
 })
 
 describe('suggestions', () => {
   it('suggests singles, parlays and a live-leg parlay, once each', async () => {
     const db = freshDb()
-    const lines = [...Array.from({ length: 7 }, (_, i) => line(i)), line(9, { live: true, bookProb: 0.7, bid: 0.69, ask: 0.7, minutes: -40 })]
+    const lines = [...Array.from({ length: 7 }, (_, i) => line(i)), line(9, { live: true, bookProb: 0.7, bid: 0.69, ask: 0.71, minutes: -40 })]
     expect(await generateSuggestions(db, 1, { lines, props: [], now: NOW })).toBe(6)
     // Run again: nothing new.
     expect(await generateSuggestions(db, 1, { lines, props: [], now: NOW })).toBe(0)
@@ -43,6 +42,35 @@ describe('suggestions', () => {
     expect(liveParlay.kind).toBe('parlay')
     // A live leg's price moves: its suggestion is short-lived.
     expect(Date.parse(liveParlay.expiresAt) - NOW).toBe(15 * 60_000)
+  })
+
+  it('uses Kalshi at an inclusive 70% floor for winner picks even when the book favours a different side', async () => {
+    const db = freshDb()
+    const lines = [
+      line(1, { bid: 0.69, ask: 0.71, bookProb: 0.4 }),
+      line(2, { bid: 0.68, ask: 0.71, bookProb: 0.9 }),
+      line(3, { bid: 0.27, ask: 0.29, bookProb: 0.8, opponent: 'Away team' }),
+      line(4, { bid: 0.71, ask: 0.72 }),
+      line(4, { ticker: 'GAME4-AWAY', side: 'away', bid: 0.32, ask: 0.33, bookProb: 0.26 }),
+      line(5, { league: 'epl', side: 'home', bid: 0.22, ask: 0.23, opponent: 'Visitor' }),
+    ]
+    expect(await generateSuggestions(db, 1, { lines, props: [], now: NOW })).toBe(2)
+    const { pending } = await listSuggestions(db, 1, NOW)
+    const byTicker = new Map(pending.map(s => [s.legs[0]!.ticker, s.legs[0]!]))
+    expect(byTicker.get(lines[0]!.ticker)).toMatchObject({ side: 'yes', confidence: 0.7 })
+    expect(byTicker.get(lines[2]!.ticker)).toMatchObject({ side: 'no', confidence: 0.72 })
+  })
+
+  it('hides and blocks approval of pending suggestions saved below the current floor', async () => {
+    const db = freshDb()
+    await generateSuggestions(db, 1, { lines: [line(1), line(2)], props: [], now: NOW })
+    const { pending } = await listSuggestions(db, 1, NOW)
+    const stale = pending.find(s => s.legs[0]?.ticker === line(1).ticker)!
+    const legacyLeg = { ...stale.legs[0]!, yesMid: 0.69, confidence: undefined }
+    await db.query('UPDATE bet_suggestions SET legs = ? WHERE id = ?').run(JSON.stringify([legacyLeg]), stale.id)
+    expect((await listSuggestions(db, 1, NOW)).pending.map(s => s.id)).not.toContain(stale.id)
+    await expect(approveSuggestion(db, 1, stale.id, NOW)).rejects.toThrow('70%')
+    expect(await generateSuggestions(db, 1, { lines: [line(1)], props: [], now: NOW })).toBe(1)
   })
 
   it('approves a single and a parlay as paper bets, and dismisses', async () => {

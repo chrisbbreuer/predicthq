@@ -1,20 +1,20 @@
 import type { Database } from '../../Support/db'
 import type { LiveLine } from './line-snapshots'
 import type { SlatePick } from './slate'
-import { propParlays } from './prop-parlays'
 import { liveLines } from './line-snapshots'
 import { placePaperParlay } from './paper-parlays'
+import { propParlays } from './prop-parlays'
 import { propLines } from './props'
-import { assembleParlay, buildSlate, ensurePaperStrategy, parlayExpectedReturn, pickLeg, placePaperSingle, rankPicks } from './slate'
+import { assembleParlay, buildSlate, ensurePaperStrategy, parlayExpectedReturn, pickLeg, placePaperSingle, rankWinnerPicks } from './slate'
+import { meetsPickConfidence, MIN_PICK_CONFIDENCE } from './winner-confidence'
 
 /**
  * Bet suggestions: singles and parlays PredictHQ proposes on the bets page,
  * for the user to approve (recorded as paper bets), bet themselves on Kalshi,
  * or dismiss. Nothing here moves money.
  *
- * Picks come from the slate: sportsbook line against Kalshi before a game,
- * Kalshi's own favourite during one. See `slate.ts` for why, and for what the
- * expected-return figure means.
+ * Winner picks use Kalshi's probability before and during games. Sportsbook
+ * lines, when available, still inform the expected-return figure.
  */
 
 export type SuggestionLeg = ReturnType<typeof pickLeg>
@@ -44,6 +44,10 @@ function signature(legs: SuggestionLeg[]): string {
   return legs.map(leg => `${leg.ticker}:${leg.side}`).sort().join('+').slice(0, 255)
 }
 
+function eligibleLegs(legs: SuggestionLeg[]): boolean {
+  return legs.length > 0 && legs.every(leg => meetsPickConfidence(leg.confidence ?? (leg.side === 'yes' ? leg.yesMid : 1 - leg.yesMid)))
+}
+
 /** When the suggestion stops being good: the first leg's start, or soon for a live leg. */
 function expiry(legs: SuggestionLeg[], now: number): string {
   const ends = legs.map(leg => (leg.live ? now + LIVE_SHELF_MS : Date.parse(leg.startsAt)))
@@ -59,9 +63,11 @@ export async function saveSuggestions(db: Database, userId: number, bets: Array<
   let saved = 0
   for (const bet of bets) {
     const legs = bet.picks.map(pickLeg)
+    if (!eligibleLegs(legs))
+      continue
     const sig = signature(legs)
-    const seen = await db.query<{ id: number }>(`SELECT id FROM bet_suggestions WHERE user_id = ? AND signature = ? AND created_at >= ? LIMIT 1`).get(userId, sig, since)
-    if (seen)
+    const seen = await db.query<{ status: string, legs: string }>(`SELECT status, legs FROM bet_suggestions WHERE user_id = ? AND signature = ? AND created_at >= ? ORDER BY id DESC LIMIT 1`).get(userId, sig, since)
+    if (seen && (seen.status !== 'pending' || eligibleLegs(JSON.parse(seen.legs))))
       continue
     const price = Math.round(legs.reduce((product, leg) => product * leg.price, 1) * 1_000_000) / 1_000_000
     const ev = bet.kind === 'single' ? legs[0]!.ev : parlayExpectedReturn(bet.picks)
@@ -85,15 +91,10 @@ export async function generateSuggestions(db: Database, userId: number, options:
   const stake = options.stake ?? 1
   const now = options.now ?? Date.now()
   // Only games that start today, US Eastern, so every suggestion settles tonight.
-  const lines = (options.lines ?? await liveLines(undefined, 18 * 60, { includeLive: true }))
+  const lines = (options.lines ?? await liveLines(undefined, 18 * 60, { includeLive: true, allowKalshiOnly: true }))
     .filter(line => Number.isFinite(Date.parse(line.startsAt)) && easternDay(Date.parse(line.startsAt)) === easternDay(now))
-  const pre = rankPicks(lines.filter(line => !line.live && line.minutes >= 15), { minGap: 0.01 })
-    // Not worth showing a bet expected to lose more than 3% even if the book is right.
-    .filter(pick => pick.ev > -0.03)
-  const live = rankPicks(lines.filter(line => line.live), { minGap: 0 })
-    // In play, favourites priced 55–85¢: the likelier leg, at a bounded cost.
-    .filter(pick => pick.price >= 0.55 && pick.price <= 0.85)
-    .sort((a, b) => a.line.ask - a.line.bid - (b.line.ask - b.line.bid))
+  const pre = rankWinnerPicks(lines.filter(line => !line.live && line.minutes >= 15))
+  const live = rankWinnerPicks(lines.filter(line => line.live))
 
   const slate = buildSlate(pre, { budget: 5, stake, singles: 3 })
   const bets: Array<{ kind: 'single' | 'parlay', picks: SlatePick[], stake: number }> = [
@@ -156,7 +157,8 @@ function toSuggestion(row: Record<string, unknown>): Suggestion {
 export async function listSuggestions(db: Database, userId: number, now = Date.now()): Promise<{ pending: Suggestion[], recent: Suggestion[] }> {
   const stamp = new Date(now).toISOString()
   await db.query(`UPDATE bet_suggestions SET status = 'expired', updated_at = ? WHERE user_id = ? AND status = 'pending' AND expires_at < ?`).run(stamp, userId, stamp)
-  const pending = (await db.query<Record<string, unknown>>(`SELECT * FROM bet_suggestions WHERE user_id = ? AND status = 'pending' ORDER BY ev DESC, id DESC LIMIT 20`).all(userId)).map(toSuggestion)
+  const pending = (await db.query<Record<string, unknown>>(`SELECT * FROM bet_suggestions WHERE user_id = ? AND status = 'pending' ORDER BY ev DESC, id DESC`).all(userId))
+    .map(toSuggestion).filter(suggestion => eligibleLegs(suggestion.legs)).slice(0, 20)
   const recent = (await db.query<Record<string, unknown>>(`SELECT * FROM bet_suggestions WHERE user_id = ? AND status IN ('approved', 'dismissed') ORDER BY id DESC LIMIT 8`).all(userId)).map(toSuggestion)
   return { pending, recent }
 }
@@ -176,6 +178,8 @@ async function pendingSuggestion(db: Database, userId: number, id: number, now =
 /** Record the suggestion as a paper bet under the user's "Approved suggestions" strategy. */
 export async function approveSuggestion(db: Database, userId: number, id: number, now = Date.now()): Promise<Suggestion> {
   const suggestion = await pendingSuggestion(db, userId, id, now)
+  if (!eligibleLegs(suggestion.legs))
+    throw new Error(`Every suggestion leg needs at least ${MIN_PICK_CONFIDENCE * 100}% confidence.`)
   const strategyId = await ensurePaperStrategy(db, userId, APPROVED_STRATEGY, 100, suggestion.stake)
   let outcome: string
   if (suggestion.kind === 'single') {

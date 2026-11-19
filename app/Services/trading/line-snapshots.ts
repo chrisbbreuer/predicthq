@@ -108,8 +108,9 @@ function teamName(team: { location?: string, name?: string } | undefined): strin
  * Every Kalshi game market starting within `windowMinutes` that has a tight
  * quote and a book line, read now. Shared by the recorder and the slate.
  * With `includeLive`, games under way are included too, at Kalshi's mid.
+ * With `allowKalshiOnly`, a pre-game quote can be used when a book line is missing.
  */
-export async function liveLines(deps: RecordDeps = defaultDeps, windowMinutes = WINDOW_MINUTES, options: { includeLive?: boolean } = {}): Promise<LiveLine[]> {
+export async function liveLines(deps: RecordDeps = defaultDeps, windowMinutes = WINDOW_MINUTES, options: { includeLive?: boolean, allowKalshiOnly?: boolean } = {}): Promise<LiveLine[]> {
   const now = deps.now()
   const details = new Map<string, Promise<GameDetail | null>>()
   const out: LiveLine[] = []
@@ -156,7 +157,7 @@ export async function liveLines(deps: RecordDeps = defaultDeps, windowMinutes = 
         details.set(key, deps.detailFor(game.league, game.gameId).catch(() => null))
       const odds = (await details.get(key))?.odds
       const prob = bookProbability(odds?.homeMoneyLine ?? null, odds?.awayMoneyLine ?? null, side, odds?.drawMoneyLine ?? null)
-      if (prob === null)
+      if (prob === null && !options.allowKalshiOnly)
         continue
 
       out.push({
@@ -165,8 +166,8 @@ export async function liveLines(deps: RecordDeps = defaultDeps, windowMinutes = 
         league: game.league,
         gameId: game.gameId,
         side,
-        provider: odds?.provider ?? '',
-        bookProb: Math.round(prob * 10000) / 10000,
+        provider: prob === null ? 'Kalshi' : odds?.provider ?? '',
+        bookProb: Math.round((prob ?? (bid + ask) / 2) * 10000) / 10000,
         bid,
         ask,
         minutes,

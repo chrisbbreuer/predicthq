@@ -7,8 +7,8 @@ import { generateSuggestions } from '../Services/trading/suggestions'
 
 /**
  * Refresh bet suggestions every ten minutes for every account with a
- * trading strategy: pre-game picks against the book, and a live-leg parlay
- * while games are under way. The lines are read once and shared.
+ * trading strategy: high-confidence pre-game picks and parlays with live
+ * legs while games are under way. The lines are read once and shared.
  */
 export default new Job({
   name: 'SuggestBets',
@@ -22,7 +22,7 @@ export default new Job({
       const users = await db.query<{ user_id: number | string }>(`SELECT DISTINCT user_id FROM trading_strategies WHERE user_id IS NOT NULL`).all()
       if (users.length === 0)
         return { users: 0, saved: 0 }
-      const lines = await liveLines(undefined, 18 * 60, { includeLive: true })
+      const lines = await liveLines(undefined, 18 * 60, { includeLive: true, allowKalshiOnly: true })
       const props = await propLines()
       let saved = 0
       for (const { user_id } of users)

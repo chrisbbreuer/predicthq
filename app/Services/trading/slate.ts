@@ -6,6 +6,7 @@ import { liveLines } from './line-snapshots'
 import { executePaper } from './paper'
 import { parlayPayout, placePaperParlay } from './paper-parlays'
 import { normalizeStrategyRow } from './run'
+import { kalshiHomeProbability, meetsPickConfidence } from './winner-confidence'
 
 /**
  * A day's paper slate: a few $1 singles and two-leg parlays, picked where
@@ -34,6 +35,8 @@ export interface SlatePick {
    */
   ev: number
   label: string
+  /** Kalshi's probability for a winner suggestion. */
+  confidence?: number
 }
 
 /** Kalshi's taker fee per contract at `price`, before rounding up the order total. */
@@ -93,6 +96,48 @@ export function rankPicks(lines: LiveLine[], options: { minGap?: number } = {}):
       best.set(key, pick)
   }
   return [...best.values()].sort((a, b) => b.ev - a.ev)
+}
+
+function quoteMid(line: LiveLine | undefined): number | null {
+  if (!line || !(line.bid >= 0 && line.ask > 0 && line.bid <= line.ask && line.ask <= 1 && line.ask - line.bid <= 0.1))
+    return null
+  return (line.bid + line.ask) / 2
+}
+
+/** One high-confidence Kalshi outcome per game, with the cheaper quote for equivalent sides. */
+export function rankWinnerPicks(lines: LiveLine[]): Array<SlatePick & { confidence: number }> {
+  const games = new Map<string, LiveLine[]>()
+  for (const line of lines) {
+    if (line.prop || quoteMid(line) === null)
+      continue
+    const key = `${line.league}:${line.gameId}`
+    const group = games.get(key) ?? []
+    group.push(line)
+    games.set(key, group)
+  }
+
+  const winners: Array<SlatePick & { confidence: number }> = []
+  for (const group of games.values()) {
+    const twoWay = !SOCCER.has(group[0]!.league)
+    const home = twoWay
+      ? kalshiHomeProbability(quoteMid(group.find(line => line.side === 'home')), quoteMid(group.find(line => line.side === 'away')))
+      : null
+    let best: (SlatePick & { confidence: number }) | undefined
+    for (const line of group) {
+      if (twoWay && (home === null || line.side === 'draw'))
+        continue
+      const side = home !== null && (home >= 0.5) !== (line.side === 'home') ? 'no' : 'yes'
+      const confidence = home === null ? quoteMid(line)! : Math.max(home, 1 - home)
+      if (!meetsPickConfidence(confidence))
+        continue
+      const pick = pickFor(line, side)
+      if (pick && (!best || confidence > best.confidence || (confidence === best.confidence && pick.price < best.price)))
+        best = { ...pick, confidence }
+    }
+    if (best)
+      winners.push(best)
+  }
+  return winners.sort((a, b) => b.confidence - a.confidence || a.price - b.price)
 }
 
 /** A pick on `side` of one market, or null when that side is outside the tradable band. */
@@ -206,6 +251,8 @@ function pct(p: number): string {
 function rationale(pick: SlatePick): string {
   const mid = (pick.line.bid + pick.line.ask) / 2
   const sideMid = pick.side === 'yes' ? mid : 1 - mid
+  if (pick.confidence !== undefined)
+    return `${pick.label}: Kalshi estimates ${pct(pick.confidence)}, buying at ${Math.round(pick.price * 100)}¢.`
   if (pick.line.prop || pick.line.live)
     return `${pick.label}: Kalshi has it at ${pct(sideMid)}, buying at ${Math.round(pick.price * 100)}¢. No edge claimed; spread and fee cost about ${(-pick.ev * 100).toFixed(1)}%`
   return `${pick.label}: ${pick.line.provider || 'Book'} ${pct(pick.fair)} vs Kalshi ${pct(sideMid)}, buying at ${Math.round(pick.price * 100)}¢, ${(pick.ev * 100).toFixed(1)}% expected if the book is right`
@@ -235,7 +282,7 @@ async function ensureMarket(db: Database, market: { ticker: string, title: strin
 }
 
 /** A pick as the stored leg a single or a suggestion carries. */
-export function pickLeg(pick: SlatePick): { ticker: string, title: string, startsAt: string, side: 'yes' | 'no', price: number, fair: number, yesMid: number, edge: number, rationale: string, label: string, live: boolean, ev: number } {
+export function pickLeg(pick: SlatePick): { ticker: string, title: string, startsAt: string, side: 'yes' | 'no', price: number, fair: number, yesMid: number, edge: number, rationale: string, label: string, live: boolean, ev: number, confidence?: number } {
   return {
     ticker: pick.line.ticker,
     title: pick.line.title,
@@ -249,6 +296,7 @@ export function pickLeg(pick: SlatePick): { ticker: string, title: string, start
     label: pick.label,
     live: pick.line.live,
     ev: pick.ev,
+    ...(pick.confidence === undefined ? {} : { confidence: pick.confidence }),
   }
 }
 

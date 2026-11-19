@@ -293,7 +293,7 @@ export default function (cli: CLI) {
     })
 
   cli
-    .command('trading:suggest', 'Suggest bets on the bets page for approval: the automatic picks, or specific markets')
+    .command('trading:suggest', 'Suggest automatic picks or specific markets with at least 70% confidence for approval')
     .option('--user <id>', 'Account to suggest to', { default: '1' })
     .option('--auto', 'Run the same picks the ten-minute job makes', { default: false })
     .option('--singles <list>', 'Singles, as TICKER:side, comma-separated', { default: '' })
@@ -304,7 +304,7 @@ export default function (cli: CLI) {
       const stake = Number(options.stake) || 1
       const db = new Database()
       try {
-        const lines = await liveLines(undefined, 36 * 60, { includeLive: true })
+        const lines = await liveLines(undefined, 36 * 60, { includeLive: true, allowKalshiOnly: true })
         let saved = 0
         if (options.auto)
           saved += await generateSuggestions(db, userId, { lines, stake })
