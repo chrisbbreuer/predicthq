@@ -651,7 +651,7 @@ function suggestionView(row: any, group: 'saved' | 'alternative' | 'suggested', 
     missing: 'A current quote is unavailable.',
     confidence: 'At least one leg is below 70% now.',
     spread: 'At least one bid–ask spread exceeds 2¢.',
-    payout: 'The estimated return is below 2×.',
+    payout: 'The estimated return is below ' + (row.minReturnMultiple ?? 2) + '×.',
   }
   const currentPayout = quote?.paperPayout ?? row.paperPayout
   return {
@@ -668,6 +668,7 @@ function suggestionView(row: any, group: 'saved' | 'alternative' | 'suggested', 
     kalshiOrderUrl: isOpen && quoted ? (row.kalshiOrderUrl || '') : '',
     paperPayout: currentPayout != null ? usd(currentPayout) : '',
     payoutLabel: quote?.paperPayout != null ? 'Est. paper return' : 'Paper return at selection',
+    payoutTarget: row.minReturnMultiple ? 'Target return ' + row.minReturnMultiple + '×' : '',
     quoteWarning: warnings[quote?.flag] || '',
     result: row.paperResult === 'won' ? 'Won' : row.paperResult === 'lost' ? 'Lost' : row.paperResult === 'partial' ? 'Partial settlement'
       : row.paperResult === 'pending' ? 'Tracking on paper' : row.status === 'expired' ? 'Closed for review' : '',
@@ -1055,6 +1056,7 @@ onMount(start)
                         <div class="pick-stake">
                           <span class="num" x-text="ticket.stake + ' stake'"></span>
                           <span x-show="ticket.paperPayout" x-text="ticket.payoutLabel + ' ' + ticket.paperPayout"></span>
+                          <span x-show="ticket.payoutTarget" x-text="ticket.payoutTarget"></span>
                         </div>
                         <div class="pick-buttons">
                           <a x-show="ticket.canPrepare && prepared()[ticket.id]?.url" :href="prepared()[ticket.id]?.url" target="_blank" rel="noopener noreferrer" class="pick-primary">Review on Kalshi <i aria-hidden="true" class="h-4 w-4 i-hugeicons-arrow-up-right-01"></i></a>

@@ -38,6 +38,7 @@ interface SlateTicketReference {
   suggestionId: number
   paperId?: number
   kalshiEventUrl?: string
+  minReturnMultiple?: number
 }
 
 type PaperResult = 'pending' | 'won' | 'lost' | 'partial'
@@ -46,6 +47,7 @@ interface SlateTicket extends Suggestion {
   canApprove: boolean
   paperResult: PaperResult | null
   paperPayout: number | null
+  minReturnMultiple?: number
   kalshiOrderUrl: string | null
 }
 
@@ -237,6 +239,7 @@ async function listSlate(db: Database, userId: number, now: number): Promise<Sug
       canApprove: suggestion.status === 'pending' && (!ref.paperId || result === 'pending') && eligibleLegs(suggestion.legs),
       paperResult: result,
       paperPayout: suggestion.kind === 'parlay' && suggestion.price > 0 ? parlayPayout(suggestion.stake, suggestion.price) : null,
+      minReturnMultiple: ref.minReturnMultiple,
       kalshiOrderUrl: suggestion.kind === 'single' && result === 'pending'
         && (suggestion.status === 'pending' || suggestion.status === 'approved')
         && Date.parse(suggestion.expiresAt) > now

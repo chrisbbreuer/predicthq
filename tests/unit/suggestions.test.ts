@@ -170,6 +170,8 @@ describe('suggestions', () => {
     expect(quotes[ticket.id]).toMatchObject({ legs: [{ bid: 0.68, ask: 0.7 }], flag: 'confidence' })
     expect(quotes[parlay.id]).toMatchObject({ flag: 'payout' })
     expect(quotes[parlay.id]!.paperPayout).toBeLessThan(2)
+    const lowerTarget = await suggestionPrices([{ ...parlay, minReturnMultiple: 1.5 }], load, NOW)
+    expect(lowerTarget[parlay.id]!.flag).toBeNull()
 
     markets.set(parlay.legs[0]!.ticker, market(0.78, 0.82))
     expect((await suggestionPrices([parlay], load, NOW))[parlay.id]!.flag).toBe('spread')

@@ -28,7 +28,7 @@ function quoteLeg(market: KalshiMarketInfo | undefined, side: 'yes' | 'no'): Leg
 
 /** Recheck the executable sides from the public order book before the user opens a ticket. */
 export async function suggestionPrices(
-  tickets: Suggestion[],
+  tickets: Array<Suggestion & { minReturnMultiple?: number }>,
   load: typeof kalshiMarkets = kalshiMarkets,
   now = Date.now(),
 ): Promise<Record<number, SuggestionQuote>> {
@@ -55,7 +55,7 @@ export async function suggestionPrices(
       flag = 'confidence'
     else if (payout !== null && priced.some(leg => leg.ask - leg.bid > 0.02 + 1e-8))
       flag = 'spread'
-    else if (payout !== null && payout < 2 * ticket.stake)
+    else if (payout !== null && payout < (ticket.minReturnMultiple ?? 2) * ticket.stake)
       flag = 'payout'
     quotes[ticket.id] = { legs, paperPayout: payout, flag }
   }
