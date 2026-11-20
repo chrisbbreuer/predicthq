@@ -64,6 +64,14 @@ describe('building a slate', () => {
     expect(assembleParlay(picks)).toBeNull()
   })
 
+  it('can reach 2x by skipping an expensive favourite within the four-leg limit', () => {
+    const expensive = rankPicks(Array.from({ length: 4 }, (_, i) => line({ ticker: `E${i}`, gameId: `e${i}`, bookProb: 0.9, bid: 0.84, ask: 0.85 })))
+    const affordable = rankPicks([line({ ticker: 'VALUE', gameId: 'value', bookProb: 0.76, bid: 0.70, ask: 0.71 })])
+    const parlay = assembleParlay([...expensive, ...affordable])!
+    expect(parlay.map(pick => pick.line.ticker)).toEqual(['E0', 'E1', 'E2', 'VALUE'])
+    expect(parlayPayout(1, parlay.reduce((product, pick) => product * pick.price, 1))).toBeGreaterThanOrEqual(2)
+  })
+
   it('places nothing when nothing disagrees', () => {
     expect(buildSlate([], { budget: 5 })).toEqual({ singles: [], parlays: [] })
   })

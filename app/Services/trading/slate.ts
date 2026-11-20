@@ -186,11 +186,13 @@ export const MIN_PARLAY_PAYOUT = 2
 /** The longest parlay assembled automatically: every leg adds Kalshi's cut. */
 export const MAX_PARLAY_LEGS = 4
 
+function pickGame(pick: SlatePick): string {
+  return `${pick.line.league}:${pick.line.gameId}`
+}
+
 /**
- * One parlay from `pool`, in its order (strongest first), adding legs from
- * different games until it pays at least `minPayout` times the stake (its
- * price is at most 1 ÷ minPayout). Null when that takes more than
- * `maxLegs` legs. Picks are taken from `pool` without reordering it.
+ * Keep the strongest picks that can still reach the target within the leg limit.
+ * The cheapest remaining quote per game bounds whether a candidate can work.
  */
 export function assembleParlay(
   pool: SlatePick[],
@@ -201,20 +203,37 @@ export function assembleParlay(
   const meetsPayout = (price: number) => parlayPayout(stake, price) >= minPayout * stake
   const maxLegs = options.maxLegs ?? MAX_PARLAY_LEGS
   const legs = [...(options.start ?? [])]
-  const games = new Set(legs.map(pick => `${pick.line.league}:${pick.line.gameId}`))
-  const price = () => legs.reduce((product, pick) => product * pick.price, 1)
-  for (const pick of pool) {
-    if (legs.length >= 2 && meetsPayout(price()))
+  const games = new Set(legs.map(pickGame))
+  if (legs.length > maxLegs || games.size !== legs.length)
+    return null
+  const candidates = pool.map((pick, index) => ({ pick, index, game: pickGame(pick) }))
+  const cheapest = candidates.slice().sort((a, b) => a.pick.price - b.pick.price)
+  let price = legs.reduce((product, pick) => product * pick.price, 1)
+  for (const candidate of candidates) {
+    if (legs.length >= 2 && meetsPayout(price))
       break
     if (legs.length >= maxLegs)
-      return null
-    const game = `${pick.line.league}:${pick.line.gameId}`
-    if (games.has(game))
+      break
+    if (games.has(candidate.game))
       continue
-    legs.push(pick)
-    games.add(game)
+    const nextPrice = price * candidate.pick.price
+    const nextGames = new Set(games).add(candidate.game)
+    let bestPrice = nextPrice
+    for (const remaining of cheapest) {
+      if (nextGames.size >= maxLegs || (nextGames.size >= 2 && meetsPayout(bestPrice)))
+        break
+      if (remaining.index <= candidate.index || nextGames.has(remaining.game))
+        continue
+      bestPrice *= remaining.pick.price
+      nextGames.add(remaining.game)
+    }
+    if (nextGames.size < 2 || !meetsPayout(bestPrice))
+      continue
+    legs.push(candidate.pick)
+    games.add(candidate.game)
+    price = nextPrice
   }
-  return legs.length >= 2 && meetsPayout(price()) ? legs : null
+  return legs.length >= 2 && meetsPayout(price) ? legs : null
 }
 
 /**

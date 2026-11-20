@@ -106,7 +106,7 @@ export async function saveSuggestions(db: Database, userId: number, bets: Array<
 }
 
 /**
- * Build fresh suggestions from today's games: up to three singles and two
+ * Build fresh suggestions from today's games: up to three singles and three
  * parlays from games before tip-off; while games run, all-live parlays and
  * one led by a live leg; and up to two player-prop parlays. Every parlay pays
  * at least 2×.
@@ -120,7 +120,7 @@ export async function generateSuggestions(db: Database, userId: number, options:
   const pre = rankWinnerPicks(lines.filter(line => !line.live && line.minutes >= 15))
   const live = rankWinnerPicks(lines.filter(line => line.live))
 
-  const slate = buildSlate(pre, { budget: 5, stake, singles: 3 })
+  const slate = buildSlate(pre, { budget: 6, stake, singles: 3 })
   const bets: Array<{ kind: 'single' | 'parlay', picks: SlatePick[], stake: number }> = [
     ...slate.singles.map(pick => ({ kind: 'single' as const, picks: [pick], stake })),
     ...slate.parlays.map(picks => ({ kind: 'parlay' as const, picks, stake })),
@@ -130,7 +130,7 @@ export async function generateSuggestions(db: Database, userId: number, options:
   // Each is built to pay at least 2× (`assembleParlay`), so favourites need
   // more legs. Picks are one per game already, so legs never share a game.
   let livePool = live
-  for (let i = 0; i < 2; i++) {
+  for (let i = 0; i < 3; i++) {
     const parlay = assembleParlay(livePool, { stake })
     if (!parlay)
       break
@@ -266,13 +266,14 @@ function kalshiOrderUrl(eventUrl: string | undefined, leg: SuggestionLeg | undef
 }
 
 /** The saved slate, pending suggestions that are still good, and recent decisions. */
-export async function listSuggestions(db: Database, userId: number, now = Date.now()): Promise<{ slate: SuggestionSlate | null, pending: Suggestion[], recent: Suggestion[] }> {
+export async function listSuggestions(db: Database, userId: number, now = Date.now(), pendingKind?: Suggestion['kind']): Promise<{ slate: SuggestionSlate | null, pending: Suggestion[], recent: Suggestion[] }> {
   const stamp = new Date(now).toISOString()
   await db.query(`UPDATE bet_suggestions SET status = 'expired', updated_at = ? WHERE user_id = ? AND status = 'pending' AND expires_at < ?`).run(stamp, userId, stamp)
   const slate = await listSlate(db, userId, now)
   const slateIds = new Set(slate ? [...slate.tickets, ...slate.alternatives].map(ticket => ticket.id) : [])
   const pending = (await db.query<Record<string, unknown>>(`SELECT * FROM bet_suggestions WHERE user_id = ? AND status = 'pending' ORDER BY ev DESC, id DESC`).all(userId))
-    .map(toSuggestion).filter(suggestion => !slateIds.has(suggestion.id) && eligibleLegs(suggestion.legs)).slice(0, 20)
+    .map(toSuggestion).filter(suggestion => (!pendingKind || suggestion.kind === pendingKind)
+      && !slateIds.has(suggestion.id) && eligibleLegs(suggestion.legs)).slice(0, 20)
   const recent = (await db.query<Record<string, unknown>>(`SELECT * FROM bet_suggestions WHERE user_id = ? AND status IN ('approved', 'dismissed') ORDER BY id DESC LIMIT 8`).all(userId)).map(toSuggestion)
   return { slate, pending, recent }
 }

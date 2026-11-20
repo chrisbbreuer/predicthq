@@ -22,12 +22,23 @@ interface Checkout {
   market?: string
   rfq?: string
   offer?: Offer
+  amountCents?: number
   submittedAt?: string
   result?: FinalStatus
 }
 
 const lifetime = 90_000
 const uuid = /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i
+const defaultAmountCents = 100
+
+/** Parse a dollar amount without silently rounding extra decimal places. */
+export function comboAmountCents(value: string): number | null {
+  const match = value.trim().match(/^(\d*)(?:\.(\d{0,2}))?$/)
+  if (!match)
+    return null
+  const cents = Number(match[1] + (match[2] ?? '').padEnd(2, '0'))
+  return Number.isSafeInteger(cents) && cents > 0 ? cents : null
+}
 
 /** A target-cost YES purchase accepts the maker's NO bid. The venue caps fees and principal at the target. */
 export function qualifyingComboOffer(quote: KalshiRfqQuote, rfq: string, market: string, stake: number, multiple: number, expires: number): Offer | null {
@@ -56,7 +67,7 @@ async function checkoutAccount(db: Database, userId: number) {
 }
 
 export function isLiveComboCandidate(ticket: Suggestion, now = Date.now()): boolean {
-  return ticket.kind === 'parlay' && Number(ticket.stake) === 1 && ticket.legs.length >= 2
+  return ticket.kind === 'parlay' && Number.isFinite(ticket.stake) && ticket.stake > 0 && ticket.legs.length >= 2
     && (ticket.status === 'pending' || ticket.status === 'approved') && Date.parse(ticket.expiresAt) > now
 }
 
@@ -143,16 +154,21 @@ export async function comboOrderStatus(
   return { state: 'unverified' }
 }
 
-async function reconcile(db: Database, id: number, raw: string, intent: Checkout, client: KalshiTradingClient): Promise<CheckoutStatus> {
+function approvedAmount(intent: Checkout): number {
+  return intent.offer?.maxCost ?? (intent.amountCents ?? defaultAmountCents) / 100
+}
+
+async function reconcile(db: Database, id: number, raw: string, intent: Checkout, client: KalshiTradingClient): Promise<CheckoutStatus & { maxCost: number }> {
+  const maxCost = approvedAmount(intent)
   if (intent.result)
-    return intent.result
+    return { ...intent.result, maxCost }
   const result = await comboOrderStatus(client, intent)
   if ((intent.phase === 'submitted' || Date.now() >= intent.expires)
     && (result.state === 'executed' || result.state === 'partial' || result.state === 'not_filled')) {
     await db.query('UPDATE suggestion_checkouts SET payload = ? WHERE bet_suggestion_id = ? AND payload = ?')
       .run(JSON.stringify({ ...intent, result }), id, raw)
   }
-  return result
+  return { ...result, maxCost }
 }
 
 /** Read receipts by owner even after the original suggestions have expired. */
@@ -174,14 +190,15 @@ export async function comboCheckoutReceipts(db: Database, userId: number) {
       ? await reconcile(db, row.id, row.payload, row.intent, client)
       : { state: 'unverified' as const })
     const legs = JSON.parse(row.legs) as Suggestion['legs']
-    return { id: Number(row.id), labels: legs.map(leg => leg.label), at: row.intent.submittedAt ?? row.updated_at, ...result }
+    return { id: Number(row.id), labels: legs.map(leg => leg.label), at: row.intent.submittedAt ?? row.updated_at, maxCost: approvedAmount(row.intent), ...result }
   }))
 }
 
-export async function comboCheckout(db: Database, userId: number, ticket: Suggestion, confirmation?: string) {
-  // The private rollout uses the $1 suggested tickets the account requested.
-  if (ticket.kind !== 'parlay' || Number(ticket.stake) !== 1)
-    throw new SuggestionPreparationError('Live combo checkout is available for $1 parlays.')
+export async function comboCheckout(db: Database, userId: number, ticket: Suggestion, amountCents: number, confirmation?: string) {
+  if (!isLiveComboCandidate(ticket))
+    throw new SuggestionPreparationError('This parlay is unavailable for live checkout.')
+  if (!Number.isSafeInteger(amountCents) || amountCents <= 0)
+    throw new SuggestionPreparationError('Enter a positive dollar amount with up to two decimal places.')
   const { client, credentials } = await checkoutAccount(db, userId)
   const previous = await load(db, ticket.id)
   let intent = previous?.intent
@@ -191,13 +208,20 @@ export async function comboCheckout(db: Database, userId: number, ticket: Sugges
   if (intent?.phase === 'submitting' || intent?.phase === 'submitted')
     return reconcile(db, ticket.id, raw!, intent, client)
 
+  const stake = amountCents / 100
+  const pricedTicket = { ...ticket, stake }
+  const preparedAmount = intent?.amountCents ?? defaultAmountCents
   const multiple = LIVE_COMBO_PAYOUT_FLOOR
   if (confirmation) {
     if (intent?.phase !== 'open' || !intent.rfq || !intent.market || !raw || intent.offer?.id !== confirmation || intent.offer.expires <= Date.now())
       throw new SuggestionPreparationError('This quote has expired. Refresh the quote before buying.')
-    const [quotes] = await Promise.all([client.comboQuotes(intent.rfq), suggestionLegs(ticket, true)])
+    if (preparedAmount !== amountCents || intent.offer.maxCost !== stake)
+      throw new SuggestionPreparationError('The amount changed. Get a new quote for that amount.')
+    const [quotes, balance] = await Promise.all([client.comboQuotes(intent.rfq), client.fetchBalance(), suggestionLegs(pricedTicket, true)])
+    if (balance.available < stake)
+      throw new SuggestionPreparationError('This amount exceeds your available Kalshi cash.')
     const quote = quotes.find(row => row.id === confirmation)
-    const current = quote && qualifyingComboOffer(quote, intent.rfq, intent.market, 1, multiple, intent.offer.expires)
+    const current = quote && qualifyingComboOffer(quote, intent.rfq, intent.market, stake, multiple, intent.offer.expires)
     if (!current || current.price !== intent.offer.price || current.payout !== intent.offer.payout || current.expires <= Date.now())
       throw new SuggestionPreparationError('Kalshi changed the quote. Review the updated payout before buying.')
     // The unique ticket row plus a fresh claim token prevents duplicate sends across workers.
@@ -206,7 +230,7 @@ export async function comboCheckout(db: Database, userId: number, ticket: Sugges
     if (await suggestionCheckoutReason(db, userId)) {
       const result = { state: 'not_filled', reason: 'Checkout was paused before this order could be sent.' } as const
       await claim(db, ticket.id, { ...sending, result }, claimed)
-      return result
+      return { ...result, maxCost: stake }
     }
     try {
       await client.acceptComboQuote(intent.rfq, confirmation)
@@ -215,7 +239,7 @@ export async function comboCheckout(db: Database, userId: number, ticket: Sugges
       if (error instanceof VenueError && [400, 401, 403, 404, 409, 422, 429].includes(error.status)) {
         const result = { state: 'not_filled', reason: 'Kalshi declined the quote acceptance.' } as const
         await claim(db, ticket.id, { ...sending, result }, claimed)
-        return result
+        return { ...result, maxCost: stake }
       }
       // An interrupted write may have reached the exchange. Subsequent calls reconcile only.
       return reconcile(db, ticket.id, claimed, sending, client)
@@ -227,16 +251,24 @@ export async function comboCheckout(db: Database, userId: number, ticket: Sugges
 
   if (intent?.phase === 'opening' && intent.expires > Date.now())
     return { state: 'waiting' } as const
-  if (!intent || intent.phase === 'opening' || intent.expires <= Date.now()) {
+  if (!intent || intent.phase === 'opening' || intent.expires <= Date.now() || preparedAmount !== amountCents) {
+    const [balance, legs] = await Promise.all([client.fetchBalance(), suggestionLegs(pricedTicket, true)])
+    if (balance.available < stake)
+      throw new SuggestionPreparationError('This amount exceeds your available Kalshi cash.')
     const oldRfq = intent?.rfq
-    const opening: Checkout = { nonce: randomUUID(), phase: 'opening', credentials, expires: Date.now() + lifetime }
+    const opening: Checkout = { nonce: randomUUID(), phase: 'opening', credentials, amountCents, expires: Date.now() + lifetime }
     const opened = await claim(db, ticket.id, opening, raw)
     if (oldRfq)
       await client.closeComboRfq(oldRfq)
-    const legs = await suggestionLegs(ticket, true)
     const collections = await kalshiComboCollections(legs[0]!.event_ticker)
     const market = await prepareExactCombo(legs, collections, client.prepareCombo.bind(client))
-    const rfq = await client.createComboRfq(market, 1)
+    const rfq = await client.createComboRfq(market, stake).catch(async (error) => {
+      if (error instanceof VenueError && error.status === 400) {
+        await claim(db, ticket.id, { ...opening, expires: 0 }, opened)
+        throw new SuggestionPreparationError('Kalshi could not quote this amount. Try a different amount.')
+      }
+      throw error
+    })
     if (!uuid.test(rfq))
       throw new SuggestionPreparationError('Kalshi did not return a usable quote request.')
     intent = { ...opening, phase: 'open', market, rfq, expires: Date.now() + lifetime }
@@ -247,7 +279,7 @@ export async function comboCheckout(db: Database, userId: number, ticket: Sugges
   for (let attempt = 0; attempt < 4; attempt++) {
     const quotes = await client.comboQuotes(intent.rfq)
     const expires = Math.min(intent.expires, Date.now() + 25_000)
-    const offers = quotes.map(quote => qualifyingComboOffer(quote, intent.rfq!, intent.market!, 1, multiple, expires))
+    const offers = quotes.map(quote => qualifyingComboOffer(quote, intent.rfq!, intent.market!, stake, multiple, expires))
       .filter(offer => offer !== null).sort((a, b) => b.payout - a.payout || a.price - b.price)
     if (offers[0]) {
       await claim(db, ticket.id, { ...intent, offer: offers[0], nonce: randomUUID() }, raw)

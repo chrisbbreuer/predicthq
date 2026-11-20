@@ -1,5 +1,5 @@
 import { response } from '@stacksjs/router'
-import { comboCheckout } from '../../Services/trading/live-combo-checkout'
+import { comboAmountCents, comboCheckout } from '../../Services/trading/live-combo-checkout'
 import { SuggestionPreparationError } from '../../Services/trading/suggestion-kalshi'
 import { suggestionForReview } from '../../Services/trading/suggestions'
 import { Database } from '../../Support/db'
@@ -21,12 +21,15 @@ export default {
     const confirmation = requestString(request, 'quoteId')
     if (operation !== 'quote' && (operation !== 'buy' || !confirmation))
       return response.error('Choose whether to request or accept an exact quote.', 422)
+    const amountCents = comboAmountCents(requestString(request, 'amount', '1'))
+    if (amountCents === null)
+      return response.error('Enter a positive dollar amount with up to two decimal places.', 422)
     const db = new Database()
     try {
       const ticket = await suggestionForReview(db, userId, id)
       if (!ticket)
         return response.error('This ticket is past its review window or unavailable.', 404)
-      return await comboCheckout(db, userId, ticket, operation === 'buy' ? confirmation : undefined)
+      return await comboCheckout(db, userId, ticket, amountCents, operation === 'buy' ? confirmation : undefined)
     }
     catch (error) {
       return error instanceof SuggestionPreparationError

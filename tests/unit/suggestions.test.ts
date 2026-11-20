@@ -191,7 +191,8 @@ describe('suggestions', () => {
     const expired = { ...current, id: 103, expiresAt: new Date(NOW).toISOString() }
     const unsupported = { ...current, id: 104, legs: current.legs.map((leg, index) => index ? leg : { ...leg, ticker: 'OTHER-MARKET' }) }
     const single = { ...current, kind: 'single' as const, id: 105 }
-    const tickets = [current, submitted, rejectedPrice, expired, unsupported, single]
+    const customStake = { ...current, id: 106, stake: 2.75 }
+    const tickets = [current, submitted, rejectedPrice, expired, unsupported, single, customStake]
     await db.insertOrIgnore('suggestion_checkouts', { bet_suggestion_id: submitted.id, payload: JSON.stringify({ phase: 'submitting' }) })
     const load = async (tickers: string[]) => new Map(tickers.map(ticker => [ticker, toMarketInfo({
       status: 'active', event_ticker: ticker, yes_bid_dollars: 0.7, yes_ask_dollars: 0.71,
@@ -202,7 +203,7 @@ describe('suggestions', () => {
       collection_ticker: 'COMBOS', associated_events: current.legs.map(leg => ({ ticker: leg.ticker })),
       size_min: 2, size_max: 4, is_all_yes: false, is_single_market_per_event: true,
     }]
-    expect((await buyableCombos(db, tickets, prices, collections, NOW)).map(ticket => ticket.id)).toEqual([current.id])
+    expect((await buyableCombos(db, tickets, prices, collections, NOW)).map(ticket => ticket.id)).toEqual([current.id, customStake.id])
   })
 
   it('returns saved fill receipts to the owner after the suggestion has expired', async () => {
@@ -221,7 +222,7 @@ describe('suggestions', () => {
     })
     await db.query("UPDATE bet_suggestions SET status = 'expired' WHERE id = ?").run(ticket.id)
     expect(await comboCheckoutReceipts(db, 1)).toEqual([{
-      id: ticket.id, labels: ticket.legs.map(leg => leg.label), at, state: 'executed', payout: 2.04, orderId: 'order',
+      id: ticket.id, labels: ticket.legs.map(leg => leg.label), at, maxCost: 1, state: 'executed', payout: 2.04, orderId: 'order',
     }])
     expect(await comboCheckoutReceipts(db, 2)).toEqual([])
   })

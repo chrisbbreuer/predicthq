@@ -25,6 +25,8 @@ export interface PositionScoreLeg extends MultiGameLeg {
   startsAt: string
   selectedScore: number | null
   opponentScore: number | null
+  selectedMark?: { abbreviation: string, logo: string }
+  opponentMark?: { abbreviation: string, logo: string }
   opponent: string
   standing: string
   tone: string
@@ -179,6 +181,8 @@ export function buildPositionScorecard(legs: MultiGameLeg[], games: Game[], now 
       startsAt: game.startsAt,
       selectedScore: selected.score,
       opponentScore: opponent.score,
+      selectedMark: { abbreviation: selected.abbreviation, logo: selected.logo ?? '' },
+      opponentMark: { abbreviation: opponent.abbreviation, logo: opponent.logo ?? '' },
       opponent: opponent.location || opponent.shortName || opponent.name,
       standing: standing.label,
       tone: standing.tone,

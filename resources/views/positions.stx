@@ -66,7 +66,10 @@ const suggestionsLoading = state(true)
 const suggestionsError = state(false)
 const purchaseReason = state('')
 const checkoutBusy = state(0)
-const checkout = state<Record<number, { state: string, offer?: { id: string, payout: number, maxCost: number } }>>({})
+const checkoutAmount = state('1.00')
+interface CheckoutOffer { id: string, payout: number, maxCost: number, expires?: number }
+const checkout = state<Record<number, { state: string, offer?: CheckoutOffer }>>({})
+const missingLogos = state<Record<string, boolean>>({})
 interface CheckoutReceipt {
   id: number
   labels: string[]
@@ -74,6 +77,7 @@ interface CheckoutReceipt {
   state: string
   payout?: number
   reason?: string
+  maxCost?: number
 }
 const checkoutReceipts = state<CheckoutReceipt[]>([])
 const checkoutNotice = state<{ id: number, title: string, message: string, receipt: boolean } | null>(null)
@@ -195,6 +199,19 @@ function progressView(progress: any, game: any, status: string): any {
   }
 }
 
+function matchupMarks(game: any): Array<{ logo: string, initials: string }> {
+  if (!game)
+    return []
+  return [game.away, game.home].map(team => ({
+    logo: String(team?.logo || ''),
+    initials: String(team?.abbreviation || '').slice(0, 4),
+  })).filter(team => team.logo || team.initials)
+}
+
+function logoUnavailable(logo: string): void {
+  missingLogos.set({ ...missingLogos(), [logo]: true })
+}
+
 function legView(leg: any, index: number, fallbackHref: string, settledLeg: boolean): any {
   const game = leg.game
   const upcoming = leg.status !== 'won' && leg.status !== 'lost' && leg.status !== 'live'
@@ -211,6 +228,7 @@ function legView(leg: any, index: number, fallbackHref: string, settledLeg: bool
     chance: upcoming || leg.status === 'live' ? pct(leg.chance) : (leg.status === 'won' ? '✓' : '✕'),
     chanceTone: leg.status === 'won' ? 'pos' : (leg.status === 'lost' ? 'neg' : (leg.chance === null ? 'muted' : (leg.chance >= 0.6 ? 'pos' : (leg.chance <= 0.35 ? 'neg' : '')))),
     hasGame: Boolean(game),
+    teams: matchupMarks(game),
     gameLine: game
       ? game.away.abbreviation + (game.state === 'pre' ? ' at ' : ' ' + game.away.score + '–' + game.home.score + ' ') + game.home.abbreviation
       : '',
@@ -300,8 +318,9 @@ function scorecardParlay(card: any): any {
           status: leg.status,
           clock: leg.clock,
           gameUrl: leg.gameUrl,
-          away: { abbreviation: leg.team, score: leg.selectedScore },
-          home: { abbreviation: leg.opponent, score: leg.opponentScore },
+          startsAt: leg.startsAt,
+          away: { abbreviation: leg.selectedMark?.abbreviation || leg.team, logo: leg.selectedMark?.logo, score: leg.selectedScore },
+          home: { abbreviation: leg.opponentMark?.abbreviation || leg.opponent, logo: leg.opponentMark?.logo, score: leg.opponentScore },
         }
       : null,
   }))
@@ -394,6 +413,7 @@ function clearPrivateBook(): void {
   purchaseReason.set('')
   selectedSlate.set(null)
   checkout.set({})
+  checkoutAmount.set('1.00')
   checkoutReceipts.set([])
   checkoutNotice.set(null)
   counts.set({ all: 0, live: 0, upcoming: 0, parlays: 0, other: 0 })
@@ -630,7 +650,6 @@ function suggestionView(row: any, quote: any, matchups: Record<string, any>): an
     const confidence = Number(leg.confidence ?? (leg.side === 'yes' ? leg.yesMid : 1 - leg.yesMid))
     const current = quote?.legs[index]
     const matchup = matchups[leg.ticker]
-    const team = (value: any) => ({ logo: value.logo || '', initials: String(value.abbreviation || '').slice(0, 4) })
     return {
       label: String(leg.label).replace(/ \(NO on .+\)$/, ''),
       confidence: current ? pct(current.confidence) : Number.isFinite(confidence) ? pct(confidence) : '',
@@ -640,7 +659,7 @@ function suggestionView(row: any, quote: any, matchups: Record<string, any>): an
       side: leg.side === 'no' ? 'NO' : 'YES',
       matchup: matchup ? matchup.away.name + ' at ' + matchup.home.name : '',
       league: matchup ? (LEAGUE_LABELS[matchup.league] || String(matchup.league).toUpperCase()) : '',
-      teams: matchup ? [team(matchup.away), team(matchup.home)] : [],
+      teams: matchupMarks(matchup),
       href: '/bet?ticker=' + encodeURIComponent(leg.ticker) + '&side=' + String(leg.side || 'yes').toLowerCase(),
     }
   })
@@ -648,9 +667,20 @@ function suggestionView(row: any, quote: any, matchups: Record<string, any>): an
     id: row.id,
     kind: legs.length + '-leg combo',
     legs,
-    stake: usd(row.stake),
-    payout: quote?.paperPayout != null ? usd(quote.paperPayout) : '',
+    multiple: quote?.paperPayout != null ? (quote.paperPayout / row.stake).toFixed(2) + '×' : '',
   }
+}
+
+function validCheckoutAmount(): boolean {
+  const raw = String(checkoutAmount()).trim()
+  const amount = Number(raw)
+  return /^(\d+(\.\d{0,2})?|\.\d{1,2})$/.test(raw) && amount > 0 && Number.isSafeInteger(Math.round(amount * 100))
+}
+
+function activeOffer(id: number): CheckoutOffer | undefined {
+  const offer = checkout()[id]?.offer
+  return validCheckoutAmount() && offer?.maxCost === Number(checkoutAmount())
+    && (offer.expires === undefined || offer.expires > Date.now()) ? offer : undefined
 }
 
 function receiptTitle(receipt: CheckoutReceipt): string {
@@ -741,15 +771,22 @@ async function loadSuggestions(): Promise<void> {
 }
 
 async function liveCheckout(id: number, quoteId?: string): Promise<void> {
-  if (checkoutBusy())
+  if (checkoutBusy() || !validCheckoutAmount())
     return
+  const offer = activeOffer(id)
+  if (quoteId && offer?.id !== quoteId) {
+    checkout.set({ ...checkout(), [id]: { state: 'waiting' } })
+    checkoutNotice.set({ id, title: 'Get a fresh quote', message: 'The previous quote expired or the amount changed.', receipt: false })
+    return
+  }
+  const amount = String(checkoutAmount()).trim()
   checkoutBusy.set(id)
-  checkoutNotice.set(quoteId ? { id, title: 'Submitting your $1 purchase', message: 'Waiting for Kalshi to respond.', receipt: false } : null)
+  checkoutNotice.set(quoteId ? { id, title: 'Submitting your ' + usd(Number(amount)) + ' purchase', message: 'Waiting for Kalshi to respond.', receipt: false } : null)
   const ticket = suggestions().find(row => row.id === id)
   try {
     const response = await bookFetch('/api/trading/suggestions/' + id + '/checkout', {
       method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(quoteId ? { operation: 'buy', quoteId } : { operation: 'quote' }),
+      body: JSON.stringify(quoteId ? { operation: 'buy', quoteId, amount } : { operation: 'quote', amount }),
     })
     const data = await response.json()
     if (!response.ok)
@@ -851,6 +888,9 @@ onMount(start)
       .match-mark { display: grid; place-items: center; width: 2.05rem; height: 2.05rem; padding: .12rem; border: 1px solid var(--border); border-radius: .65rem; background: var(--surface); font-size: .55rem; font-weight: 800; }
       .match-mark + .match-mark { margin-inline-start: -.45rem; }
       .match-mark img { width: 100%; height: 100%; object-fit: contain; }
+      .match-marks.compact { min-width: 2.35rem; flex-shrink: 0; }
+      .match-marks.compact .match-mark { width: 1.5rem; height: 1.5rem; border-radius: .48rem; font-size: .5rem; }
+      .match-marks.compact .match-mark + .match-mark { margin-inline-start: -.28rem; }
       .pick-name, .pick-matchup, .pick-meta { display: block; }
       .pick-name { font-size: .94rem; font-weight: 730; line-height: 1.25; text-wrap: pretty; }
       .pick-matchup, .pick-meta, .pick-chance small { color: var(--muted); font-size: .71rem; line-height: 1.35; }
@@ -1026,7 +1066,12 @@ onMount(start)
                 <h2 id="picks-title" class="section-title">Suggested bets</h2>
                 <button type="button" class="desk-text-action" @click="loadSuggestions()">Refresh</button>
               </div>
-              <p class="mt-1 text-sm muted">Get a live quote for a $1 combo and review the payout before buying.</p>
+              <p class="mt-1 text-sm muted">Estimated payouts of 2× or more appear first. Review the live quote before buying.</p>
+              <label x-show="!purchaseReason() && suggestions().length" class="inline-flex gap-2 items-center mt-3 font-semibold text-sm">
+                <span>Bet amount ($)</span>
+                <input type="number" min="0.01" step="0.01" inputmode="decimal" class="px-2 h-9 w-24 text-right rounded-lg input num" x-model="checkoutAmount" :disabled="checkoutBusy() !== 0">
+              </label>
+              <p x-show="suggestions().length && !validCheckoutAmount()" class="mt-1 text-xs muted">Enter a positive amount with up to two decimal places.</p>
             </header>
 
             <section x-show="checkoutReceipts().length" id="checkout-receipts" class="checkout-receipts" aria-labelledby="checkout-receipts-title">
@@ -1037,6 +1082,7 @@ onMount(start)
                     <p class="font-bold text-sm" x-text="receiptTitle(receipt)"></p>
                     <p class="mt-1 text-xs muted" x-text="receipt.labels.join(' · ')"></p>
                     <p class="mt-1 text-xs muted" x-text="receiptMessage(receipt)"></p>
+                    <p x-show="receipt.maxCost != null" class="mt-1 text-xs muted" x-text="'Maximum approved: ' + usd(receipt.maxCost)"></p>
                   </div>
                   <time class="text-xs muted" :datetime="receipt.at" x-text="receiptTime(receipt.at)"></time>
                 </div>
@@ -1051,14 +1097,14 @@ onMount(start)
 
             <p x-show="suggestionsLoading()" class="py-6 text-sm muted" role="status">Loading suggested bets…</p>
             <p x-show="suggestionsError()" class="py-4 text-sm neg" role="status">Suggested bets couldn’t refresh. Try Refresh.</p>
-            <p x-show="!suggestionsLoading() && !suggestionsError() && !purchaseReason() && suggestions().length === 0" class="py-8 text-sm muted">No live suggestions meet your $1.50 minimum payout and 70% per-leg cutoff right now.</p>
+            <p x-show="!suggestionsLoading() && !suggestionsError() && !purchaseReason() && suggestions().length === 0" class="py-8 text-sm muted">No live suggestions meet the 1.5× minimum payout and 70% per-leg cutoff right now.</p>
 
             <div class="pick-grid">
               <template :for="ticket in suggestions">
                 <article class="pick-card">
                   <header class="pick-card-head">
                     <h4 x-text="ticket.kind"></h4>
-                    <span class="num" x-text="ticket.stake + ' stake'"></span>
+                    <span class="num" x-text="ticket.multiple ? ticket.multiple + ' estimated' : ''"></span>
                   </header>
                   <div class="pick-legs">
                     <template :for="leg in ticket.legs">
@@ -1066,11 +1112,11 @@ onMount(start)
                         <div class="match-marks" aria-hidden="true">
                           <template :for="team in leg.teams">
                             <span class="match-mark">
-                              <img x-show="team.logo" :src="team.logo" alt="" width="27" height="27" loading="lazy">
-                              <span x-show="!team.logo" x-text="team.initials"></span>
+                              <img x-show="team.logo && !missingLogos()[team.logo]" :src="team.logo || null" alt="" width="27" height="27" loading="lazy" @error="logoUnavailable(team.logo)">
+                              <span x-show="!team.logo || missingLogos()[team.logo]" x-text="team.initials"></span>
                             </span>
                           </template>
-                          <i x-show="leg.teams.length === 0" class="h-5 w-5 i-hugeicons-basketball-01"></i>
+                          <i x-show="leg.teams.length === 0" class="h-5 w-5 i-hugeicons-target-01"></i>
                         </div>
                         <div class="min-w-0">
                           <span class="pick-name" x-text="leg.label"></span>
@@ -1084,17 +1130,17 @@ onMount(start)
                       </a>
                     </template>
                   </div>
-                  <div class="pick-actions">
+                  <div x-show="activeOffer(ticket.id)" class="pick-actions">
                     <div class="pick-stake">
-                      <span class="num" x-text="checkout()[ticket.id]?.offer ? usd(checkout()[ticket.id]?.offer?.payout) : ticket.payout"></span>
-                      <span x-text="checkout()[ticket.id]?.offer ? 'Live payout if all legs win' : 'Estimated total payout'"></span>
+                      <span class="num" x-text="activeOffer(ticket.id) ? usd(activeOffer(ticket.id)?.payout) : ''"></span>
+                      <span>Live payout if all legs win</span>
                     </div>
                   </div>
-                  <p x-show="checkout()[ticket.id]?.offer" class="text-sm muted" role="status" x-text="'Up to ' + usd(checkout()[ticket.id]?.offer?.maxCost) + ' including fees'"></p>
-                  <button x-show="!checkout()[ticket.id]?.offer" type="button" class="live-checkout-button pick-primary" :disabled="checkoutBusy() !== 0" @click="liveCheckout(ticket.id)" x-text="checkoutBusy() === ticket.id ? 'Checking Kalshi…' : checkout()[ticket.id]?.state === 'waiting' ? 'Check again for a quote' : 'Get live quote · $1'"></button>
-                  <button x-show="checkout()[ticket.id]?.offer" type="button" class="live-checkout-button pick-primary" :disabled="checkoutBusy() !== 0" @click="liveCheckout(ticket.id, checkout()[ticket.id]?.offer?.id)" x-text="checkoutBusy() === ticket.id ? 'Submitting…' : 'Confirm $1 purchase'"></button>
-                  <button x-show="checkout()[ticket.id]?.offer" type="button" class="desk-text-action" :disabled="checkoutBusy() !== 0" @click="liveCheckout(ticket.id)">Refresh quote</button>
-                  <p x-show="checkout()[ticket.id]?.state === 'waiting'" class="text-xs muted" role="status">Waiting for a live payout of at least $1.50.</p>
+                  <p x-show="activeOffer(ticket.id)" class="text-sm muted" role="status" x-text="'Up to ' + usd(activeOffer(ticket.id)?.maxCost) + ' including fees'"></p>
+                  <button x-show="!activeOffer(ticket.id)" type="button" class="mt-auto live-checkout-button pick-primary" :disabled="checkoutBusy() !== 0 || !validCheckoutAmount()" @click="liveCheckout(ticket.id)" x-text="checkoutBusy() === ticket.id ? 'Checking Kalshi…' : validCheckoutAmount() ? 'Get live quote · ' + usd(Number(checkoutAmount())) : 'Get live quote'"></button>
+                  <button x-show="activeOffer(ticket.id)" type="button" class="live-checkout-button pick-primary" :disabled="checkoutBusy() !== 0" @click="liveCheckout(ticket.id, checkout()[ticket.id]?.offer?.id)" x-text="checkoutBusy() === ticket.id ? 'Submitting…' : 'Confirm ' + usd(activeOffer(ticket.id)?.maxCost) + ' purchase'"></button>
+                  <button x-show="activeOffer(ticket.id)" type="button" class="desk-text-action" :disabled="checkoutBusy() !== 0" @click="liveCheckout(ticket.id)">Refresh quote</button>
+                  <p x-show="checkout()[ticket.id]?.state === 'waiting'" class="text-xs muted" role="status">Waiting for a live payout of at least 1.5× the bet amount.</p>
                   <details class="pick-details">
                     <summary>Individual leg prices</summary>
                     <template :for="leg in ticket.legs">
@@ -1340,15 +1386,26 @@ onMount(start)
                       </button>
                       <a x-show="leg.kind === 'leg' && (!leg.settled || openSettled()[position.key])" :href="leg.href" data-no-router class="leg" :class="leg.settled ? 'leg-settled' : ''">
                         <span class="leg-status pill" :class="leg.statusClass"><span x-show="leg.isLive" class="live-pulse"></span><span x-text="leg.statusLabel"></span></span>
-                        <div class="min-w-0">
-                          <div class="flex gap-1.5 items-center min-w-0">
-                            <span x-show="leg.choice === 'NO'" class="no pill">NO</span>
-                            <span class="font-semibold text-sm leg-label" :title="leg.label" x-text="leg.label"></span>
+                        <div class="flex gap-2 items-center min-w-0">
+                          <div class="compact match-marks" aria-hidden="true">
+                            <template :for="team in leg.teams">
+                              <span class="match-mark">
+                                <img x-show="team.logo && !missingLogos()[team.logo]" :src="team.logo || null" alt="" width="22" height="22" loading="lazy" @error="logoUnavailable(team.logo)">
+                                <span x-show="!team.logo || missingLogos()[team.logo]" x-text="team.initials"></span>
+                              </span>
+                            </template>
+                            <i x-show="leg.teams.length === 0" class="h-4 w-4 i-hugeicons-target-01"></i>
                           </div>
-                          <div x-show="leg.progress.has" class="flex gap-2 items-center mt-1">
-                            <span class="font-bold text-xs num" :class="leg.progress.tone" x-text="leg.progress.text"></span>
-                            <span class="text-[11px] faint num" x-text="leg.progress.target"></span>
-                            <div x-show="leg.progress.showBar" class="w-16 leg-bar progress"><span :style="'width:' + leg.progress.width"></span></div>
+                          <div class="min-w-0">
+                            <div class="flex gap-1.5 items-center min-w-0">
+                              <span x-show="leg.choice === 'NO'" class="no pill">NO</span>
+                              <span class="font-semibold text-sm leg-label" :title="leg.label" x-text="leg.label"></span>
+                            </div>
+                            <div x-show="leg.progress.has" class="flex gap-2 items-center mt-1">
+                              <span class="font-bold text-xs num" :class="leg.progress.tone" x-text="leg.progress.text"></span>
+                              <span class="text-[11px] faint num" x-text="leg.progress.target"></span>
+                              <div x-show="leg.progress.showBar" class="w-16 leg-bar progress"><span :style="'width:' + leg.progress.width"></span></div>
+                            </div>
                           </div>
                         </div>
                         <div class="text-right leg-game">
@@ -1530,6 +1587,15 @@ onMount(start)
                   <template :for="leg in position.legs">
                     <div x-show="leg.kind === 'leg'" class="paper-leg">
                       <span class="leg-status pill" :class="leg.statusClass"><span x-show="leg.isLive" class="live-pulse"></span><span x-text="leg.statusLabel"></span></span>
+                      <div class="compact match-marks" aria-hidden="true">
+                        <template :for="team in leg.teams">
+                          <span class="match-mark">
+                            <img x-show="team.logo && !missingLogos()[team.logo]" :src="team.logo || null" alt="" width="22" height="22" loading="lazy" @error="logoUnavailable(team.logo)">
+                            <span x-show="!team.logo || missingLogos()[team.logo]" x-text="team.initials"></span>
+                          </span>
+                        </template>
+                        <i x-show="leg.teams.length === 0" class="h-4 w-4 i-hugeicons-target-01"></i>
+                      </div>
                       <span x-show="leg.choice === 'NO'" class="no pill">NO</span>
                       <span class="min-w-0 text-sm truncate" :title="leg.label" x-text="leg.label"></span>
                       <span class="ml-auto font-semibold text-sm num" :class="leg.chanceTone" x-text="leg.chance"></span>
