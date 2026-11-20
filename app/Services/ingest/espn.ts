@@ -90,6 +90,26 @@ export interface EspnIngestResult {
   errors: string[]
 }
 
+export async function importEspnFinals(db: Database, entries: Array<{ league: string, events: unknown[] }>) {
+  const sports = new Map((await loadSports(db)).filter(sport => sport.espn_path && !sport.non_sporting).map(sport => [sport.slug, sport]))
+  const results: Record<string, number> = {}
+  for (const entry of entries) {
+    const sport = sports.get(entry.league)
+    if (!sport || !Array.isArray(entry.events))
+      continue
+    for (const raw of entry.events) {
+      const event = raw as { date?: string, status?: { type?: { completed?: boolean } } } | null
+      const starts = Date.parse(event?.date ?? '')
+      if (event?.status?.type?.completed !== true || !Number.isFinite(starts) || starts > Date.now() - 86_400_000)
+        continue
+      const stored = await ingestOneEvent(db, sport, event, 'espn', true)
+      if (stored?.resultWritten)
+        results[sport.slug] = (results[sport.slug] ?? 0) + 1
+    }
+  }
+  return results
+}
+
 /**
  * Pull the schedule and results for every active, sporting league.
  *
@@ -196,6 +216,7 @@ async function ingestOneEvent(
   sport: SportRow,
   event: any,
   provider = 'espn',
+  archive = false,
 ): Promise<{ created: boolean, resultWritten: boolean } | null> {
   const externalId = String(event?.id ?? '')
   if (!externalId)
@@ -236,14 +257,14 @@ async function ingestOneEvent(
     abbreviation: homeRaw.team?.abbreviation,
     logo: homeRaw.team?.logo ?? homeRaw.team?.logos?.[0]?.href,
     espnId: homeRaw.team?.id,
-    record: homeRaw.records?.find(r => r?.type === 'total')?.summary ?? homeRaw.records?.[0]?.summary,
+    record: archive ? undefined : homeRaw.records?.find(r => r?.type === 'total')?.summary ?? homeRaw.records?.[0]?.summary,
   })
   const awayTeamId = await resolveTeam(db, sport.id, awayName, {
     shortName: awayRaw.team?.shortDisplayName,
     abbreviation: awayRaw.team?.abbreviation,
     logo: awayRaw.team?.logo ?? awayRaw.team?.logos?.[0]?.href,
     espnId: awayRaw.team?.id,
-    record: awayRaw.records?.find(r => r?.type === 'total')?.summary ?? awayRaw.records?.[0]?.summary,
+    record: archive ? undefined : awayRaw.records?.find(r => r?.type === 'total')?.summary ?? awayRaw.records?.[0]?.summary,
   })
 
   const commenceAt = toIso(event?.date)
@@ -279,8 +300,7 @@ async function ingestOneEvent(
     const homeScore = num(homeRaw.score)
     const awayScore = num(awayRaw.score)
     if (homeScore !== null && awayScore !== null) {
-      await writeResult(db, eventId, homeScore, awayScore, competition, provider)
-      resultWritten = true
+      resultWritten = await writeResult(db, eventId, homeScore, awayScore, competition, archive ? 'espn_archive' : provider)
     }
   }
 
@@ -305,7 +325,7 @@ async function writeResult(
   awayScore: number,
   competition: any,
   provider: string,
-): Promise<void> {
+): Promise<boolean> {
   const winnerSide = homeScore > awayScore ? 'home' : (awayScore > homeScore ? 'away' : 'draw')
 
   const periodScores = JSON.stringify({
@@ -313,9 +333,13 @@ async function writeResult(
     away: (competition?.competitors ?? []).find((c: any) => c?.homeAway === 'away')?.linescores?.map((l: any) => num(l?.value) ?? 0) ?? [],
   })
 
-  const previous = await db.query<{ home_score: number, away_score: number, graded_at: string }>(
-    'SELECT home_score, away_score, graded_at FROM event_results WHERE market_event_id = ?',
+  const previous = await db.query<{ home_score: number, away_score: number, graded_at: string, settled_at: string }>(
+    'SELECT home_score, away_score, graded_at, settled_at FROM event_results WHERE market_event_id = ?',
   ).get(eventId)
+  if (provider === 'espn_archive' && previous)
+    return false
+  const unchanged = previous && Number(previous.home_score) === homeScore && Number(previous.away_score) === awayScore
+  const at = nowIso()
   await db.updateOrInsert('event_results', { market_event_id: eventId }, {
     home_score: homeScore,
     away_score: awayScore,
@@ -323,8 +347,9 @@ async function writeResult(
     period_scores: periodScores,
     completed: 1,
     source: provider,
-    settled_at: nowIso(),
-    graded_at: previous && previous.home_score === homeScore && previous.away_score === awayScore ? previous.graded_at : '',
-    updated_at: nowIso(),
+    settled_at: unchanged ? previous.settled_at : at,
+    graded_at: unchanged ? previous.graded_at : '',
+    updated_at: at,
   })
+  return true
 }

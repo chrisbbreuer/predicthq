@@ -105,6 +105,7 @@ const betHref = state('')
 const board = state<any>(null)
 const boardRows = state<any[]>([])
 const intelligence = state<any[]>([])
+const scoreForecast = state<any>(null)
 
 /** Decimal odds the way an exchange prints a payout: `1.83x`. */
 function multiplier(price: unknown): string {
@@ -192,6 +193,12 @@ function similarColors(a: string, b: string): boolean {
 function apply(data: any): void {
   const game = data.game
   const kalshi = data.kalshi
+  const forecast = data.intelligence?.forecast
+  scoreForecast.set(forecast ? {
+    away: teamShort(game.away) + ' ' + forecast.away,
+    home: teamShort(game.home) + ' ' + forecast.home,
+    total: forecast.total,
+  } : null)
   intelligence.set(['away', 'home'].map(side => {
     const info = data.intelligence && data.intelligence[side]
     const report = info && info.injuries
@@ -447,6 +454,20 @@ onMount(async () => {
               </div>
             </div>
             <p x-show="view() && view().lastPlay" class="mt-5 text-center text-sm muted" x-text="view() ? view().lastPlay : ''"></p>
+          </section>
+
+          <section x-show="scoreForecast()" x-cloak class="mt-4 p-5 sm:p-6 card" aria-label="PredictHQ score forecast">
+            <div class="flex flex-wrap gap-4 items-center justify-between">
+              <div>
+                <h2 class="font-bold">PredictHQ score forecast</h2>
+                <p class="mt-1 text-sm muted">Recent scoring, opponent strength and home advantage</p>
+              </div>
+              <div class="flex gap-4 sm:gap-6 font-semibold num" aria-label="Projected scores">
+                <span x-text="scoreForecast()?.away"></span>
+                <span x-text="scoreForecast()?.home"></span>
+              </div>
+            </div>
+            <p class="mt-3 text-sm muted">Projected total <strong class="num" x-text="scoreForecast()?.total"></strong></p>
           </section>
 
           {{-- How the market saw it. --}}

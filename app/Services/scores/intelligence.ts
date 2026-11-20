@@ -2,6 +2,8 @@ import type { Database } from '../../Support/db'
 import type { GameDetail } from './espn'
 import { injuryReport } from '../fundamentals/injuries'
 import { loadScheduleContext } from '../quant/schedule'
+import { utcTime } from '../trading/winner-context'
+import { projectScore } from './score-forecast'
 
 /** Facts from settled results only; the game being viewed never enters its own form. */
 export async function teamIntelligence(db: Database, teamId: number, startsAt: string, venue: string | null, now = Date.now()) {
@@ -40,17 +42,19 @@ export async function teamIntelligence(db: Database, teamId: number, startsAt: s
 }
 
 export async function gameIntelligence(db: Database, game: GameDetail) {
-  const event = await db.query<{ home_sports_team_id: number, away_sports_team_id: number, commence_at: string, venue: string }>(`
-    SELECT e.home_sports_team_id, e.away_sports_team_id, e.commence_at, e.venue
+  const event = await db.query<{ id: number, home_sports_team_id: number, away_sports_team_id: number, commence_at: string, venue: string }>(`
+    SELECT e.id, e.home_sports_team_id, e.away_sports_team_id, e.commence_at, e.venue
     FROM market_events e JOIN event_sources s ON s.market_event_id = e.id
     WHERE s.provider = ? AND s.external_id = ? LIMIT 1
   `).get(game.source === 'kalshi' ? 'kalshi' : 'espn', game.eventTicker || game.id)
   if (!event?.home_sports_team_id || !event.away_sports_team_id)
     return null
   const start = game.startsAt || event.commence_at
-  const [away, home] = await Promise.all([
+  const [away, home, forecast] = await Promise.all([
     teamIntelligence(db, Number(event.away_sports_team_id), start, game.venue || event.venue),
     teamIntelligence(db, Number(event.home_sports_team_id), start, game.venue || event.venue),
+    game.state === 'pre' ? projectScore(db, game.league, { id: Number(event.id), starts: utcTime(start),
+      home: Number(event.home_sports_team_id), away: Number(event.away_sports_team_id), neutral: game.neutralSite }).catch(() => null) : null,
   ])
-  return { away, home }
+  return { away, home, forecast }
 }

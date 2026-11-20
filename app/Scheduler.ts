@@ -85,6 +85,10 @@ export default function () {
     .job('RecordLines')
     .everyFiveMinutes()
 
+  schedule
+    .job('CollectGameBoxes')
+    .everyFiveMinutes()
+
   // Paper parlays settle from their legs' results. See app/Jobs/SettlePaperParlays.ts.
   schedule
     .job('SettlePaperParlays')

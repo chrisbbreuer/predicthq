@@ -287,6 +287,9 @@ export interface GameDetail {
   home: Team & { line: string[], total: string }
   away: Team & { line: string[], total: string }
   stats: StatPair[]
+  teamStats?: { home: Record<string, string>, away: Record<string, string> }
+  finalPlayAt?: string
+  neutralSite?: boolean
   odds: GameOdds | null
   note: string | null
   /** Player box scores, empty before tip-off or for sports ESPN lacks them for. */
@@ -390,7 +393,7 @@ function flatStats(team: any): Map<string, string> {
  * throwing, so the page shows "not found" instead of a 500 when ESPN
  * changes shape or an id is stale.
  */
-export async function fetchGame(leagueKey: string, eventId: string): Promise<GameDetail | null> {
+export async function fetchGame(leagueKey: string, eventId: string, options?: { ttlMs?: number }): Promise<GameDetail | null> {
   if (eventId.startsWith('kalshi-'))
     return kalshiGameDetail(leagueKey, eventId).catch(() => null)
   const league = leagueFor(leagueKey)
@@ -398,7 +401,7 @@ export async function fetchGame(leagueKey: string, eventId: string): Promise<Gam
 
   let d: any
   try {
-    const res = await espnFetch(url)
+    const res = await espnFetch(url, options)
     if (!res?.ok)
       return null
     d = await res.json()
@@ -478,6 +481,9 @@ export async function fetchGame(leagueKey: string, eventId: string): Promise<Gam
     home: toDetailTeam(homeRaw, homeLine),
     away: toDetailTeam(awayRaw, awayLine),
     stats,
+    teamStats: { home: Object.fromEntries(homeStats), away: Object.fromEntries(awayStats) },
+    finalPlayAt: type?.completed === true && d?.wallclockAvailable ? String(plays[plays.length - 1]?.wallclock ?? '') : '',
+    neutralSite: competition?.neutralSite === true,
     // pickcenter is the richer of the two and carries the moneylines;
     // `odds` on the competition is the fallback when it is absent.
     odds: toOdds((d?.pickcenter ?? [])[0] ?? (competition?.odds ?? [])[0]),
