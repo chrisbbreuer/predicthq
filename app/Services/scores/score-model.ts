@@ -48,7 +48,7 @@ interface TeamForm {
   injuriesAsOf: number | null
 }
 
-interface Projection {
+export interface ScoreProjection {
   scores: Partial<Record<Variant, Score>>
   inputs: { home: TeamForm, away: TeamForm }
   corrections: Partial<Record<Feature, [number, number]>>
@@ -217,10 +217,10 @@ export function replayScores(league: string, history: PlayedGame[], reports: Inj
   const byTime = [...history].sort((a, b) => a.knownAt - b.knownAt)
   const scores: Score[] = []
   const teams = new Map<number, Observation[]>()
-  const deferred = new Map<number, { base: Score | null, home: Rating, away: Rating, projection: Projection | null }>()
+  const deferred = new Map<number, { base: Score | null, home: Rating, away: Rating, projection: ScoreProjection | null }>()
   const fitted = Object.fromEntries(features.map(key => [key, { x2: [0, 0], xy: [0, 0], games: 0 }])) as Record<Feature, FeatureFit>
   const comparison = Object.fromEntries(variants.map(key => [key, { model: metric(), baseline: metric() }])) as Record<Variant, { model: ReturnType<typeof metric>, baseline: ReturnType<typeof metric> }>
-  const results = new Map<number, Projection>()
+  const results = new Map<number, ScoreProjection>()
   let index = 0
   let qualified = 0
   const walk: Array<Fixture | PlayedGame> = [...history, ...fixtures].sort((a, b) => a.starts - b.starts || a.id - b.id)
@@ -267,7 +267,7 @@ export function replayScores(league: string, history: PlayedGame[], reports: Inj
     const base: Score = game.neutral ? [mean(average), mean(average)] : average
     const homeRating = rating(home, true, false)
     const awayRating = rating(away, true, false)
-    let projection: Projection | null = null
+    let projection: ScoreProjection | null = null
     if (scores.length >= 20 && home.length >= 3 && away.length >= 3) {
       qualified++
       const homeInjury = snapshot(reports, game.home, at)
@@ -276,7 +276,7 @@ export function replayScores(league: string, history: PlayedGame[], reports: Inj
       const matchup = scoreFor(base, rating(home, false, false), rating(away, false, false))
       const form = scoreFor(base, homeRating, awayRating)
       const adjusted = scoreFor(base, rating(home, true, true), rating(away, true, true))
-      const corrections: Projection['corrections'] = {}
+      const corrections: ScoreProjection['corrections'] = {}
       const recovery = (rows: Observation[]) => Math.exp(-(game.starts - rows[0]!.game.starts) / day)
       const rest = recovery(away) - recovery(home)
       corrections.rest = [rest, -rest]
@@ -288,7 +288,7 @@ export function replayScores(league: string, history: PlayedGame[], reports: Inj
         const burden = injuryBurden(awayInjury, away, at) - injuryBurden(homeInjury, home, at)
         corrections.injuries = [burden, -burden]
       }
-      const projected: Projection['scores'] = { leagueAverage: base, offenseDefense: matchup, recentForm: form, opponentAdjusted: adjusted }
+      const projected: ScoreProjection['scores'] = { leagueAverage: base, offenseDefense: matchup, recentForm: form, opponentAdjusted: adjusted }
       for (const feature of features) {
         const signal = corrections[feature]
         const fit = fitted[feature]

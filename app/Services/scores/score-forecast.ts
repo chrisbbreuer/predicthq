@@ -1,7 +1,7 @@
 import type { Database } from '../../Support/db'
 import type { ReportedInjury } from '../fundamentals/injuries'
 import type { FinalBox } from './box-history'
-import type { Fixture, InjurySnapshot, PlayedGame } from './score-model'
+import type { Fixture, InjurySnapshot, PlayedGame, ScoreProjection } from './score-model'
 import { utcTime } from '../trading/winner-context'
 import { scoreLeagues } from './box-history'
 import { replayScores } from './score-model'
@@ -22,6 +22,9 @@ interface HistoryRow {
 
 interface InjuryRow { sports_team_id: number, injuries: string, captured_at: string }
 interface BoxRow { market_event_id: number, payload: string, captured_at: string }
+interface ForecastGameRow extends Pick<HistoryRow, 'id' | 'commence_at' | 'home_sports_team_id' | 'away_sports_team_id'> { league: string }
+
+export const scoreForecastVersion = 'opponent-adjusted-1'
 
 async function scoreHistory(db: Database, league: string, from: number, until: number, includeBoxes = true): Promise<PlayedGame[]> {
   const rows = await db.query<HistoryRow>(`
@@ -116,11 +119,57 @@ export async function projectScore(db: Database, league: string, fixture: Fixtur
     scoreHistory(db, league, now - 120 * day, now, false),
     injuryHistory(db, [fixture], now),
   ])
-  const projection = replayScores(league, history, injuries, [fixture]).fixtures.get(fixture.id)
+  return scorePayload(replayScores(league, history, injuries, [fixture]).fixtures.get(fixture.id))
+}
+
+function scorePayload(projection: ScoreProjection | undefined) {
   const predicted = projection?.scores.opponentAdjusted
   if (!projection || !predicted)
     return null
   const [home, away] = predicted.map(score => Math.round(score * 10) / 10) as [number, number]
   const round = (score: number) => Math.round(score * 10) / 10
   return { home, away, total: round(home + away), margin: round(home - away), inputs: projection.inputs }
+}
+
+export async function recordedScoreForecast(db: Database, eventId: number, starts: number) {
+  if (!Number.isFinite(starts))
+    return null
+  const row = await db.query<{ payload: string, captured_at: string }>(`
+    SELECT payload, captured_at FROM game_score_forecasts WHERE market_event_id = ? AND start_at = ?
+  `).get(eventId, new Date(starts).toISOString())
+  if (!row)
+    return null
+  return { ...JSON.parse(row.payload) as NonNullable<ReturnType<typeof scorePayload>>, capturedAt: new Date(utcTime(row.captured_at)).toISOString() }
+}
+
+export async function captureScoreForecasts(db: Database, clock = Date.now) {
+  const now = clock()
+  const iso = (value: number) => new Date(value).toISOString()
+  const rows = await db.query<ForecastGameRow>(`
+    SELECT e.id, e.commence_at, e.home_sports_team_id, e.away_sports_team_id, s.slug AS league
+    FROM market_events e JOIN sports s ON s.id = e.sport_id
+    LEFT JOIN game_score_forecasts f ON f.market_event_id = e.id AND f.start_at = e.commence_at
+    WHERE e.status = 'scheduled' AND e.commence_at BETWEEN ? AND ?
+      AND e.home_sports_team_id IS NOT NULL AND e.away_sports_team_id IS NOT NULL AND f.id IS NULL
+      AND s.slug IN (${scoreLeagues.map(() => '?').join(',')})
+  `).all(iso(now + 30 * minutes), iso(now + 40 * minutes), ...scoreLeagues)
+  let recorded = 0
+  for (const [league, games] of Map.groupBy(rows, row => row.league)) {
+    const fixtures = games.map(game => ({ id: Number(game.id), starts: utcTime(game.commence_at),
+      home: Number(game.home_sports_team_id), away: Number(game.away_sports_team_id) })).filter(game => Number.isFinite(game.starts))
+    const [history, injuries] = await Promise.all([
+      scoreHistory(db, league, now - 120 * day, now, false), injuryHistory(db, fixtures, now),
+    ])
+    const forecasts = replayScores(league, history, injuries, fixtures).fixtures
+    for (const game of fixtures) {
+      const payload = scorePayload(forecasts.get(game.id))
+      const at = clock()
+      if (!payload || game.starts - at < 30 * minutes || game.starts - at > 40 * minutes)
+        continue
+      await db.insertOrIgnore('game_score_forecasts', { market_event_id: game.id, start_at: iso(game.starts), captured_at: iso(at),
+        payload: JSON.stringify({ ...payload, model: scoreForecastVersion }), created_at: iso(at), updated_at: iso(at) })
+      recorded++
+    }
+  }
+  return { checked: rows.length, recorded }
 }

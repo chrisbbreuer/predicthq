@@ -6582,6 +6582,84 @@
         ]
       },
       {
+        "table": "game_score_forecasts",
+        "columns": [
+          {
+            "name": "id",
+            "type": "bigint",
+            "isPrimaryKey": true,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": false
+          },
+          {
+            "name": "payload",
+            "type": "text",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": false
+          },
+          {
+            "name": "start_at",
+            "type": "string",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": false,
+            "maxLength": 40
+          },
+          {
+            "name": "captured_at",
+            "type": "string",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": false,
+            "maxLength": 40
+          },
+          {
+            "name": "market_event_id",
+            "type": "bigint",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": true,
+            "hasDefault": false,
+            "references": {
+              "table": "market_events",
+              "column": "id"
+            }
+          },
+          {
+            "name": "created_at",
+            "type": "datetime",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": true,
+            "defaultValue": "UTC_TIMESTAMP"
+          },
+          {
+            "name": "updated_at",
+            "type": "datetime",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": true,
+            "hasDefault": false
+          }
+        ],
+        "indexes": [
+          {
+            "name": "game_score_forecasts_event_start",
+            "columns": [
+              "market_event_id",
+              "start_at"
+            ],
+            "type": "unique"
+          }
+        ]
+      },
+      {
         "table": "gift_cards",
         "columns": [
           {
@@ -16333,7 +16411,7 @@
       }
     ]
   },
-  "hash": "916e4069eea64215f8747c9a8c23a05da10dc831554b1fbe014524998fbe48f8",
+  "hash": "32fdfdeb9434c95cf6f67e5a7826c91b3cc386bb69c474c59601e61a02e83a1d",
   "dialect": "vitess",
-  "updatedAt": "2026-11-20T00:37:56.195Z"
+  "updatedAt": "2026-11-20T00:59:12.865Z"
 }

@@ -3,7 +3,7 @@ import type { GameDetail } from './espn'
 import { injuryReport } from '../fundamentals/injuries'
 import { loadScheduleContext } from '../quant/schedule'
 import { utcTime } from '../trading/winner-context'
-import { projectScore } from './score-forecast'
+import { projectScore, recordedScoreForecast } from './score-forecast'
 
 /** Facts from settled results only; the game being viewed never enters its own form. */
 export async function teamIntelligence(db: Database, teamId: number, startsAt: string, venue: string | null, now = Date.now()) {
@@ -50,11 +50,16 @@ export async function gameIntelligence(db: Database, game: GameDetail) {
   if (!event?.home_sports_team_id || !event.away_sports_team_id)
     return null
   const start = game.startsAt || event.commence_at
+  const fixture = { id: Number(event.id), starts: utcTime(start), home: Number(event.home_sports_team_id),
+    away: Number(event.away_sports_team_id), neutral: game.neutralSite }
+  const forecastForGame = async () => {
+    const snapshot = await recordedScoreForecast(db, fixture.id, fixture.starts).catch(() => null)
+    return snapshot ?? (game.state === 'pre' ? await projectScore(db, game.league, fixture).catch(() => null) : null)
+  }
   const [away, home, forecast] = await Promise.all([
     teamIntelligence(db, Number(event.away_sports_team_id), start, game.venue || event.venue),
     teamIntelligence(db, Number(event.home_sports_team_id), start, game.venue || event.venue),
-    game.state === 'pre' ? projectScore(db, game.league, { id: Number(event.id), starts: utcTime(start),
-      home: Number(event.home_sports_team_id), away: Number(event.away_sports_team_id), neutral: game.neutralSite }).catch(() => null) : null,
+    forecastForGame(),
   ])
   return { away, home, forecast }
 }

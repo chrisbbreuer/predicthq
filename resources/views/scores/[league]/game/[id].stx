@@ -194,10 +194,13 @@ function apply(data: any): void {
   const game = data.game
   const kalshi = data.kalshi
   const forecast = data.intelligence?.forecast
+  const finalTotal = game.state === 'post' && game.home.total !== '' && game.away.total !== '' ? Number(game.home.total) + Number(game.away.total) : null
   scoreForecast.set(forecast ? {
     away: teamShort(game.away) + ' ' + forecast.away,
     home: teamShort(game.home) + ' ' + forecast.home,
     total: forecast.total,
+    finalTotal: finalTotal !== null && Number.isFinite(finalTotal) ? finalTotal : null,
+    captured: forecast.capturedAt ? 'Saved at ' + new Date(forecast.capturedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '',
   } : null)
   intelligence.set(['away', 'home'].map(side => {
     const info = data.intelligence && data.intelligence[side]
@@ -467,7 +470,11 @@ onMount(async () => {
                 <span x-text="scoreForecast()?.home"></span>
               </div>
             </div>
-            <p class="mt-3 text-sm muted">Projected total <strong class="num" x-text="scoreForecast()?.total"></strong></p>
+            <div class="flex flex-wrap gap-x-5 gap-y-1 mt-3 text-sm muted">
+              <p>Projected total <strong class="num" x-text="scoreForecast()?.total"></strong></p>
+              <p x-show="scoreForecast()?.finalTotal != null">Final total <strong class="num" x-text="scoreForecast()?.finalTotal"></strong></p>
+              <p x-show="scoreForecast()?.captured" x-text="scoreForecast()?.captured"></p>
+            </div>
           </section>
 
           {{-- How the market saw it. --}}
