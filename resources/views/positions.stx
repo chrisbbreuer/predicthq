@@ -51,7 +51,7 @@ const note = state('')
 const busy = state(0)
 const tab = state('all')
 const browserLocation = useBrowserLocation()
-const panel = state(browserLocation.hash.value === '#suggestion-slate' ? 'suggestions' : browserLocation.hash.value === '#paper-tracking' ? 'paper' : 'positions')
+const panel = state(['#suggestion-slate', '#checkout-receipts'].includes(browserLocation.hash.value) ? 'suggestions' : browserLocation.hash.value === '#paper-tracking' ? 'paper' : 'positions')
 const accounts = state<any[]>([])
 const broken = state<any[]>([])
 const liveGames = state<any[]>([])
@@ -67,6 +67,16 @@ const suggestionsError = state(false)
 const purchaseReason = state('')
 const checkoutBusy = state(0)
 const checkout = state<Record<number, { state: string, offer?: { id: string, payout: number, maxCost: number } }>>({})
+interface CheckoutReceipt {
+  id: number
+  labels: string[]
+  at: string
+  state: string
+  payout?: number
+  reason?: string
+}
+const checkoutReceipts = state<CheckoutReceipt[]>([])
+const checkoutNotice = state<{ id: number, title: string, message: string, receipt: boolean } | null>(null)
 const selectedSlate = state<any>(null)
 let refreshingSuggestions = false
 const settled = state<any[]>([])
@@ -384,6 +394,8 @@ function clearPrivateBook(): void {
   purchaseReason.set('')
   selectedSlate.set(null)
   checkout.set({})
+  checkoutReceipts.set([])
+  checkoutNotice.set(null)
   counts.set({ all: 0, live: 0, upcoming: 0, parlays: 0, other: 0 })
   totals.set(blankTotals())
   empty.set(false)
@@ -641,6 +653,50 @@ function suggestionView(row: any, quote: any, matchups: Record<string, any>): an
   }
 }
 
+function receiptTitle(receipt: CheckoutReceipt): string {
+  if (receipt.state === 'executed')
+    return 'Filled on Kalshi'
+  if (receipt.state === 'partial' || receipt.state === 'partial_pending')
+    return 'Partially filled on Kalshi'
+  if (receipt.state === 'not_filled')
+    return 'Order did not fill'
+  if (receipt.state === 'unverified')
+    return 'Fill still unverified'
+  return 'Waiting for Kalshi'
+}
+
+function receiptMessage(receipt: CheckoutReceipt): string {
+  if (receipt.payout != null)
+    return usd(receipt.payout) + ' total payout if every leg wins.'
+  if (receipt.reason)
+    return receipt.reason
+  if (receipt.state === 'unverified')
+    return 'Kalshi hasn’t returned a final status. This receipt will update when it does.'
+  return 'This receipt will update when Kalshi confirms the result.'
+}
+
+function receiptTime(at: string): string {
+  const stamp = instant(at)
+  return stamp ? new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(stamp) : ''
+}
+
+function showCheckoutReceipt(receipt: CheckoutReceipt): void {
+  const title = receiptTitle(receipt)
+  const message = receiptMessage(receipt)
+  const notice = checkoutNotice()
+  if (notice?.id !== receipt.id || notice.title !== title || notice.message !== message)
+    checkoutNotice.set({ id: receipt.id, title, message, receipt: true })
+}
+
+function viewCheckoutReceipts(): void {
+  panel.set('suggestions')
+  checkoutNotice.set(null)
+}
+
+function finalReceipt(receipt: CheckoutReceipt): boolean {
+  return ['executed', 'partial', 'not_filled'].includes(receipt.state)
+}
+
 async function loadSuggestions(): Promise<void> {
   if (refreshingSuggestions)
     return
@@ -650,8 +706,19 @@ async function loadSuggestions(): Promise<void> {
     if (!response.ok)
       throw new Error('Could not refresh suggestions')
     const data = await response.json()
+    const receipts = new Map(checkoutReceipts().map(receipt => [receipt.id, receipt]))
+    for (const receipt of (data.receipts || []) as CheckoutReceipt[]) {
+      const old = receipts.get(receipt.id)
+      if (!old || !finalReceipt(old) || finalReceipt(receipt))
+        receipts.set(receipt.id, receipt)
+    }
+    checkoutReceipts.set([...receipts.values()].sort((a, b) => instant(b.at) - instant(a.at)).slice(0, 8))
+    const notice = checkoutNotice()
+    const latest = notice?.receipt && receipts.get(notice.id)
+    if (latest)
+      showCheckoutReceipt(latest)
     const cards = (data.live || []).filter((ticket: any) => Date.parse(ticket.expiresAt) > Date.now()
-      && !['submitted', 'executed'].includes(checkout()[ticket.id]?.state))
+      && !checkoutReceipts().some(receipt => receipt.id === ticket.id))
     suggestions.set(cards.map((ticket: any) => suggestionView(ticket, data.prices?.[ticket.id], data.matchups || {})))
     const slate = data.slate
     const summary = slate ? ['won', 'lost', 'pending', 'partial'].map(status => slate.tickets.filter((ticket: any) => ticket.paperResult === status).length) : []
@@ -677,7 +744,8 @@ async function liveCheckout(id: number, quoteId?: string): Promise<void> {
   if (checkoutBusy())
     return
   checkoutBusy.set(id)
-  note.set('')
+  checkoutNotice.set(quoteId ? { id, title: 'Submitting your $1 purchase', message: 'Waiting for Kalshi to respond.', receipt: false } : null)
+  const ticket = suggestions().find(row => row.id === id)
   try {
     const response = await bookFetch('/api/trading/suggestions/' + id + '/checkout', {
       method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
@@ -687,14 +755,16 @@ async function liveCheckout(id: number, quoteId?: string): Promise<void> {
     if (!response.ok)
       throw new Error(data.message || data.error || 'Kalshi could not update this checkout.')
     checkout.set({ ...checkout(), [id]: data })
-    if (data.state === 'executed' || data.state === 'submitted') {
+    if (['submitted', 'executed', 'partial', 'partial_pending', 'not_filled', 'unverified'].includes(data.state)) {
+      const receipt = { ...data, id, labels: (ticket?.legs || []).map((leg: any) => leg.label), at: new Date().toISOString() } as CheckoutReceipt
+      checkoutReceipts.set([receipt, ...checkoutReceipts().filter(row => row.id !== id)].slice(0, 8))
+      showCheckoutReceipt(receipt)
       suggestions.set(suggestions().filter(ticket => ticket.id !== id))
-      note.set(data.state === 'executed' ? 'Kalshi confirmed the order. See Positions for the fill.' : 'Awaiting Kalshi confirmation. Check Positions for updates.')
       void load(true)
     }
   }
   catch (exception) {
-    note.set(messageOf(exception))
+    checkoutNotice.set({ id, title: quoteId ? 'Couldn’t confirm the purchase' : 'Couldn’t get a live quote', message: messageOf(exception), receipt: false })
     checkout.set({ ...checkout(), [id]: { state: 'waiting' } })
     void loadSuggestions()
   }
@@ -759,6 +829,10 @@ onMount(start)
       .saved-picks { margin-top: .85rem; border-inline-start: 3px solid var(--accent); }
       .purchase-status { flex-wrap: nowrap; justify-content: flex-start; color: var(--muted); font-size: .8rem; }
       .purchase-status i { flex-shrink: 0; }
+      .checkout-receipts { margin: 0 0 1.15rem; padding: .95rem 1.05rem; border: 1px solid var(--border); border-radius: .85rem; background: var(--surface); scroll-margin-top: 5rem; }
+      .checkout-receipt { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: .35rem 1rem; padding: .75rem 0; border-bottom: 1px solid var(--border); }
+      .checkout-receipt:last-child { padding-bottom: 0; border-bottom: 0; }
+      .checkout-notice { position: fixed; z-index: 60; inset-inline-end: 1rem; bottom: max(1rem, env(safe-area-inset-bottom)); width: min(24rem, calc(100% - 2rem)); padding: .95rem 1.05rem; border: 1px solid var(--border); border-inline-start: 3px solid var(--accent); border-radius: .85rem; background: var(--surface); box-shadow: 0 12px 40px #0005; }
       .position-overview { display: grid; grid-template-columns: minmax(11rem, 1.4fr) repeat(3, minmax(0, 1fr)); padding: 1.05rem 1.25rem; gap: .85rem 1.05rem; border: 1px solid var(--border); border-radius: 1rem; background: var(--surface); }
       .balance-hero, .balance-metric { display: grid; align-content: center; gap: .2rem; }
       .balance-metric { padding-inline-start: 1rem; border-inline-start: 1px solid var(--border); }
@@ -933,6 +1007,19 @@ onMount(start)
             </button>
           </nav>
 
+          <aside x-show="checkoutNotice()" class="checkout-notice">
+            <div class="flex gap-3 items-start justify-between">
+              <div role="status">
+                <p class="font-bold text-sm" x-text="checkoutNotice()?.title"></p>
+                <p class="mt-1 text-sm muted" x-text="checkoutNotice()?.message"></p>
+              </div>
+              <button type="button" aria-label="Dismiss checkout message" class="desk-text-action" @click="checkoutNotice.set(null)">
+                <i aria-hidden="true" class="h-4 w-4 i-hugeicons-cancel-01"></i>
+              </button>
+            </div>
+            <a x-show="checkoutNotice()?.receipt" href="#checkout-receipts" data-no-router class="desk-text-action" @click="viewCheckoutReceipts()">View receipt</a>
+          </aside>
+
           <section id="suggestion-slate" x-show="panel() === 'suggestions'" class="desk-panel" aria-labelledby="picks-title">
             <header class="desk-panel-heading">
               <div class="flex gap-3 items-center justify-between">
@@ -941,6 +1028,20 @@ onMount(start)
               </div>
               <p class="mt-1 text-sm muted">Get a live quote for a $1 combo and review the payout before buying.</p>
             </header>
+
+            <section x-show="checkoutReceipts().length" id="checkout-receipts" class="checkout-receipts" aria-labelledby="checkout-receipts-title">
+              <h3 id="checkout-receipts-title" class="font-bold text-sm">Recent checkouts</h3>
+              <template :for="receipt in checkoutReceipts">
+                <div class="checkout-receipt">
+                  <div class="min-w-0">
+                    <p class="font-bold text-sm" x-text="receiptTitle(receipt)"></p>
+                    <p class="mt-1 text-xs muted" x-text="receipt.labels.join(' · ')"></p>
+                    <p class="mt-1 text-xs muted" x-text="receiptMessage(receipt)"></p>
+                  </div>
+                  <time class="text-xs muted" :datetime="receipt.at" x-text="receiptTime(receipt.at)"></time>
+                </div>
+              </template>
+            </section>
 
             <p x-show="purchaseReason()" class="purchase-status" role="status">
               <i aria-hidden="true" class="h-4 w-4 i-hugeicons-information-circle"></i>

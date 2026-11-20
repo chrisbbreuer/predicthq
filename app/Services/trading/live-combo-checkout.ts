@@ -7,8 +7,13 @@ import { kalshiComboCollections } from '../prediction-markets/kalshi-public'
 import { clientFor } from './execute'
 import { KalshiTradingClient } from './kalshi-trading'
 import { comboFits, kalshiCheckoutAccount, LIVE_COMBO_PAYOUT_FLOOR, prepareExactCombo, suggestionCheckoutReason, suggestionLegs, SuggestionPreparationError } from './suggestion-kalshi'
+import { VenueError } from './venue'
 
 interface Offer { id: string, price: number, payout: number, maxCost: number, expires: number }
+type FinalStatus =
+  | { state: 'executed' | 'partial', orderId: string, payout: number }
+  | { state: 'not_filled', reason: string }
+type CheckoutStatus = FinalStatus | { state: 'submitted' | 'unverified' } | { state: 'partial_pending', payout: number }
 interface Checkout {
   nonce: string
   credentials: string
@@ -17,6 +22,8 @@ interface Checkout {
   market?: string
   rfq?: string
   offer?: Offer
+  submittedAt?: string
+  result?: FinalStatus
 }
 
 const lifetime = 90_000
@@ -102,12 +109,73 @@ async function claim(db: Database, id: number, intent: Checkout, previous?: stri
   return raw
 }
 
-async function status(client: KalshiTradingClient, intent: Checkout) {
-  const quotes = intent.rfq ? await client.comboQuotes(intent.rfq).catch(() => []) : []
-  const executed = quotes.find(quote => quote.market_ticker === intent.market && quote.executed_ts && quote.rfq_creator_order_id)
-  if (executed)
-    return { state: 'executed', orderId: executed.rfq_creator_order_id } as const
-  return { state: 'submitted' } as const
+/** A maker can accept at the same price under a different quote ID. Check the whole RFQ. */
+export async function comboOrderStatus(
+  client: Pick<KalshiTradingClient, 'comboQuotes' | 'comboRfqStatus' | 'fetchOrder'>,
+  intent: Pick<Checkout, 'rfq' | 'market' | 'expires'>,
+  now = Date.now(),
+): Promise<CheckoutStatus> {
+  const { rfq, market } = intent
+  if (!rfq || !market)
+    return { state: 'unverified' }
+  const quotes = (await client.comboQuotes(rfq).catch(() => null))?.filter(quote => quote.rfq_id === rfq && quote.market_ticker === market)
+  const orderId = quotes?.find(quote => quote.executed_ts && quote.rfq_creator_order_id)?.rfq_creator_order_id
+  if (orderId) {
+    const order = await client.fetchOrder(orderId).catch(() => null)
+    if (order && order.filledSize > 0) {
+      const payout = order.filledSize
+      if (order.status === 'filled')
+        return { state: 'executed', orderId, payout }
+      if (order.venueStatus === 'canceled' || order.venueStatus === 'cancelled')
+        return { state: 'partial', orderId, payout }
+      return { state: 'partial_pending', payout }
+    }
+    if (order?.status === 'cancelled')
+      return { state: 'not_filled', reason: 'Kalshi canceled the order without a fill.' }
+  }
+  if (now < intent.expires)
+    return { state: 'submitted' }
+  if (quotes?.length && !quotes.some(quote => quote.executed_ts || quote.status === 'confirmed')) {
+    const rfqStatus = await client.comboRfqStatus(rfq).catch(() => '')
+    if (rfqStatus === 'cancelled')
+      return { state: 'not_filled', reason: 'Kalshi canceled the quote request without a fill.' }
+  }
+  return { state: 'unverified' }
+}
+
+async function reconcile(db: Database, id: number, raw: string, intent: Checkout, client: KalshiTradingClient): Promise<CheckoutStatus> {
+  if (intent.result)
+    return intent.result
+  const result = await comboOrderStatus(client, intent)
+  if ((intent.phase === 'submitted' || Date.now() >= intent.expires)
+    && (result.state === 'executed' || result.state === 'partial' || result.state === 'not_filled')) {
+    await db.query('UPDATE suggestion_checkouts SET payload = ? WHERE bet_suggestion_id = ? AND payload = ?')
+      .run(JSON.stringify({ ...intent, result }), id, raw)
+  }
+  return result
+}
+
+/** Read receipts by owner even after the original suggestions have expired. */
+export async function comboCheckoutReceipts(db: Database, userId: number) {
+  const rows = await db.query<{ id: number, legs: string, payload: string, updated_at: string }>(`
+    SELECT s.id, s.legs, c.payload, c.updated_at
+    FROM suggestion_checkouts c JOIN bet_suggestions s ON s.id = c.bet_suggestion_id
+    WHERE s.user_id = ? AND REPLACE(JSON_EXTRACT(c.payload, '$.phase'), '"', '') IN ('submitting', 'submitted')
+    ORDER BY c.updated_at DESC, s.id DESC LIMIT 8
+  `).all(userId)
+  if (!rows.length)
+    return []
+  const attempts = rows.map(row => ({ ...row, intent: JSON.parse(row.payload) as Checkout }))
+  const account = attempts.some(row => !row.intent.result) ? await kalshiCheckoutAccount(db, userId) : null
+  const client = account ? await clientFor(account.credentials).catch(() => null) : null
+  const credentials = account ? createHash('sha256').update(account.credentials).digest('hex') : null
+  return await Promise.all(attempts.map(async (row) => {
+    const result = row.intent.result ?? (client instanceof KalshiTradingClient && row.intent.credentials === credentials
+      ? await reconcile(db, row.id, row.payload, row.intent, client)
+      : { state: 'unverified' as const })
+    const legs = JSON.parse(row.legs) as Suggestion['legs']
+    return { id: Number(row.id), labels: legs.map(leg => leg.label), at: row.intent.submittedAt ?? row.updated_at, ...result }
+  }))
 }
 
 export async function comboCheckout(db: Database, userId: number, ticket: Suggestion, confirmation?: string) {
@@ -121,7 +189,7 @@ export async function comboCheckout(db: Database, userId: number, ticket: Sugges
   if (intent && intent.credentials !== credentials)
     throw new SuggestionPreparationError('This checkout was started with a different Kalshi connection.')
   if (intent?.phase === 'submitting' || intent?.phase === 'submitted')
-    return status(client, intent)
+    return reconcile(db, ticket.id, raw!, intent, client)
 
   const multiple = LIVE_COMBO_PAYOUT_FLOOR
   if (confirmation) {
@@ -133,19 +201,28 @@ export async function comboCheckout(db: Database, userId: number, ticket: Sugges
     if (!current || current.price !== intent.offer.price || current.payout !== intent.offer.payout || current.expires <= Date.now())
       throw new SuggestionPreparationError('Kalshi changed the quote. Review the updated payout before buying.')
     // The unique ticket row plus a fresh claim token prevents duplicate sends across workers.
-    const sending: Checkout = { ...intent, phase: 'submitting', nonce: randomUUID() }
+    const sending: Checkout = { ...intent, phase: 'submitting', nonce: randomUUID(), submittedAt: new Date().toISOString() }
     const claimed = await claim(db, ticket.id, sending, raw)
-    if (await suggestionCheckoutReason(db, userId))
-      throw new SuggestionPreparationError('Live checkout was paused before this order could be sent.')
+    if (await suggestionCheckoutReason(db, userId)) {
+      const result = { state: 'not_filled', reason: 'Checkout was paused before this order could be sent.' } as const
+      await claim(db, ticket.id, { ...sending, result }, claimed)
+      return result
+    }
     try {
       await client.acceptComboQuote(intent.rfq, confirmation)
     }
-    catch {
+    catch (error) {
+      if (error instanceof VenueError && [400, 401, 403, 404, 409, 422, 429].includes(error.status)) {
+        const result = { state: 'not_filled', reason: 'Kalshi declined the quote acceptance.' } as const
+        await claim(db, ticket.id, { ...sending, result }, claimed)
+        return result
+      }
       // An interrupted write may have reached the exchange. Subsequent calls reconcile only.
-      return status(client, sending)
+      return reconcile(db, ticket.id, claimed, sending, client)
     }
-    await claim(db, ticket.id, { ...sending, phase: 'submitted' }, claimed)
-    return status(client, sending)
+    const submitted = { ...sending, phase: 'submitted' } as const
+    const saved = await claim(db, ticket.id, submitted, claimed)
+    return reconcile(db, ticket.id, saved, submitted, client)
   }
 
   if (intent?.phase === 'opening' && intent.expires > Date.now())

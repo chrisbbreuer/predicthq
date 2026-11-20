@@ -3,7 +3,7 @@ import type { LiveLine } from '../../app/Services/trading/line-snapshots'
 import { afterEach, describe, expect, it } from 'bun:test'
 import { rmSync } from 'node:fs'
 import { toMarketInfo } from '../../app/Services/prediction-markets/kalshi-public'
-import { buyableCombos } from '../../app/Services/trading/live-combo-checkout'
+import { buyableCombos, comboCheckoutReceipts } from '../../app/Services/trading/live-combo-checkout'
 import { prepareExactCombo } from '../../app/Services/trading/suggestion-kalshi'
 import { suggestionPrices } from '../../app/Services/trading/suggestion-prices'
 import { approveSuggestion, dismissSuggestion, generateSuggestions, listSuggestions } from '../../app/Services/trading/suggestions'
@@ -203,6 +203,27 @@ describe('suggestions', () => {
       size_min: 2, size_max: 4, is_all_yes: false, is_single_market_per_event: true,
     }]
     expect((await buyableCombos(db, tickets, prices, collections, NOW)).map(ticket => ticket.id)).toEqual([current.id])
+  })
+
+  it('returns saved fill receipts to the owner after the suggestion has expired', async () => {
+    const db = freshDb()
+    await generateSuggestions(db, 1, { lines: Array.from({ length: 7 }, (_, i) => line(i)), props: [], now: NOW })
+    const { pending } = await listSuggestions(db, 1, NOW)
+    const ticket = pending.find(suggestion => suggestion.kind === 'parlay')!
+    const at = new Date(NOW).toISOString()
+    await db.insertOrIgnore('suggestion_checkouts', {
+      bet_suggestion_id: pending.find(suggestion => suggestion.kind === 'single')!.id,
+      payload: JSON.stringify({ phase: 'open' }),
+    })
+    await db.insertOrIgnore('suggestion_checkouts', {
+      bet_suggestion_id: ticket.id,
+      payload: JSON.stringify({ phase: 'submitted', submittedAt: at, result: { state: 'executed', payout: 2.04, orderId: 'order' } }),
+    })
+    await db.query("UPDATE bet_suggestions SET status = 'expired' WHERE id = ?").run(ticket.id)
+    expect(await comboCheckoutReceipts(db, 1)).toEqual([{
+      id: ticket.id, labels: ticket.legs.map(leg => leg.label), at, state: 'executed', payout: 2.04, orderId: 'order',
+    }])
+    expect(await comboCheckoutReceipts(db, 2)).toEqual([])
   })
 
   it('prepares the exact Kalshi combo and rejects a changed side from the venue', async () => {

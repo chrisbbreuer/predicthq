@@ -170,6 +170,11 @@ export class KalshiTradingClient implements TradingClient {
     return (await this.request<{ quotes: KalshiRfqQuote[] }>('GET', `/communications/quotes?${query}`)).quotes
   }
 
+  async comboRfqStatus(rfq: string): Promise<string> {
+    const { rfq: result } = await this.request<{ rfq: { status: string } }>('GET', `/communications/rfqs/${encodeURIComponent(rfq)}`)
+    return result.status
+  }
+
   async acceptComboQuote(rfq: string, quote: string): Promise<void> {
     await this.request('PUT', `/communications/rfqs/${encodeURIComponent(rfq)}/quotes/${encodeURIComponent(quote)}/accept`, { accepted_side: 'no' })
   }
@@ -329,7 +334,7 @@ export class KalshiTradingClient implements TradingClient {
     }
   }
 
-  async fetchOrder(externalOrderId: string): Promise<PlaceOrderResult | null> {
+  async fetchOrder(externalOrderId: string): Promise<(PlaceOrderResult & { venueStatus?: string }) | null> {
     try {
       const data = await this.request<{
         order: KalshiOrder
@@ -345,6 +350,7 @@ export class KalshiTradingClient implements TradingClient {
       return {
         externalOrderId: data.order.order_id,
         status: normalizeStatus(data.order.status ?? '', filled, requested),
+        venueStatus: data.order.status,
         filledSize: filled,
         avgFillPrice: filled > 0 ? (totalCost > 0 ? totalCost / filled : quotedPrice) : 0,
       }

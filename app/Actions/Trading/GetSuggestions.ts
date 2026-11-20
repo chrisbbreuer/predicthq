@@ -1,7 +1,7 @@
 import { Database } from '../../Support/db'
 import { authenticatedUserId } from '../../Support/request-auth'
 import { response } from '@stacksjs/router'
-import { buyableCombos, isLiveComboCandidate } from '../../Services/trading/live-combo-checkout'
+import { buyableCombos, comboCheckoutReceipts, isLiveComboCandidate } from '../../Services/trading/live-combo-checkout'
 import { LIVE_COMBO_PAYOUT_FLOOR, suggestionCheckoutReason } from '../../Services/trading/suggestion-kalshi'
 import { suggestionMatchups } from '../../Services/trading/suggestion-matchups'
 import { suggestionPrices } from '../../Services/trading/suggestion-prices'
@@ -22,10 +22,13 @@ export default {
       const slate = suggestions.slate
       const purchaseReason = await suggestionCheckoutReason(db, userId)
       const candidates = purchaseReason ? [] : [...(slate?.alternatives ?? []), ...suggestions.pending].filter(ticket => isLiveComboCandidate(ticket))
-      const prices = await suggestionPrices(candidates.map(ticket => ({ ...ticket, minReturnMultiple: LIVE_COMBO_PAYOUT_FLOOR })))
+      const [prices, receipts] = await Promise.all([
+        suggestionPrices(candidates.map(ticket => ({ ...ticket, minReturnMultiple: LIVE_COMBO_PAYOUT_FLOOR }))),
+        comboCheckoutReceipts(db, userId),
+      ])
       const live = await buyableCombos(db, candidates, prices)
       const matchups = await suggestionMatchups(live)
-      return { slate, live, prices, matchups, purchaseReason }
+      return { slate, live, prices, matchups, purchaseReason, receipts }
     }
     finally {
       db.close()
