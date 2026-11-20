@@ -2,7 +2,8 @@ import type { LiveGame } from '../../app/Services/trading/live-games'
 import type { OddsPapiBoard } from '../../app/Services/trading/oddspapi-checkpoints'
 import type { Database } from '../../app/Support/db'
 import { expect, it, spyOn } from 'bun:test'
-import { loadOddsPapiBoards, matchOddsPapiQuotes, oddsPapiAllowance, saveOddsPapiQuotes } from '../../app/Services/trading/oddspapi-checkpoints'
+import { loadOddsPapiBoards, matchOddsPapiQuotes, matchOddsPapiTotals, oddsPapiAllowance, saveOddsPapiQuotes } from '../../app/Services/trading/oddspapi-checkpoints'
+import { archivedTotalPairs } from '../../app/Services/trading/total-research'
 import { schemaFor } from '../support/schema'
 
 it('saves active offers with their receipt time and leaves the live trading board alone', async () => {
@@ -21,9 +22,13 @@ it('saves active offers with their receipt time and leaves the live trading boar
     book,
     checkedAt,
     fixtures: [{
-      fixtureId: 'fixture', tournamentId: 132, statusName: 'Pre-Game', startTime: startsAt,
+      fixtureId: 'fixture', sportId: 11, tournamentId: 132, statusName: 'Pre-Game', startTime: startsAt,
       participant1Name: 'Boston Celtics', participant2Name: 'Toronto Raptors',
-      bookmakerOdds: { [book]: { bookmakerIsActive: true, suspended: false, markets: { 111: { marketActive: true, outcomes: { 111: offer(1.62), 112: offer(2.52) } } } } },
+      bookmakerOdds: { [book]: { bookmakerIsActive: true, suspended: false, markets: {
+        111: { marketActive: true, outcomes: { 111: offer(1.62), 112: offer(2.52) } },
+        250: { marketActive: true, outcomes: { 500: offer(1.91), 501: offer(1.98) } },
+        251: { marketActive: true, outcomes: { 500: offer(1.91) } },
+      } } },
     }],
   }))
   try {
@@ -39,10 +44,28 @@ it('saves active offers with their receipt time and leaves the live trading boar
     await saveOddsPapiQuotes(db, 1, game, quotes)
     expect(raw.query('SELECT COUNT(*) AS n FROM sportsbook_quote_observations WHERE checked_at_ms = ? AND source = ?').get(checkedAt, 'oddspapi')).toEqual({ n: 4 })
     expect(raw.query('SELECT COUNT(*) AS n FROM odds').get()).toEqual({ n: 0 })
+
+    const catalog = new Map(['250', '251'].map(market => [market, { sportId: 11, line: 223.5, overId: '500', underId: '501' }]))
+    const totals = matchOddsPapiTotals(game, boards, catalog, cutoff)
+    expect(totals).toHaveLength(2)
+    expect(totals[0]).toMatchObject({ bookmaker: 'pinnacle', checkedAt, line: 223.5, over: { price: 1.91 }, under: { price: 1.98 } })
+    expect(matchOddsPapiTotals(game, boards, catalog, checkedAt - 1)).toHaveLength(0)
   }
   finally {
     raw.close()
   }
+})
+
+it('scores only contemporaneous over and under observations at the same line before T−30', () => {
+  const starts = Date.parse('2026-11-20T01:00:00Z')
+  const capture = starts - 31 * 60_000
+  const price = { book: 'pinnacle', kind: 'sportsbook', market_id: 1, line: 227.5, point: 227.5, price: 1.91, capture }
+  const over = { ...price, side: 'over' }
+  const under = { ...price, side: 'under', price: 1.98 }
+  expect(archivedTotalPairs([over, under], starts)).toEqual([{ source: 'sportsbook', book: 'pinnacle', line: 227.5, over: 1.98 / (1.91 + 1.98), at: capture }])
+  expect(archivedTotalPairs([over, { ...under, point: 226.5 }], starts)).toHaveLength(0)
+  expect(archivedTotalPairs([over, { ...under, capture: capture + 1 }], starts)).toHaveLength(0)
+  expect(archivedTotalPairs([over, under].map(quote => ({ ...quote, capture: starts - 29 * 60_000 })), starts)).toHaveLength(0)
 })
 
 it('spreads the quota across the remaining days and leaves a credit for archives', () => {

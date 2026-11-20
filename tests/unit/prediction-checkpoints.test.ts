@@ -3,6 +3,7 @@ import type { Database } from '../../app/Support/db'
 import { describe, expect, it } from 'bun:test'
 import { toMarketInfo } from '../../app/Services/prediction-markets/kalshi-public'
 import { auditRecordedCheckpoints, capturePredictionCheckpoint, settlePredictionCheckpoints } from '../../app/Services/trading/prediction-checkpoints'
+import { capturedTotal } from '../../app/Services/trading/total-checkpoints'
 import { schemaFor } from '../support/schema'
 
 describe('T-30 winner checkpoints', () => {
@@ -53,4 +54,15 @@ describe('T-30 winner checkpoints', () => {
       raw.close()
     }
   })
+})
+
+it('keeps independently quoted over and under bids and asks at the same half-point line', () => {
+  const raw = {
+    ticker: 'KXNBATOTAL-26NOV19LACSAS-224', status: 'active', strike_type: 'greater', floor_strike: 223.5,
+    yes_sub_title: 'Over 223.5 points', yes_bid_dollars: '0.48', yes_ask_dollars: '0.50',
+    no_bid_dollars: '0.49', no_ask_dollars: '0.52',
+  }
+  expect(capturedTotal(toMarketInfo(raw), 42)).toEqual({ ticker: raw.ticker, line: 223.5, bidOver: 0.48, askOver: 0.50, bidUnder: 0.49, askUnder: 0.52, checkedAt: 42 })
+  expect(capturedTotal(toMarketInfo({ ...raw, no_ask_dollars: undefined }), 42)).toBeNull()
+  expect(capturedTotal(toMarketInfo({ ...raw, floor_strike: 224 }), 42)).toBeNull()
 })

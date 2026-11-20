@@ -1,4 +1,5 @@
 import type { Database } from '../../Support/db'
+import type { TotalCheckpoint } from './total-checkpoints'
 import type { KalshiMarketInfo } from '../prediction-markets/kalshi-public'
 import type { LiveGame } from './live-games'
 import type { OddsPapiQuote } from './oddspapi-checkpoints'
@@ -70,6 +71,7 @@ export async function capturePredictionCheckpoint(
   now = Date.now,
   loadMarket = async (ticker: string) => (await kalshiMarkets([ticker], 0)).get(ticker),
   externalQuotes: OddsPapiQuote[] = [],
+  totals?: TotalCheckpoint,
 ): Promise<{ captured: number, paired: number, oddsPapiObservations?: number }> {
   const none = { captured: 0, paired: 0 }
   const start = Date.parse(game.startsAt)
@@ -112,7 +114,10 @@ export async function capturePredictionCheckpoint(
     league: game.league,
     start_at: new Date(start).toISOString(),
     captured_at: new Date(at).toISOString(),
-    payload: JSON.stringify({ bid, ask, usable, kalshiStatus: quote?.status ?? null, observations, consensus, context, oddsPapiQuotes: freshOddsPapi }),
+    payload: JSON.stringify({
+      bid, ask, usable, kalshiStatus: quote?.status ?? null, observations, consensus, context, oddsPapiQuotes: freshOddsPapi,
+      ...(totals && (totals.kalshi.length || totals.sportsbook.length) ? { totals: { ...totals, eventId } } : {}),
+    }),
     created_at: new Date(at).toISOString(),
   }
   const oddsPapiObservations = eventId === null || freshOddsPapi.length === 0 ? 0 : await db.transaction(async (tx) => {

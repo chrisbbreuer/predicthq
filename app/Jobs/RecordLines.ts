@@ -22,6 +22,8 @@ export default new Job({
       const capture = await recordLines(db, undefined, true)
       if (capture.checkpoints)
         log.info(`[PredictionCheckpoints] captured ${capture.checkpoints} checkpoints, ${capture.paired} paired, ${capture.oddsPapiObservations} OddsPapi offers saved`)
+      if (capture.totalGames)
+        log.info(`[PredictionCheckpoints] captured totals for ${capture.totalGames} games, ${capture.totalPairs} sportsbook lines matched to Kalshi`)
       if (new Date().getUTCMinutes() < 10) {
         await settlePredictionCheckpoints(db)
         const report = await auditRecordedCheckpoints(db)

@@ -2,6 +2,7 @@ import type { Database } from '../../Support/db'
 import type { LiveGame, LiveTeam } from './live-games'
 import { loadBookmakerIndex } from '../ingest/prices'
 import { resolveMarket, resolveSelection } from '../ingest/resolve'
+import { cached } from '../prediction-markets/kalshi-public'
 import { utcTime } from './winner-context'
 
 const dayMs = 86_400_000
@@ -32,6 +33,7 @@ interface WinnerMarket {
 
 interface Fixture {
   fixtureId: string
+  sportId?: number
   tournamentId: number
   startTime: string
   trueStartTime?: string | null
@@ -61,6 +63,40 @@ export interface OddsPapiQuote {
   fixtureId: string
 }
 
+export interface OddsPapiTotalPair {
+  bookmaker: string
+  fixtureId: string
+  marketId: string
+  line: number
+  checkedAt: number
+  over: { price: number, observedAt: string }
+  under: { price: number, observedAt: string }
+}
+
+interface TotalDefinition {
+  sportId: number
+  line: number
+  overId: string
+  underId: string
+}
+
+interface MarketDefinition {
+  marketId: number
+  sportId: number
+  marketName: string
+  period: string
+  playerProp?: boolean
+  handicap: number
+  outcomes?: Array<{ outcomeId: number, outcomeName: string }>
+}
+
+const totalNames: Record<number, RegExp> = {
+  11: /^Over Under \(incl\. overtime\)$/i,
+  13: /^Over Under \(incl\. extra innings\)$/i,
+  14: /^Total \(incl\. overtime\)$/i,
+  15: /^(?:Over Under|Total)(?: Goals)? \(incl\. overtime and penalties\)$/i,
+}
+
 interface Account {
   current_subscription_id?: string
   subscriptions?: Array<{ subscription_id?: string, is_active?: boolean, request_limit?: number, request_count?: number }>
@@ -79,6 +115,26 @@ async function request<T>(route: string, apiKey: string, params: Record<string, 
   catch {
     return null
   }
+}
+
+export async function loadOddsPapiTotalCatalog(apiKey = process.env.ODDSPAPI_API_KEY): Promise<Map<string, TotalDefinition>> {
+  if (!apiKey)
+    return new Map()
+  return await cached('oddspapi-full-game-total-definitions', dayMs, async () => {
+    const definitions = await request<MarketDefinition[]>('markets', apiKey, { language: 'en' })
+    if (!Array.isArray(definitions))
+      throw new Error('OddsPapi total definitions unavailable')
+    const totals = new Map<string, TotalDefinition>()
+    for (const row of definitions) {
+      if (row.playerProp || row.period !== 'result' || !totalNames[row.sportId]?.test(row.marketName) || !Number.isFinite(row.handicap))
+        continue
+      const over = row.outcomes?.find(outcome => outcome.outcomeName.toLowerCase() === 'over')
+      const under = row.outcomes?.find(outcome => outcome.outcomeName.toLowerCase() === 'under')
+      if (over && under)
+        totals.set(String(row.marketId), { sportId: row.sportId, line: row.handicap, overId: String(over.outcomeId), underId: String(under.outcomeId) })
+    }
+    return totals
+  }).catch(() => new Map<string, TotalDefinition>())
 }
 
 export function oddsPapiAllowance(now: number, limit: number, used: number, usedToday: number): number {
@@ -152,51 +208,86 @@ function matchesTeam(team: LiveTeam, names: Array<string | undefined>): boolean 
   return names.some(name => name && keys.includes(teamKey(name)))
 }
 
+function matchFixture(game: LiveGame, board: OddsPapiBoard, cutoff?: number) {
+  const league = tournaments[game.league]
+  if (!league || game.state !== 'pre' || (cutoff !== undefined && board.checkedAt > cutoff))
+    return null
+  const start = utcTime(game.startsAt)
+  const matches = board.fixtures.flatMap((fixture) => {
+    const providerStart = utcTime(fixture.startTime)
+    if (fixture.tournamentId !== league.tournament || !fixture.fixtureId || !Number.isFinite(providerStart)
+      || !['Pre-Game', 'Scheduled'].includes(fixture.statusName ?? '') || fixture.trueStartTime
+      || Math.abs(providerStart - start) > 60 * 60_000 || board.checkedAt >= providerStart
+      || (cutoff !== undefined && board.checkedAt > providerStart - 30 * 60_000))
+      return []
+    const p1 = [fixture.participant1Name, fixture.participant1ShortName, fixture.participant1Abbr]
+    const p2 = [fixture.participant2Name, fixture.participant2ShortName, fixture.participant2Abbr]
+    const homeFirst = matchesTeam(game.home, p1) && matchesTeam(game.away, p2)
+    const awayFirst = matchesTeam(game.away, p1) && matchesTeam(game.home, p2)
+    return homeFirst !== awayFirst ? [{ fixture, homeFirst }] : []
+  })
+  return matches.length === 1 ? matches[0]! : null
+}
+
+function observedOffer(offer: Offer | undefined, checkedAt: number): { price: number, observedAt: string } | null {
+  const price = offer?.price
+  if (!offer?.active || typeof price !== 'number' || !Number.isFinite(price) || price <= 1)
+    return null
+  const observedAt = offer.bookmakerChangedAt || offer.changedAt || ''
+  if (observedAt && (!Number.isFinite(utcTime(observedAt)) || utcTime(observedAt) > checkedAt))
+    return null
+  return { price, observedAt }
+}
+
 export function matchOddsPapiQuotes(game: LiveGame, boards: OddsPapiBoard[], cutoff?: number): OddsPapiQuote[] {
   const league = tournaments[game.league]
   if (!league || game.state !== 'pre')
     return []
-  const startsAt = utcTime(game.startsAt)
-  return boards.flatMap(({ book, checkedAt, fixtures }) => {
-    if (cutoff !== undefined && checkedAt > cutoff)
+  return boards.flatMap((board) => {
+    const { book, checkedAt } = board
+    const matched = matchFixture(game, board, cutoff)
+    if (!matched)
       return []
-    const fixturesForGame = fixtures.flatMap(fixture => {
-      const providerStart = utcTime(fixture.startTime)
-      if (fixture.tournamentId !== league.tournament || !fixture.fixtureId || !Number.isFinite(providerStart)
-        || !['Pre-Game', 'Scheduled'].includes(fixture.statusName ?? '') || fixture.trueStartTime
-        || Math.abs(providerStart - startsAt) > 60 * 60_000 || checkedAt >= providerStart
-        || (cutoff !== undefined && checkedAt > providerStart - 30 * 60_000))
-        return []
-      const p1 = [fixture.participant1Name, fixture.participant1ShortName, fixture.participant1Abbr]
-      const p2 = [fixture.participant2Name, fixture.participant2ShortName, fixture.participant2Abbr]
-      const homeFirst = matchesTeam(game.home, p1) && matchesTeam(game.away, p2)
-      const awayFirst = matchesTeam(game.away, p1) && matchesTeam(game.home, p2)
-      return homeFirst !== awayFirst ? [{ fixture, homeFirst }] : []
-    })
-    if (fixturesForGame.length !== 1)
-      return []
-    const { fixture, homeFirst } = fixturesForGame[0]!
+    const { fixture, homeFirst } = matched
     const offerBoard = fixture.bookmakerOdds?.[book]
     const market = offerBoard?.markets?.[league.winner]
     if (!offerBoard?.bookmakerIsActive || offerBoard.suspended || !market?.marketActive)
       return []
     return [0, 1].flatMap((index): OddsPapiQuote[] => {
-      const offer = market.outcomes?.[league.winner + index]?.players?.['0']
-      const price = offer?.price
-      if (!offer?.active || typeof price !== 'number' || !Number.isFinite(price) || price <= 1)
-        return []
-      const observed = offer.bookmakerChangedAt || offer.changedAt || ''
-      if (observed && (!Number.isFinite(utcTime(observed)) || utcTime(observed) > checkedAt))
+      const offer = observedOffer(market.outcomes?.[league.winner + index]?.players?.['0'], checkedAt)
+      if (!offer)
         return []
       return [{
         bookmaker: book,
         side: homeFirst === (index === 0) ? 'home' : 'away',
-        price,
-        observed_at: observed,
+        price: offer.price,
+        observed_at: offer.observedAt,
         updated_at: new Date(checkedAt).toISOString(),
         source: 'oddspapi',
         fixtureId: fixture.fixtureId,
       }]
+    })
+  })
+}
+
+export function matchOddsPapiTotals(game: LiveGame, boards: OddsPapiBoard[], catalog: Map<string, TotalDefinition>, cutoff: number): OddsPapiTotalPair[] {
+  if (!catalog.size)
+    return []
+  const earliest = utcTime(game.startsAt) - 40 * 60_000
+  return boards.flatMap((board) => {
+    const matched = matchFixture(game, board, cutoff)
+    const book = matched?.fixture.bookmakerOdds?.[board.book]
+    if (!matched || board.checkedAt < earliest || !book?.bookmakerIsActive || book.suspended)
+      return []
+    return Object.entries(book.markets ?? {}).flatMap(([marketId, market]) => {
+      const definition = catalog.get(marketId)
+      if (!definition || definition.sportId !== matched.fixture.sportId || !market.marketActive)
+        return []
+      const over = observedOffer(market.outcomes?.[definition.overId]?.players?.['0'], board.checkedAt)
+      const under = observedOffer(market.outcomes?.[definition.underId]?.players?.['0'], board.checkedAt)
+      return over && under
+        ? [{ bookmaker: board.book, fixtureId: matched.fixture.fixtureId, marketId, line: definition.line, checkedAt: board.checkedAt, over, under }]
+        : []
     })
   })
 }

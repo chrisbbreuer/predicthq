@@ -10,6 +10,7 @@ import { linesReport, liveLines } from '../Services/trading/line-snapshots'
 import { auditRecordedCheckpoints, MIN_PAIRED_CHECKPOINTS } from '../Services/trading/prediction-checkpoints'
 import { draftSlate, explicitPicks, MIN_PARLAY_PAYOUT, parlayExpectedReturn, placeSlate } from '../Services/trading/slate'
 import { generateSuggestions, saveSuggestions } from '../Services/trading/suggestions'
+import { totalsReport } from '../Services/trading/total-research'
 import { archiveSportsbookConsensus, importWinnerQuoteArchive, readWinnerQuoteArchive } from '../Services/trading/winner-quote-archive'
 
 /**
@@ -240,6 +241,22 @@ export default function (cli: CLI) {
         const won = report.bets.filter(bet => bet.won).length
         const pnl = report.bets.reduce((sum, bet) => sum + bet.pnl, 0)
         log.info(`Bets at a ${report.gap} gap: ${report.bets.length} (${won} won) · P&L ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)} on $1 stakes · ROI ${report.roi === null ? '-' : `${(report.roi * 100).toFixed(1)}%`} · ${report.daysUp}/${report.days} days up`)
+      }
+      finally {
+        db.close()
+      }
+    })
+
+  cli
+    .command('trading:totals', 'Backtest full-game overs and unders on recorded pregame quotes')
+    .option('--days <n>', 'Number of days of history to read', { default: '90' })
+    .action(async (options: { days?: string }) => {
+      const days = Number(options.days)
+      if (!Number.isInteger(days) || days < 1 || days > 365)
+        throw new RangeError('Supply --days between 1 and 365')
+      const db = new Database()
+      try {
+        console.log(JSON.stringify(await totalsReport(db, days), null, 2))
       }
       finally {
         db.close()

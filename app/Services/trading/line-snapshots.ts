@@ -8,8 +8,9 @@ import { SERIES } from '../odds/books/kalshi'
 import { kalshiFee } from './backtest'
 import { tradablePrice } from './evidence'
 import { LEAGUE_PREFIXES, liveGameFor, parseGameTicker } from './live-games'
-import { loadOddsPapiBoards, matchOddsPapiQuotes } from './oddspapi-checkpoints'
+import { loadOddsPapiBoards, loadOddsPapiTotalCatalog, matchOddsPapiQuotes, matchOddsPapiTotals } from './oddspapi-checkpoints'
 import { capturePredictionCheckpoint, winnerCheckpointDue, winnerCheckpointLeagues } from './prediction-checkpoints'
+import { loadKalshiGameTotals } from './total-checkpoints'
 import { utcTime } from './winner-context'
 
 /**
@@ -29,7 +30,7 @@ import { utcTime } from './winner-context'
 
 /** Every game-winner series we price, soccer included, plus women's college basketball. */
 export const LINE_SERIES = [...new Set([...Object.values(SERIES), 'KXNCAAWBGAME'])]
-const checkpointSeries = LINE_SERIES.filter(series => LEAGUE_PREFIXES.some(([prefix, league]) => series.startsWith(prefix) && winnerCheckpointLeagues.has(league)))
+const checkpointSeries = [...LINE_SERIES, 'KXWNBAGAME'].filter(series => LEAGUE_PREFIXES.some(([prefix, league]) => series.startsWith(prefix) && winnerCheckpointLeagues.has(league)))
 
 export type LineSide = 'home' | 'away' | 'draw'
 
@@ -181,7 +182,7 @@ export async function liveLines(deps: RecordDeps = defaultDeps, windowMinutes = 
 }
 
 export async function recordLines(db: Database, deps: RecordDeps = defaultDeps, capture = false) {
-  const saved = capture ? await recordWinnerCheckpoints(db, deps) : { checkpoints: 0, paired: 0, oddsPapiObservations: 0 }
+  const saved = capture ? await recordWinnerCheckpoints(db, deps) : { checkpoints: 0, paired: 0, oddsPapiObservations: 0, totalGames: 0, totalPairs: 0 }
   const lines = await liveLines(deps, WINDOW_MINUTES)
   const stamp = new Date(deps.now()).toISOString()
   for (const line of lines) {
@@ -211,7 +212,7 @@ async function recordWinnerCheckpoints(db: Database, deps: RecordDeps) {
     }))
   }
   if (candidates.size === 0)
-    return { checkpoints: 0, paired: 0, oddsPapiObservations: 0 }
+    return { checkpoints: 0, paired: 0, oddsPapiObservations: 0, totalGames: 0, totalPairs: 0 }
 
   const cohort = [...candidates.values()]
   const dueLeagues = new Map<string, number>()
@@ -221,21 +222,32 @@ async function recordWinnerCheckpoints(db: Database, deps: RecordDeps) {
       dueLeagues.set(game.league, (dueLeagues.get(game.league) ?? 0) + 1)
   }
   const leaguesByGames = [...dueLeagues].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([league]) => league)
+  const totalBooks = cohort.map(({ ticker, game }) => loadKalshiGameTotals(ticker, utcTime(game.startsAt), deps.now))
   const [sportsBooks, kalshi] = await Promise.all([
     loadOddsPapiBoards(db, leaguesByGames),
     kalshiMarkets(cohort.map(row => row.ticker), 0).catch(() => new Map<string, KalshiMarketInfo>()),
   ])
+  const totalCatalog = sportsBooks.length ? await loadOddsPapiTotalCatalog() : new Map()
   let checkpoints = 0
   let paired = 0
   let oddsPapiObservations = 0
-  for (const { ticker, game } of cohort) {
-    const quotes = matchOddsPapiQuotes(game, sportsBooks, utcTime(game.startsAt) - 30 * 60_000)
-    const observation = await capturePredictionCheckpoint(db, ticker, game, deps.now, async () => kalshi.get(ticker), quotes)
+  let totalGames = 0
+  let totalPairs = 0
+  for (const [i, { ticker, game }] of cohort.entries()) {
+    const cutoff = utcTime(game.startsAt) - 30 * 60_000
+    const quotes = matchOddsPapiQuotes(game, sportsBooks, cutoff)
+    const totals = {
+      sportsbook: matchOddsPapiTotals(game, sportsBooks, totalCatalog, cutoff),
+      kalshi: await totalBooks[i]!,
+    }
+    const observation = await capturePredictionCheckpoint(db, ticker, game, deps.now, async () => kalshi.get(ticker), quotes, totals)
     checkpoints += observation.captured
     paired += observation.paired
     oddsPapiObservations += observation.oddsPapiObservations ?? 0
+    totalGames += observation.captured && (totals.kalshi.length || totals.sportsbook.length) ? 1 : 0
+    totalPairs += observation.captured * totals.sportsbook.filter(pair => totals.kalshi.some(quote => quote.line === pair.line)).length
   }
-  return { checkpoints, paired, oddsPapiObservations }
+  return { checkpoints, paired, oddsPapiObservations, totalGames, totalPairs }
 }
 
 export interface LineBet {
