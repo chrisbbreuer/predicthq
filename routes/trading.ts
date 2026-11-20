@@ -58,10 +58,13 @@ route.group({ middleware: ['auth', 'throttle:60,1'] }, () => {
   // without automated execution, queues decisions into.
   route.post('/trading/decisions/{id}/review', 'Actions/Trading/ReviewDecision')
 
-  // Suggested bets on the bets page. Approving records a paper bet; real
-  // money is the user's own step on Kalshi, linked from each card.
+  // Paper decisions are separate from live combo checkout.
   route.get('/trading/suggestions', 'Actions/Trading/GetSuggestions')
   route.post('/trading/suggestions/{id}/decide', 'Actions/Trading/DecideSuggestion')
+})
+
+route.group({ middleware: ['auth', 'throttle:12,1'] }, () => {
+  route.post('/trading/suggestions/{id}/checkout', 'Actions/Trading/CheckoutSuggestion')
 })
 
 // Connecting an account verifies the credentials against the venue before

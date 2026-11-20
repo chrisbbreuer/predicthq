@@ -36,6 +36,19 @@ export interface KalshiComboLeg {
   side: 'yes' | 'no'
 }
 
+export interface KalshiRfqQuote {
+  id: string
+  rfq_id: string
+  market_ticker: string
+  status: string
+  no_bid_dollars?: string
+  no_contracts_fp?: string
+  rfq_target_cost_dollars?: string
+  target_cost_excludes_fees?: boolean
+  rfq_creator_order_id?: string
+  executed_ts?: string
+}
+
 /**
  * Kalshi's authenticated trading API.
  *
@@ -140,7 +153,35 @@ export class KalshiTradingClient implements TradingClient {
       throw failure
     }
 
-    return await response.json() as T
+    return (response.status === 204 ? undefined : await response.json()) as T
+  }
+
+  async createComboRfq(ticker: string, stake: number): Promise<string> {
+    const result = await this.request<{ id: string }>('POST', '/communications/rfqs', {
+      market_ticker: ticker, target_cost_dollars: stake.toFixed(4), target_cost_excludes_fees: false,
+      rest_remainder: false, obscure_creator_id: true,
+      ...(this.credentials.subaccount === undefined ? {} : { subaccount: this.credentials.subaccount }),
+    })
+    return result.id
+  }
+
+  async comboQuotes(rfq: string): Promise<KalshiRfqQuote[]> {
+    const query = new URLSearchParams({ rfq_id: rfq, rfq_user_filter: 'self', limit: '20' })
+    return (await this.request<{ quotes: KalshiRfqQuote[] }>('GET', `/communications/quotes?${query}`)).quotes
+  }
+
+  async acceptComboQuote(rfq: string, quote: string): Promise<void> {
+    await this.request('PUT', `/communications/rfqs/${encodeURIComponent(rfq)}/quotes/${encodeURIComponent(quote)}/accept`, { accepted_side: 'no' })
+  }
+
+  async closeComboRfq(rfq: string): Promise<void> {
+    try {
+      await this.request('DELETE', `/communications/rfqs/${encodeURIComponent(rfq)}`)
+    }
+    catch (error) {
+      if (!(error instanceof VenueError) || error.status !== 404)
+        throw error
+    }
   }
 
   async fetchHistory() {

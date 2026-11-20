@@ -65,6 +65,9 @@ const suggestions = state<any[]>([])
 const suggestionsLoading = state(true)
 const suggestionsError = state(false)
 const purchaseReason = state('')
+const checkoutEnabled = state(false)
+const checkoutBusy = state(0)
+const checkout = state<Record<number, { state: string, offer?: { id: string, price: number, payout: number, maxCost: number }, error?: string }>>({})
 const selectedSlate = state<any>(null)
 const prepared = state<Record<number, { url: string, amount: string, error: string }>>({})
 const preparing = state(0)
@@ -665,6 +668,7 @@ function suggestionView(row: any, group: 'saved' | 'alternative' | 'suggested', 
     canApprove: group === 'suggested' ? isOpen && row.status === 'pending' : Boolean(row.canApprove),
     approved: row.status === 'approved',
     canPrepare: isOpen && quoted && !row.kalshiOrderUrl,
+    canCheckout: isOpen && quoted && !single && Number(row.stake) === 1,
     kalshiOrderUrl: isOpen && quoted ? (row.kalshiOrderUrl || '') : '',
     paperPayout: currentPayout != null ? usd(currentPayout) : '',
     payoutLabel: quote?.paperPayout != null ? 'Est. paper return' : 'Paper return at selection',
@@ -700,6 +704,7 @@ async function loadSuggestions(): Promise<void> {
       summary: summary[0] + ' won · ' + summary[1] + ' lost · ' + summary[2] + ' awaiting results' + (summary[3] ? ' · ' + summary[3] + ' partial' : ''),
     } : null)
     purchaseReason.set(data.purchaseReason || '')
+    checkoutEnabled.set(data.checkoutEnabled === true)
     suggestionsError.set(false)
   }
   catch {
@@ -707,6 +712,28 @@ async function loadSuggestions(): Promise<void> {
   }
   finally {
     suggestionsLoading.set(false)
+  }
+}
+
+async function liveCheckout(id: number, quoteId?: string): Promise<void> {
+  if (checkoutBusy())
+    return
+  checkoutBusy.set(id)
+  try {
+    const response = await bookFetch('/api/trading/suggestions/' + id + '/checkout', {
+      method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(quoteId ? { operation: 'buy', quoteId } : { operation: 'quote' }),
+    })
+    const data = await response.json()
+    if (!response.ok)
+      throw new Error(data.message || data.error || 'Kalshi could not update this checkout.')
+    checkout.set({ ...checkout(), [id]: data })
+  }
+  catch (exception) {
+    checkout.set({ ...checkout(), [id]: { state: 'waiting', error: messageOf(exception) } })
+  }
+  finally {
+    checkoutBusy.set(0)
   }
 }
 
@@ -1059,9 +1086,11 @@ onMount(start)
                           <span x-show="ticket.payoutTarget" x-text="ticket.payoutTarget"></span>
                         </div>
                         <div class="pick-buttons">
-                          <a x-show="ticket.canPrepare && prepared()[ticket.id]?.url" :href="prepared()[ticket.id]?.url" target="_blank" rel="noopener noreferrer" class="pick-primary">Review on Kalshi <i aria-hidden="true" class="h-4 w-4 i-hugeicons-arrow-up-right-01"></i></a>
-                          <a x-show="ticket.kalshiOrderUrl" :href="ticket.kalshiOrderUrl" target="_blank" rel="noopener noreferrer" class="pick-primary">Review on Kalshi <i aria-hidden="true" class="h-4 w-4 i-hugeicons-arrow-up-right-01"></i></a>
-                          <button x-show="ticket.canPrepare && !prepared()[ticket.id]?.url" type="button" class="pick-primary" :disabled="preparing() !== 0" @click="prepareKalshi(ticket.id)" x-text="preparing() === ticket.id ? 'Preparing…' : ticket.single ? 'Prepare bet' : 'Prepare combo'"></button>
+                          <a x-show="!(checkoutEnabled() && ticket.canCheckout) && ticket.canPrepare && prepared()[ticket.id]?.url" :href="prepared()[ticket.id]?.url" target="_blank" rel="noopener noreferrer" class="pick-primary">Review on Kalshi <i aria-hidden="true" class="h-4 w-4 i-hugeicons-arrow-up-right-01"></i></a>
+                          <a x-show="!(checkoutEnabled() && ticket.canCheckout) && ticket.kalshiOrderUrl" :href="ticket.kalshiOrderUrl" target="_blank" rel="noopener noreferrer" class="pick-primary">Review on Kalshi <i aria-hidden="true" class="h-4 w-4 i-hugeicons-arrow-up-right-01"></i></a>
+                          <button x-show="!(checkoutEnabled() && ticket.canCheckout) && ticket.canPrepare && !prepared()[ticket.id]?.url" type="button" class="pick-primary" :disabled="preparing() !== 0" @click="prepareKalshi(ticket.id)" x-text="preparing() === ticket.id ? 'Preparing…' : ticket.single ? 'Prepare bet' : 'Prepare combo'"></button>
+                          <button x-show="checkoutEnabled() && ticket.canCheckout && checkout()[ticket.id]?.state !== 'executed' && !checkout()[ticket.id]?.offer" type="button" class="pick-primary" :disabled="checkoutBusy() !== 0" @click="liveCheckout(ticket.id)" x-text="checkoutBusy() === ticket.id ? 'Checking…' : checkout()[ticket.id]?.state === 'submitted' ? 'Check order status' : checkout()[ticket.id] ? 'Check for a quote' : 'Get live quote'"></button>
+                          <button x-show="checkoutEnabled() && ticket.canCheckout && checkout()[ticket.id]?.offer" type="button" class="pick-primary" :disabled="checkoutBusy() !== 0" @click="liveCheckout(ticket.id, checkout()[ticket.id]?.offer?.id)">Confirm live purchase</button>
                           <button x-show="ticket.canApprove" type="button" class="desk-text-action" :disabled="suggestionBusy() !== 0" @click="decide(ticket.id, true)" x-text="ticket.group === 'saved' ? 'Mark reviewed' : 'Track on paper'"></button>
                           <button x-show="ticket.group === 'suggested' && ticket.canApprove" type="button" class="desk-text-action" :disabled="suggestionBusy() !== 0" @click="decide(ticket.id, false)">Dismiss</button>
                           <span x-show="ticket.approved" class="font-semibold text-xs pos">Reviewed on paper</span>
@@ -1069,6 +1098,11 @@ onMount(start)
                       </div>
                       <p x-show="prepared()[ticket.id]?.url && ticket.canPrepare" class="text-xs muted" x-text="'Planned stake ' + prepared()[ticket.id]?.amount + ' · check the live payout when you review.'"></p>
                       <p x-show="prepared()[ticket.id]?.error" class="text-xs neg" role="status" x-text="prepared()[ticket.id]?.error"></p>
+                      <p x-show="checkout()[ticket.id]?.offer" class="font-semibold text-sm" role="status" x-text="'Up to ' + usd(checkout()[ticket.id]?.offer?.maxCost) + ' including fees · ' + usd(checkout()[ticket.id]?.offer?.payout) + ' payout if all legs win'"></p>
+                      <p x-show="checkout()[ticket.id]?.state === 'waiting' && !checkout()[ticket.id]?.error" class="text-xs muted" role="status">Waiting for a quote that meets the payout floor.</p>
+                      <p x-show="checkout()[ticket.id]?.state === 'submitted'" class="text-xs muted" role="status">Awaiting Kalshi confirmation. Check the order status here or in Positions.</p>
+                      <p x-show="checkout()[ticket.id]?.state === 'executed'" class="text-xs pos" role="status">Kalshi confirmed the order. See Positions for the fill.</p>
+                      <p x-show="checkout()[ticket.id]?.error" class="text-xs neg" role="status" x-text="checkout()[ticket.id]?.error"></p>
                     </article>
                   </template>
                 </div>

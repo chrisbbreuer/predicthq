@@ -11241,6 +11241,65 @@
         ]
       },
       {
+        "table": "suggestion_checkouts",
+        "columns": [
+          {
+            "name": "id",
+            "type": "bigint",
+            "isPrimaryKey": true,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": false
+          },
+          {
+            "name": "payload",
+            "type": "text",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": false
+          },
+          {
+            "name": "bet_suggestion_id",
+            "type": "bigint",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": false,
+            "references": {
+              "table": "bet_suggestions",
+              "column": "id"
+            }
+          },
+          {
+            "name": "created_at",
+            "type": "datetime",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": false,
+            "hasDefault": true,
+            "defaultValue": "UTC_TIMESTAMP"
+          },
+          {
+            "name": "updated_at",
+            "type": "datetime",
+            "isPrimaryKey": false,
+            "isUnique": false,
+            "isNullable": true,
+            "hasDefault": false
+          }
+        ],
+        "indexes": [
+          {
+            "name": "suggestion_checkout_ticket",
+            "columns": [
+              "bet_suggestion_id"
+            ],
+            "type": "unique"
+          }
+        ]
+      },
+      {
         "table": "suggestion_slates",
         "columns": [
           {
@@ -16308,7 +16367,7 @@
       }
     ]
   },
-  "hash": "9b54336dda604c3caaaed02890951b5e1f06b21dd41afd6f97b8d0b66dc5bb23",
+  "hash": "a75e35e2405b8724c82e1ea9e84f4861c41dd4503cc4c4298cd3a012fc06f046",
   "dialect": "sqlite",
-  "updatedAt": "2026-11-20T00:59:11.734Z"
+  "updatedAt": "2026-11-20T01:30:02.915Z"
 }

@@ -2,10 +2,9 @@ import type { Database } from '../../Support/db'
 import type { KalshiComboCollection } from '../prediction-markets/kalshi-public'
 import type { KalshiComboLeg } from './kalshi-trading'
 import type { Suggestion } from './suggestions'
-import { resolveEntitlements } from '../billing/entitlements'
 import { cached, kalshiComboCollections, kalshiMarkets } from '../prediction-markets/kalshi-public'
 import { jurisdictionObjection } from './eligibility'
-import { clientFor, liveAccessReason } from './execute'
+import { clientFor } from './execute'
 import { haltState } from './halt'
 import { KalshiTradingClient } from './kalshi-trading'
 import { suggestionPrices } from './suggestion-prices'
@@ -13,13 +12,12 @@ import { VenueError } from './venue'
 
 export class SuggestionPreparationError extends Error {}
 
-export async function suggestionPurchaseReason(db: Database, userId: number): Promise<string> {
-  const [halt, entitlement] = await Promise.all([haltState(db), resolveEntitlements(db, userId)])
+export async function suggestionCheckoutReason(db: Database, userId: number): Promise<string> {
+  const halt = await haltState(db)
   if (halt.halted)
-    return 'In-app buying is disabled in production. Review eligible tickets on Kalshi.'
-  if (!entitlement.canAutoExecute || liveAccessReason(userId))
-    return 'In-app buying is unavailable for your account. You can prepare a ticket for review on Kalshi.'
-  return 'You can prepare an exact ticket here and confirm the purchase on Kalshi.'
+    return 'In-app buying is disabled for this deployment.'
+  const allowed = (process.env.LIVE_CHECKOUT_USER_ALLOWLIST ?? '').split(',').map(id => id.trim()).includes(String(userId))
+  return allowed ? '' : 'In-app buying is unavailable for your account.'
 }
 
 function comboFits(collection: KalshiComboCollection, legs: KalshiComboLeg[]): boolean {
@@ -63,7 +61,7 @@ export async function prepareExactCombo(
   throw new SuggestionPreparationError('Kalshi does not offer these exact legs together.')
 }
 
-export async function prepareSuggestionOnKalshi(db: Database, userId: number, ticket: Suggestion): Promise<{ url: string, stake: number }> {
+export async function suggestionLegs(ticket: Suggestion): Promise<KalshiComboLeg[]> {
   const markets = await kalshiMarkets(ticket.legs.map(leg => leg.ticker), 0)
   const quote = (await suggestionPrices([ticket], async () => markets))[ticket.id]
   if (!quote || quote.flag === 'missing')
@@ -71,13 +69,16 @@ export async function prepareSuggestionOnKalshi(db: Database, userId: number, ti
   if (quote.flag === 'confidence')
     throw new SuggestionPreparationError('At least one leg fell below the 70% cutoff.')
 
-  const legs = ticket.legs.map((leg) => {
+  return ticket.legs.map((leg) => {
     const event = markets.get(leg.ticker)?.eventTicker
     if (!event || !/^[A-Z0-9-]+$/.test(event))
       throw new SuggestionPreparationError('Kalshi did not identify the underlying event.')
     return { event_ticker: event, market_ticker: leg.ticker, side: leg.side }
   })
+}
 
+export async function prepareSuggestionOnKalshi(db: Database, userId: number, ticket: Suggestion): Promise<{ url: string, stake: number }> {
+  const legs = await suggestionLegs(ticket)
   if (ticket.kind === 'single') {
     const leg = legs[0]!
     const series = leg.event_ticker.split('-')[0]!

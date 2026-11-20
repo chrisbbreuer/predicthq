@@ -1,7 +1,7 @@
 import { Database } from '../../Support/db'
 import { authenticatedUserId } from '../../Support/request-auth'
 import { response } from '@stacksjs/router'
-import { suggestionPurchaseReason } from '../../Services/trading/suggestion-kalshi'
+import { suggestionCheckoutReason } from '../../Services/trading/suggestion-kalshi'
 import { suggestionMatchups } from '../../Services/trading/suggestion-matchups'
 import { suggestionPrices } from '../../Services/trading/suggestion-prices'
 import { listSuggestions } from '../../Services/trading/suggestions'
@@ -23,9 +23,9 @@ export default {
       const [prices, matchups, purchaseReason] = await Promise.all([
         suggestionPrices([...saved, ...suggestions.pending]),
         suggestionMatchups([...saved, ...suggestions.pending]),
-        suggestionPurchaseReason(db, userId),
+        suggestionCheckoutReason(db, userId),
       ])
-      return { ...suggestions, prices, matchups, purchaseReason }
+      return { ...suggestions, prices, matchups, purchaseReason, checkoutEnabled: !purchaseReason }
     }
     finally {
       db.close()
