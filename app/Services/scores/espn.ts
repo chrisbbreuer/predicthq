@@ -267,6 +267,12 @@ export interface BoxPlayer {
   stats: string[]
 }
 
+export interface BoxStatGroup {
+  name: string
+  labels: string[]
+  players: Pick<BoxPlayer, 'id' | 'name' | 'position' | 'starter' | 'dnp' | 'stats'>[]
+}
+
 export interface GameDetail {
   source?: string
   sourceUpdatedAt?: string
@@ -294,11 +300,11 @@ export interface GameDetail {
   note: string | null
   /** Player box scores, empty before tip-off or for sports ESPN lacks them for. */
   box: { away: BoxTeam | null, home: BoxTeam | null }
+  playerGroups?: { away: BoxStatGroup[], home: BoxStatGroup[] }
 }
 
-/** ESPN's `boxscore.players` entry for one team, as rows we can draw. */
-function toBoxTeam(entry: any): BoxTeam | null {
-  const group = entry?.statistics?.[0]
+/** One statistic group from ESPN's `boxscore.players` entry. */
+function toBoxTeam(group: any): BoxTeam | null {
   const labels: string[] = Array.isArray(group?.labels) ? group.labels.map((label: unknown) => String(label)) : []
   const athletes: any[] = Array.isArray(group?.athletes) ? group.athletes : []
   if (labels.length === 0 || athletes.length === 0)
@@ -318,6 +324,17 @@ function toBoxTeam(entry: any): BoxTeam | null {
       stats: Array.isArray(row?.stats) ? row.stats.map((value: unknown) => String(value)) : [],
     })).filter(player => player.name),
   }
+}
+
+function playerGroups(entry: any): BoxStatGroup[] {
+  const groups: any[] = Array.isArray(entry?.statistics) ? entry.statistics : []
+  return groups.flatMap((group) => {
+    const box = toBoxTeam(group)
+    const name = String(group?.name ?? group?.type ?? '').trim()
+    if (!box)
+      return []
+    return [{ name, labels: box.labels, players: box.players.map(({ id, name, position, starter, dnp, stats }) => ({ id, name, position, starter, dnp, stats })) }]
+  })
 }
 
 /**
@@ -393,7 +410,7 @@ function flatStats(team: any): Map<string, string> {
  * throwing, so the page shows "not found" instead of a 500 when ESPN
  * changes shape or an id is stale.
  */
-export async function fetchGame(leagueKey: string, eventId: string, options?: { ttlMs?: number }): Promise<GameDetail | null> {
+export async function fetchGame(leagueKey: string, eventId: string, options?: { ttlMs?: number, includePlayerGroups?: boolean }): Promise<GameDetail | null> {
   if (eventId.startsWith('kalshi-'))
     return kalshiGameDetail(leagueKey, eventId).catch(() => null)
   const league = leagueFor(leagueKey)
@@ -461,7 +478,9 @@ export async function fetchGame(leagueKey: string, eventId: string, options?: { 
 
   // Box teams again by id, since ESPN orders them independently too.
   const boxPlayers: any[] = d?.boxscore?.players ?? []
-  const playersFor = (c: any) => toBoxTeam(boxPlayers.find(b => String(b?.team?.id ?? '') === String(c?.team?.id ?? '')))
+  const playersFor = (c: any) => boxPlayers.find(b => String(b?.team?.id ?? '') === String(c?.team?.id ?? ''))
+  const homePlayers = playersFor(homeRaw)
+  const awayPlayers = playersFor(awayRaw)
   const plays: any[] = Array.isArray(d?.plays) ? d.plays : []
 
   return {
@@ -473,7 +492,8 @@ export async function fetchGame(leagueKey: string, eventId: string, options?: { 
     period: num(competition?.status?.period) ?? undefined,
     lastPlay: type?.state === 'in' ? String(plays[plays.length - 1]?.text ?? d?.situation?.lastPlay?.text ?? '') : '',
     broadcast: competition?.broadcasts?.[0]?.media?.shortName ?? null,
-    box: { away: playersFor(awayRaw), home: playersFor(homeRaw) },
+    box: { away: toBoxTeam(awayPlayers?.statistics?.[0]), home: toBoxTeam(homePlayers?.statistics?.[0]) },
+    ...(options?.includePlayerGroups ? { playerGroups: { away: playerGroups(awayPlayers), home: playerGroups(homePlayers) } } : {}),
     clock: type?.state === 'in' ? String(competition?.status?.displayClock ?? '') : '',
     venue: d?.gameInfo?.venue?.fullName ?? null,
     attendance: num(d?.gameInfo?.attendance),

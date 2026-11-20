@@ -138,27 +138,40 @@ function boxFeature(rows: Observation[], keys: string[], at: number) {
 
 function injuryBurden(report: InjurySnapshot, rows: Observation[], at: number) {
   const minutes = new Map<string, number[]>()
+  const nameKey = (name: string) => `name:${name.normalize('NFKD').toLowerCase().replace(/[^a-z0-9]/g, '')}`
   for (const row of rows.slice(0, 8)) {
     if ((row.game.boxKnownAt ?? Infinity) > at)
       continue
-    const box = row.game.box?.players[row.home ? 'home' : 'away']
-    const column = box?.labels.indexOf('MIN') ?? -1
-    if (column < 0)
-      continue
-    for (const player of box?.players ?? []) {
-      const playingTime = player.stats[column]
-      if (!player.id || player.dnp || !playingTime)
+    const side = row.home ? 'home' : 'away'
+    const box = row.game.box
+    const groups = box?.playerGroupsCapturedAt && Date.parse(box.playerGroupsCapturedAt) <= at ? box.playerGroups?.[side] : null
+    const byGame = new Map<string, number>()
+    for (const group of groups?.length ? groups : [box?.players[side]]) {
+      const column = group?.labels.findIndex(label => label === 'MIN' || label === 'TOI') ?? -1
+      if (column < 0)
         continue
-      const [m, s] = playingTime.split(':').map(Number)
-      if (!Number.isFinite(m))
-        continue
-      const games = minutes.get(player.id) ?? []
-      games.push(m! + (s || 0) / 60)
-      minutes.set(player.id, games)
+      for (const player of group?.players ?? []) {
+        const playingTime = player.stats[column]
+        if (player.dnp || !playingTime)
+          continue
+        const [m, s] = playingTime.split(':').map(Number)
+        if (!Number.isFinite(m))
+          continue
+        const played = m! + (s || 0) / 60
+        const playerName = nameKey(player.name)
+        byGame.set(playerName, Math.max(played, byGame.get(playerName) ?? 0))
+        if (player.id)
+          byGame.set(player.id, Math.max(played, byGame.get(player.id) ?? 0))
+      }
+    }
+    for (const [key, played] of byGame) {
+      const games = minutes.get(key) ?? []
+      games.push(played)
+      minutes.set(key, games)
     }
   }
   return report.injuries.reduce((sum, player) => {
-    const history = minutes.get(player.athleteId)
+    const history = minutes.get(player.athleteId) ?? minutes.get(nameKey(player.name))
     const positionalWeight = /^(?:QB|GK|G)$/i.test(player.position) ? 1.5 : .5
     return sum + player.severity * (history?.length ? clamp(mean(history) / 25, 0.1, 1.8) : positionalWeight)
   }, 0)
