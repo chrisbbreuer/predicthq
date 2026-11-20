@@ -8,9 +8,10 @@ interface LegQuote {
   bid: number
   ask: number
   confidence: number
+  eventTicker: string
 }
 
-interface SuggestionQuote {
+export interface SuggestionQuote {
   legs: Array<LegQuote | null>
   paperPayout: number | null
   flag: 'missing' | 'confidence' | 'spread' | 'payout' | null
@@ -23,7 +24,7 @@ function quoteLeg(market: KalshiMarketInfo | undefined, side: 'yes' | 'no'): Leg
   const ask = side === 'yes' ? market.yesAsk : market.noAsk
   if (bid == null || ask == null || bid <= 0 || ask < bid || ask >= 1)
     return null
-  return { bid, ask, confidence: (bid + ask) / 2 }
+  return { bid, ask, confidence: (bid + ask) / 2, eventTicker: market.eventTicker }
 }
 
 /** Recheck the executable sides from the public order book before the user opens a ticket. */
@@ -37,7 +38,7 @@ export async function suggestionPrices(
   if (active.length === 0)
     return {}
 
-  const tickers = active.flatMap(ticket => ticket.legs.map(leg => leg.ticker))
+  const tickers = [...new Set(active.flatMap(ticket => ticket.legs.map(leg => leg.ticker)))].sort()
   const markets = await load(tickers, 30_000).catch(() => new Map<string, KalshiMarketInfo>())
   const quotes: Record<number, SuggestionQuote> = {}
   for (const ticket of active) {

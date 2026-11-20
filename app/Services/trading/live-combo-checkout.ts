@@ -1,12 +1,12 @@
 import type { Database } from '../../Support/db'
 import type { KalshiRfqQuote } from './kalshi-trading'
+import type { SuggestionQuote } from './suggestion-prices'
 import type { Suggestion } from './suggestions'
 import { createHash, randomUUID } from 'node:crypto'
 import { kalshiComboCollections } from '../prediction-markets/kalshi-public'
-import { jurisdictionObjection } from './eligibility'
 import { clientFor } from './execute'
 import { KalshiTradingClient } from './kalshi-trading'
-import { prepareExactCombo, suggestionCheckoutReason, suggestionLegs, SuggestionPreparationError } from './suggestion-kalshi'
+import { comboFits, kalshiCheckoutAccount, LIVE_COMBO_PAYOUT_FLOOR, prepareExactCombo, suggestionCheckoutReason, suggestionLegs, SuggestionPreparationError } from './suggestion-kalshi'
 
 interface Offer { id: string, price: number, payout: number, maxCost: number, expires: number }
 interface Checkout {
@@ -39,15 +39,48 @@ async function checkoutAccount(db: Database, userId: number) {
   const reason = await suggestionCheckoutReason(db, userId)
   if (reason)
     throw new SuggestionPreparationError(reason)
-  const account = await db.query<{ credentials: string, status: string, jurisdiction: string }>(`
-    SELECT credentials, status, jurisdiction FROM exchange_accounts WHERE user_id = ? AND venue = 'kalshi'
-  `).get(userId)
-  if (!account || account.status !== 'active' || jurisdictionObjection('kalshi', account.jurisdiction))
+  const account = await kalshiCheckoutAccount(db, userId)
+  if (!account)
     throw new SuggestionPreparationError('Connect an eligible, active Kalshi account to buy a combo.')
   const client = await clientFor(account.credentials)
   if (!(client instanceof KalshiTradingClient))
     throw new SuggestionPreparationError('Reconnect your Kalshi account to request a quote.')
   return { client, credentials: createHash('sha256').update(account.credentials).digest('hex') }
+}
+
+export function isLiveComboCandidate(ticket: Suggestion, now = Date.now()): boolean {
+  return ticket.kind === 'parlay' && Number(ticket.stake) === 1 && ticket.legs.length >= 2
+    && (ticket.status === 'pending' || ticket.status === 'approved') && Date.parse(ticket.expiresAt) > now
+}
+
+export async function buyableCombos(
+  db: Database,
+  tickets: Suggestion[],
+  prices: Record<number, SuggestionQuote>,
+  collections = kalshiComboCollections,
+  now = Date.now(),
+): Promise<Suggestion[]> {
+  const eligible = tickets.filter(ticket => isLiveComboCandidate(ticket, now) && prices[ticket.id]?.flag === null)
+  if (!eligible.length)
+    return []
+  const rows = await db.query<{ bet_suggestion_id: number, payload: string }>(`
+    SELECT bet_suggestion_id, payload FROM suggestion_checkouts
+    WHERE bet_suggestion_id IN (${eligible.map(() => '?').join(',')})
+  `).all(...eligible.map(ticket => ticket.id))
+  const submitted = new Set(rows.filter(row => {
+    const phase = (JSON.parse(row.payload) as Checkout).phase
+    return phase === 'submitted' || phase === 'submitting'
+  }).map(row => Number(row.bet_suggestion_id)))
+  const available = await Promise.all(eligible.map(async (ticket) => {
+    if (submitted.has(ticket.id))
+      return null
+    const legs = ticket.legs.map((leg, index) => ({ event_ticker: prices[ticket.id]!.legs[index]?.eventTicker ?? '', market_ticker: leg.ticker, side: leg.side }))
+    if (legs.some(leg => !leg.event_ticker))
+      return null
+    const allowed = await collections(legs[0]!.event_ticker).catch(() => [])
+    return allowed.some(collection => comboFits(collection, legs)) ? ticket : null
+  }))
+  return available.filter(ticket => ticket !== null)
 }
 
 async function load(db: Database, id: number) {
@@ -90,11 +123,11 @@ export async function comboCheckout(db: Database, userId: number, ticket: Sugges
   if (intent?.phase === 'submitting' || intent?.phase === 'submitted')
     return status(client, intent)
 
-  const multiple = 1.5
+  const multiple = LIVE_COMBO_PAYOUT_FLOOR
   if (confirmation) {
     if (intent?.phase !== 'open' || !intent.rfq || !intent.market || !raw || intent.offer?.id !== confirmation || intent.offer.expires <= Date.now())
       throw new SuggestionPreparationError('This quote has expired. Refresh the quote before buying.')
-    const [quotes] = await Promise.all([client.comboQuotes(intent.rfq), suggestionLegs(ticket)])
+    const [quotes] = await Promise.all([client.comboQuotes(intent.rfq), suggestionLegs(ticket, true)])
     const quote = quotes.find(row => row.id === confirmation)
     const current = quote && qualifyingComboOffer(quote, intent.rfq, intent.market, 1, multiple, intent.offer.expires)
     if (!current || current.price !== intent.offer.price || current.payout !== intent.offer.payout || current.expires <= Date.now())
@@ -123,7 +156,7 @@ export async function comboCheckout(db: Database, userId: number, ticket: Sugges
     const opened = await claim(db, ticket.id, opening, raw)
     if (oldRfq)
       await client.closeComboRfq(oldRfq)
-    const legs = await suggestionLegs(ticket)
+    const legs = await suggestionLegs(ticket, true)
     const collections = await kalshiComboCollections(legs[0]!.event_ticker)
     const market = await prepareExactCombo(legs, collections, client.prepareCombo.bind(client))
     const rfq = await client.createComboRfq(market, 1)

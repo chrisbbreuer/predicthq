@@ -12,15 +12,27 @@ import { VenueError } from './venue'
 
 export class SuggestionPreparationError extends Error {}
 
+export const LIVE_COMBO_PAYOUT_FLOOR = 1.5
+
 export async function suggestionCheckoutReason(db: Database, userId: number): Promise<string> {
   const halt = await haltState(db)
   if (halt.halted)
     return 'In-app buying is disabled for this deployment.'
   const allowed = (process.env.LIVE_CHECKOUT_USER_ALLOWLIST ?? '').split(',').map(id => id.trim()).includes(String(userId))
-  return allowed ? '' : 'In-app buying is unavailable for your account.'
+  if (!allowed)
+    return 'In-app buying is unavailable for your account.'
+  const account = await kalshiCheckoutAccount(db, userId)
+  return account ? '' : 'Connect an active Kalshi account in Account to buy in PredictHQ.'
 }
 
-function comboFits(collection: KalshiComboCollection, legs: KalshiComboLeg[]): boolean {
+export async function kalshiCheckoutAccount(db: Database, userId: number) {
+  const account = await db.query<{ credentials: string, status: string, jurisdiction: string }>(`
+    SELECT credentials, status, jurisdiction FROM exchange_accounts WHERE user_id = ? AND venue = 'kalshi'
+  `).get(userId)
+  return account?.status === 'active' && account.credentials && !jurisdictionObjection('kalshi', account.jurisdiction) ? account : null
+}
+
+export function comboFits(collection: KalshiComboCollection, legs: KalshiComboLeg[]): boolean {
   if (legs.length < collection.size_min || (collection.size_max > 0 && legs.length > collection.size_max))
     return false
   const events = new Map(collection.associated_events.map(event => [event.ticker, event]))
@@ -61,13 +73,17 @@ export async function prepareExactCombo(
   throw new SuggestionPreparationError('Kalshi does not offer these exact legs together.')
 }
 
-export async function suggestionLegs(ticket: Suggestion): Promise<KalshiComboLeg[]> {
+export async function suggestionLegs(ticket: Suggestion, liveCheckout = false): Promise<KalshiComboLeg[]> {
   const markets = await kalshiMarkets(ticket.legs.map(leg => leg.ticker), 0)
-  const quote = (await suggestionPrices([ticket], async () => markets))[ticket.id]
+  const quote = (await suggestionPrices([{ ...ticket, minReturnMultiple: LIVE_COMBO_PAYOUT_FLOOR }], async () => markets))[ticket.id]
   if (!quote || quote.flag === 'missing')
     throw new SuggestionPreparationError('A leg is closed or its current quote is unavailable.')
   if (quote.flag === 'confidence')
     throw new SuggestionPreparationError('At least one leg fell below the 70% cutoff.')
+  if (liveCheckout && quote.flag === 'spread')
+    throw new SuggestionPreparationError('A leg’s bid–ask spread widened. This ticket is off the suggested list.')
+  if (liveCheckout && quote.flag === 'payout')
+    throw new SuggestionPreparationError('The current estimated payout fell below $1.50.')
 
   return ticket.legs.map((leg) => {
     const event = markets.get(leg.ticker)?.eventTicker

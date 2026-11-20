@@ -65,24 +65,10 @@ const suggestions = state<any[]>([])
 const suggestionsLoading = state(true)
 const suggestionsError = state(false)
 const purchaseReason = state('')
-const checkoutEnabled = state(false)
 const checkoutBusy = state(0)
-const checkout = state<Record<number, { state: string, offer?: { id: string, price: number, payout: number, maxCost: number }, error?: string }>>({})
+const checkout = state<Record<number, { state: string, offer?: { id: string, payout: number, maxCost: number } }>>({})
 const selectedSlate = state<any>(null)
-const prepared = state<Record<number, { url: string, amount: string, error: string }>>({})
-const preparing = state(0)
-const pickGroups = derived(() => {
-  const slate = selectedSlate()
-  const groups: { title: string, tickets: any[] }[] = []
-  if (slate?.tickets.length)
-    groups.push({ title: '', tickets: slate.tickets })
-  if (slate?.alternatives.length)
-    groups.push({ title: 'Alternative combos', tickets: slate.alternatives })
-  if (suggestions().length)
-    groups.push({ title: 'More suggestions', tickets: suggestions() })
-  return groups
-})
-const suggestionBusy = state(0)
+let refreshingSuggestions = false
 const settled = state<any[]>([])
 const paperSettled = state<any[]>([])
 /** Which parlay cards have their settled legs unfolded, by position key. */
@@ -397,7 +383,7 @@ function clearPrivateBook(): void {
   suggestionsError.set(false)
   purchaseReason.set('')
   selectedSlate.set(null)
-  prepared.set({})
+  checkout.set({})
   counts.set({ all: 0, live: 0, upcoming: 0, parlays: 0, other: 0 })
   totals.set(blankTotals())
   empty.set(false)
@@ -627,10 +613,7 @@ async function load(fromVenue = false): Promise<void> {
   }
 }
 
-function suggestionView(row: any, group: 'saved' | 'alternative' | 'suggested', quote: any, matchups: Record<string, any>): any {
-  const quoted = quote?.flag !== 'confidence' && quote?.flag !== 'missing'
-  const isOpen = (row.status === 'pending' || row.status === 'approved') && Date.parse(row.expiresAt) > Date.now()
-  const single = row.kind === 'single'
+function suggestionView(row: any, quote: any, matchups: Record<string, any>): any {
   const legs = (row.legs || []).map((leg: any, index: number) => {
     const confidence = Number(leg.confidence ?? (leg.side === 'yes' ? leg.yesMid : 1 - leg.yesMid))
     const current = quote?.legs[index]
@@ -643,74 +626,49 @@ function suggestionView(row: any, group: 'saved' | 'alternative' | 'suggested', 
       book: current ? cents(current.bid) + ' bid · ' + cents(current.ask) + ' ask' : '',
       starts: leg.live ? 'Live' : startLabel(leg.startsAt),
       side: leg.side === 'no' ? 'NO' : 'YES',
-      prop: /^KXNBA(PTS|REB|AST|PRA|3PT|STL|BLK|STOCK)/i.test(leg.ticker),
       matchup: matchup ? matchup.away.name + ' at ' + matchup.home.name : '',
       league: matchup ? (LEAGUE_LABELS[matchup.league] || String(matchup.league).toUpperCase()) : '',
       teams: matchup ? [team(matchup.away), team(matchup.home)] : [],
       href: '/bet?ticker=' + encodeURIComponent(leg.ticker) + '&side=' + String(leg.side || 'yes').toLowerCase(),
     }
   })
-  const warnings: Record<string, string> = {
-    missing: 'A current quote is unavailable.',
-    confidence: 'At least one leg is below 70% now.',
-    spread: 'At least one bid–ask spread exceeds 2¢.',
-    payout: 'The estimated return is below ' + (row.minReturnMultiple ?? 2) + '×.',
-  }
-  const currentPayout = quote?.paperPayout ?? row.paperPayout
   return {
     id: row.id,
-    group,
-    kind: !single ? legs.length + '-leg combo' : legs[0]?.prop ? 'Player prop' : 'Game pick',
+    kind: legs.length + '-leg combo',
     legs,
     stake: usd(row.stake),
-    rationale: row.rationale,
-    single,
-    canApprove: group === 'suggested' ? isOpen && row.status === 'pending' : Boolean(row.canApprove),
-    approved: row.status === 'approved',
-    canPrepare: isOpen && quoted && !row.kalshiOrderUrl,
-    canCheckout: isOpen && quoted && !single && Number(row.stake) === 1,
-    kalshiOrderUrl: isOpen && quoted ? (row.kalshiOrderUrl || '') : '',
-    paperPayout: currentPayout != null ? usd(currentPayout) : '',
-    payoutLabel: quote?.paperPayout != null ? 'Est. paper return' : 'Paper return at selection',
-    payoutTarget: row.minReturnMultiple ? 'Target return ' + row.minReturnMultiple + '×' : '',
-    quoteWarning: warnings[quote?.flag] || '',
-    result: row.paperResult === 'won' ? 'Won' : row.paperResult === 'lost' ? 'Lost' : row.paperResult === 'partial' ? 'Partial settlement'
-      : row.paperResult === 'pending' ? 'Tracking on paper' : row.status === 'expired' ? 'Closed for review' : '',
-    resultTone: row.paperResult === 'won' ? 'pos' : row.paperResult === 'lost' ? 'neg' : '',
+    payout: quote?.paperPayout != null ? usd(quote.paperPayout) : '',
   }
 }
 
 async function loadSuggestions(): Promise<void> {
+  if (refreshingSuggestions)
+    return
+  refreshingSuggestions = true
   try {
     const response = await bookFetch('/api/trading/suggestions', { credentials: 'same-origin' })
-    if (!response.ok) {
-      suggestionsError.set(true)
-      return
-    }
+    if (!response.ok)
+      throw new Error('Could not refresh suggestions')
     const data = await response.json()
-    const toCard = (group: 'saved' | 'alternative' | 'suggested') => (ticket: any) => suggestionView(ticket, group, data.prices?.[ticket.id], data.matchups || {})
-    suggestions.set((data.pending || []).map(toCard('suggested')))
+    const cards = (data.live || []).filter((ticket: any) => Date.parse(ticket.expiresAt) > Date.now()
+      && !['submitted', 'executed'].includes(checkout()[ticket.id]?.state))
+    suggestions.set(cards.map((ticket: any) => suggestionView(ticket, data.prices?.[ticket.id], data.matchups || {})))
     const slate = data.slate
     const summary = slate ? ['won', 'lost', 'pending', 'partial'].map(status => slate.tickets.filter((ticket: any) => ticket.paperResult === status).length) : []
     const day = instant(slate?.createdAt)
-    const stake = Number(slate?.tickets?.[0]?.stake)
     selectedSlate.set(slate ? {
       title: day ? new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' }).format(day) + ' picks' : 'Saved picks',
-      tickets: slate.tickets.map(toCard('saved')),
-      alternatives: (slate.alternatives || []).map(toCard('alternative')),
-      description: stake > 0 && slate.tickets.every((ticket: any) => Number(ticket.stake) === stake)
-        ? 'We saved these picks at ' + usd(stake) + ' each for a paper trial. Real purchases appear in Positions.'
-        : 'We saved these picks for a paper trial. Real purchases appear in Positions.',
       summary: summary[0] + ' won · ' + summary[1] + ' lost · ' + summary[2] + ' awaiting results' + (summary[3] ? ' · ' + summary[3] + ' partial' : ''),
     } : null)
     purchaseReason.set(data.purchaseReason || '')
-    checkoutEnabled.set(data.checkoutEnabled === true)
     suggestionsError.set(false)
   }
   catch {
+    suggestions.set([])
     suggestionsError.set(true)
   }
   finally {
+    refreshingSuggestions = false
     suggestionsLoading.set(false)
   }
 }
@@ -719,6 +677,7 @@ async function liveCheckout(id: number, quoteId?: string): Promise<void> {
   if (checkoutBusy())
     return
   checkoutBusy.set(id)
+  note.set('')
   try {
     const response = await bookFetch('/api/trading/suggestions/' + id + '/checkout', {
       method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
@@ -728,56 +687,19 @@ async function liveCheckout(id: number, quoteId?: string): Promise<void> {
     if (!response.ok)
       throw new Error(data.message || data.error || 'Kalshi could not update this checkout.')
     checkout.set({ ...checkout(), [id]: data })
+    if (data.state === 'executed' || data.state === 'submitted') {
+      suggestions.set(suggestions().filter(ticket => ticket.id !== id))
+      note.set(data.state === 'executed' ? 'Kalshi confirmed the order. See Positions for the fill.' : 'Awaiting Kalshi confirmation. Check Positions for updates.')
+      void load(true)
+    }
   }
   catch (exception) {
-    checkout.set({ ...checkout(), [id]: { state: 'waiting', error: messageOf(exception) } })
+    note.set(messageOf(exception))
+    checkout.set({ ...checkout(), [id]: { state: 'waiting' } })
+    void loadSuggestions()
   }
   finally {
     checkoutBusy.set(0)
-  }
-}
-
-async function prepareKalshi(id: number): Promise<void> {
-  preparing.set(id)
-  try {
-    const response = await bookFetch('/api/trading/suggestions/' + id + '/prepare', { method: 'POST', credentials: 'same-origin' })
-    const data = await response.json()
-    if (!response.ok)
-      throw new Error(data.message || data.error || 'Kalshi could not prepare this ticket.')
-    prepared.set({ ...prepared(), [id]: { url: data.url, amount: usd(data.stake), error: '' } })
-  }
-  catch (requestError) {
-    prepared.set({ ...prepared(), [id]: { url: '', amount: '', error: messageOf(requestError) } })
-  }
-  finally {
-    preparing.set(0)
-  }
-}
-
-async function decide(id: number, approve: boolean): Promise<void> {
-  suggestionBusy.set(id)
-  note.set('')
-  try {
-    const response = await bookFetch('/api/trading/suggestions/' + id + '/decide', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ approve }),
-    })
-    const data = await response.json()
-    if (!response.ok)
-      throw new Error(data.message || data.error || ('Request failed (' + response.status + ')'))
-    const tracked = selectedSlate()?.tickets.some((ticket: any) => ticket.id === id)
-    note.set(approve
-      ? (tracked ? 'Approved on paper. This ticket is already tracked in your slate.' : 'Recorded as a paper bet. It settles on its own after the game.')
-      : 'Suggestion dismissed.')
-    await Promise.all([loadSuggestions(), load(false)])
-  }
-  catch (requestError) {
-    note.set(messageOf(requestError))
-  }
-  finally {
-    suggestionBusy.set(0)
   }
 }
 
@@ -843,8 +765,6 @@ onMount(start)
       .balance-metric span, .balance-label { display: flex; align-items: center; gap: .5rem; color: var(--muted); font-size: .8rem; }
       .balance-hero strong { font-size: clamp(1.55rem, 4vw, 2.3rem); letter-spacing: -.05em; line-height: 1.1; }
       .balance-metric strong { font-size: 1.05rem; }
-      .pick-group { margin-top: 1.7rem; }
-      .pick-group-title { margin: 0 0 .65rem; font-size: 1rem; font-weight: 700; }
       .pick-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; align-items: stretch; }
       .pick-card { display: flex; flex-direction: column; min-width: 0; padding: .95rem; gap: .75rem; border: 1px solid var(--border); border-radius: 1rem; background: var(--surface); }
       .pick-card-head, .pick-actions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .45rem .8rem; }
@@ -865,16 +785,15 @@ onMount(start)
       .pick-chance { text-align: right; }
       .pick-chance .num { display: block; font-size: 1.05rem; font-weight: 750; line-height: 1.1; }
       .pick-chance small { white-space: nowrap; }
-      .pick-warning { padding: .45rem .65rem; border-radius: .5rem; background: color-mix(in srgb, var(--neg) 7%, var(--surface)); color: var(--neg); font-size: .77rem; font-weight: 650; }
       .pick-details { color: var(--muted); font-size: .78rem; }
       .pick-details summary { cursor: pointer; font-weight: 650; }
       .pick-details p { margin-top: .45rem; }
       .pick-actions { margin-top: auto; padding-top: .7rem; border-top: 1px solid var(--border); }
       .pick-stake { display: grid; gap: .08rem; font-size: .72rem; color: var(--muted); }
       .pick-stake .num { font-size: .88rem; font-weight: 750; color: var(--text); }
-      .pick-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .65rem; }
       .pick-primary, .desk-text-action { display: inline-flex; align-items: center; justify-content: center; gap: .35rem; min-height: 2.15rem; font-size: .78rem; font-weight: 700; }
       .pick-primary { padding: .35rem .7rem; border-radius: .55rem; background: var(--accent); color: var(--on-accent); }
+      .live-checkout-button { width: 100%; min-height: 2.75rem; margin-top: .6rem; font-size: .9rem; }
       .pick-primary:hover { opacity: .9; }
       .desk-text-action { color: var(--text); }
       .desk-text-action:hover { text-decoration: underline; text-underline-offset: .14rem; }
@@ -1016,98 +935,74 @@ onMount(start)
 
           <section id="suggestion-slate" x-show="panel() === 'suggestions'" class="desk-panel" aria-labelledby="picks-title">
             <header class="desk-panel-heading">
-              <h2 id="picks-title" class="section-title">Suggested bets</h2>
-              <p class="mt-1 text-sm muted">PredictHQ looks for picks with at least a 70% market-implied chance per leg. Review the latest Kalshi odds before buying.</p>
+              <div class="flex gap-3 items-center justify-between">
+                <h2 id="picks-title" class="section-title">Suggested bets</h2>
+                <button type="button" class="desk-text-action" @click="loadSuggestions()">Refresh</button>
+              </div>
+              <p class="mt-1 text-sm muted">Get a live quote for a $1 combo and review the payout before buying.</p>
             </header>
 
             <p x-show="purchaseReason()" class="purchase-status" role="status">
               <i aria-hidden="true" class="h-4 w-4 i-hugeicons-information-circle"></i>
               <span x-text="purchaseReason()"></span>
+              <a x-show="purchaseReason().startsWith('Connect')" href="/account" class="font-semibold">Open Account</a>
             </p>
-
-            <aside x-show="selectedSlate()" class="saved-picks">
-              <div>
-                <h3 class="font-bold" x-text="selectedSlate()?.title"></h3>
-                <p class="mt-1 text-sm muted" x-text="selectedSlate()?.description"></p>
-              </div>
-              <button type="button" class="desk-text-action" @click="panel.set('paper')">See paper results <i aria-hidden="true" class="h-4 w-4 i-hugeicons-arrow-right-01"></i></button>
-            </aside>
 
             <p x-show="suggestionsLoading()" class="py-6 text-sm muted" role="status">Loading suggested bets…</p>
             <p x-show="suggestionsError()" class="py-4 text-sm neg" role="status">Suggested bets couldn’t refresh. Try Refresh.</p>
-            <p x-show="!suggestionsLoading() && !suggestionsError() && pickGroups().length === 0" class="py-8 text-sm muted">There are no suggested bets to review right now.</p>
+            <p x-show="!suggestionsLoading() && !suggestionsError() && !purchaseReason() && suggestions().length === 0" class="py-8 text-sm muted">No live suggestions meet your $1.50 minimum payout and 70% per-leg cutoff right now.</p>
 
-            <template :for="group in pickGroups">
-              <section class="pick-group">
-                <h3 x-show="group.title" class="pick-group-title" x-text="group.title"></h3>
-                <div class="pick-grid">
-                  <template :for="ticket in group.tickets">
-                    <article class="pick-card">
-                      <header class="pick-card-head">
-                        <h4 x-text="ticket.kind"></h4>
-                        <span x-show="ticket.result" :class="ticket.resultTone" x-text="ticket.result"></span>
-                      </header>
-                      <div class="pick-legs">
-                        <template :for="leg in ticket.legs">
-                          <a :href="leg.href" data-no-router class="pick-leg">
-                            <div class="match-marks" aria-hidden="true">
-                              <template :for="team in leg.teams">
-                                <span class="match-mark">
-                                  <img x-show="team.logo" :src="team.logo" alt="" width="27" height="27" loading="lazy">
-                                  <span x-show="!team.logo" x-text="team.initials"></span>
-                                </span>
-                              </template>
-                              <i x-show="leg.teams.length === 0" class="h-5 w-5 i-hugeicons-basketball-01"></i>
-                            </div>
-                            <div class="min-w-0">
-                              <span class="pick-name" x-text="leg.label"></span>
-                              <span x-show="leg.matchup" class="pick-matchup" x-text="leg.matchup"></span>
-                              <span class="pick-meta" x-text="leg.league ? leg.league + ' · ' + leg.starts : leg.starts"></span>
-                            </div>
-                            <div x-show="leg.confidence" class="pick-chance">
-                              <span class="num" x-text="leg.confidence"></span>
-                              <small x-text="leg.confidenceLabel"></small>
-                            </div>
-                          </a>
-                        </template>
-                      </div>
-                      <p x-show="ticket.quoteWarning" class="pick-warning" x-text="ticket.quoteWarning"></p>
-                      <details class="pick-details">
-                        <summary>Odds and reasoning</summary>
-                        <template :for="leg in ticket.legs">
-                          <p class="text-xs muted"><strong x-text="leg.label"></strong> <span x-text="leg.side"></span> <span x-show="leg.book" x-text="' · ' + leg.book"></span></p>
-                        </template>
-                        <p x-show="ticket.rationale" class="text-xs muted" x-text="ticket.rationale"></p>
-                      </details>
-                      <div class="pick-actions">
-                        <div class="pick-stake">
-                          <span class="num" x-text="ticket.stake + ' stake'"></span>
-                          <span x-show="ticket.paperPayout" x-text="ticket.payoutLabel + ' ' + ticket.paperPayout"></span>
-                          <span x-show="ticket.payoutTarget" x-text="ticket.payoutTarget"></span>
+            <div class="pick-grid">
+              <template :for="ticket in suggestions">
+                <article class="pick-card">
+                  <header class="pick-card-head">
+                    <h4 x-text="ticket.kind"></h4>
+                    <span class="num" x-text="ticket.stake + ' stake'"></span>
+                  </header>
+                  <div class="pick-legs">
+                    <template :for="leg in ticket.legs">
+                      <a :href="leg.href" data-no-router class="pick-leg">
+                        <div class="match-marks" aria-hidden="true">
+                          <template :for="team in leg.teams">
+                            <span class="match-mark">
+                              <img x-show="team.logo" :src="team.logo" alt="" width="27" height="27" loading="lazy">
+                              <span x-show="!team.logo" x-text="team.initials"></span>
+                            </span>
+                          </template>
+                          <i x-show="leg.teams.length === 0" class="h-5 w-5 i-hugeicons-basketball-01"></i>
                         </div>
-                        <div class="pick-buttons">
-                          <a x-show="!(checkoutEnabled() && ticket.canCheckout) && ticket.canPrepare && prepared()[ticket.id]?.url" :href="prepared()[ticket.id]?.url" target="_blank" rel="noopener noreferrer" class="pick-primary">Review on Kalshi <i aria-hidden="true" class="h-4 w-4 i-hugeicons-arrow-up-right-01"></i></a>
-                          <a x-show="!(checkoutEnabled() && ticket.canCheckout) && ticket.kalshiOrderUrl" :href="ticket.kalshiOrderUrl" target="_blank" rel="noopener noreferrer" class="pick-primary">Review on Kalshi <i aria-hidden="true" class="h-4 w-4 i-hugeicons-arrow-up-right-01"></i></a>
-                          <button x-show="!(checkoutEnabled() && ticket.canCheckout) && ticket.canPrepare && !prepared()[ticket.id]?.url" type="button" class="pick-primary" :disabled="preparing() !== 0" @click="prepareKalshi(ticket.id)" x-text="preparing() === ticket.id ? 'Preparing…' : ticket.single ? 'Prepare bet' : 'Prepare combo'"></button>
-                          <button x-show="checkoutEnabled() && ticket.canCheckout && checkout()[ticket.id]?.state !== 'executed' && !checkout()[ticket.id]?.offer" type="button" class="pick-primary" :disabled="checkoutBusy() !== 0" @click="liveCheckout(ticket.id)" x-text="checkoutBusy() === ticket.id ? 'Checking…' : checkout()[ticket.id]?.state === 'submitted' ? 'Check order status' : checkout()[ticket.id] ? 'Check for a quote' : 'Get live quote'"></button>
-                          <button x-show="checkoutEnabled() && ticket.canCheckout && checkout()[ticket.id]?.offer" type="button" class="pick-primary" :disabled="checkoutBusy() !== 0" @click="liveCheckout(ticket.id, checkout()[ticket.id]?.offer?.id)">Confirm live purchase</button>
-                          <button x-show="ticket.canApprove" type="button" class="desk-text-action" :disabled="suggestionBusy() !== 0" @click="decide(ticket.id, true)" x-text="ticket.group === 'saved' ? 'Mark reviewed' : 'Track on paper'"></button>
-                          <button x-show="ticket.group === 'suggested' && ticket.canApprove" type="button" class="desk-text-action" :disabled="suggestionBusy() !== 0" @click="decide(ticket.id, false)">Dismiss</button>
-                          <span x-show="ticket.approved" class="font-semibold text-xs pos">Reviewed on paper</span>
+                        <div class="min-w-0">
+                          <span class="pick-name" x-text="leg.label"></span>
+                          <span x-show="leg.matchup" class="pick-matchup" x-text="leg.matchup"></span>
+                          <span class="pick-meta" x-text="leg.league ? leg.league + ' · ' + leg.starts : leg.starts"></span>
                         </div>
-                      </div>
-                      <p x-show="prepared()[ticket.id]?.url && ticket.canPrepare" class="text-xs muted" x-text="'Planned stake ' + prepared()[ticket.id]?.amount + ' · check the live payout when you review.'"></p>
-                      <p x-show="prepared()[ticket.id]?.error" class="text-xs neg" role="status" x-text="prepared()[ticket.id]?.error"></p>
-                      <p x-show="checkout()[ticket.id]?.offer" class="font-semibold text-sm" role="status" x-text="'Up to ' + usd(checkout()[ticket.id]?.offer?.maxCost) + ' including fees · ' + usd(checkout()[ticket.id]?.offer?.payout) + ' payout if all legs win'"></p>
-                      <p x-show="checkout()[ticket.id]?.state === 'waiting' && !checkout()[ticket.id]?.error" class="text-xs muted" role="status">Waiting for a quote that meets the payout floor.</p>
-                      <p x-show="checkout()[ticket.id]?.state === 'submitted'" class="text-xs muted" role="status">Awaiting Kalshi confirmation. Check the order status here or in Positions.</p>
-                      <p x-show="checkout()[ticket.id]?.state === 'executed'" class="text-xs pos" role="status">Kalshi confirmed the order. See Positions for the fill.</p>
-                      <p x-show="checkout()[ticket.id]?.error" class="text-xs neg" role="status" x-text="checkout()[ticket.id]?.error"></p>
-                    </article>
-                  </template>
-                </div>
-              </section>
-            </template>
+                        <div x-show="leg.confidence" class="pick-chance">
+                          <span class="num" x-text="leg.confidence"></span>
+                          <small x-text="leg.confidenceLabel"></small>
+                        </div>
+                      </a>
+                    </template>
+                  </div>
+                  <div class="pick-actions">
+                    <div class="pick-stake">
+                      <span class="num" x-text="checkout()[ticket.id]?.offer ? usd(checkout()[ticket.id]?.offer?.payout) : ticket.payout"></span>
+                      <span x-text="checkout()[ticket.id]?.offer ? 'Live payout if all legs win' : 'Estimated total payout'"></span>
+                    </div>
+                  </div>
+                  <p x-show="checkout()[ticket.id]?.offer" class="text-sm muted" role="status" x-text="'Up to ' + usd(checkout()[ticket.id]?.offer?.maxCost) + ' including fees'"></p>
+                  <button x-show="!checkout()[ticket.id]?.offer" type="button" class="live-checkout-button pick-primary" :disabled="checkoutBusy() !== 0" @click="liveCheckout(ticket.id)" x-text="checkoutBusy() === ticket.id ? 'Checking Kalshi…' : checkout()[ticket.id]?.state === 'waiting' ? 'Check again for a quote' : 'Get live quote · $1'"></button>
+                  <button x-show="checkout()[ticket.id]?.offer" type="button" class="live-checkout-button pick-primary" :disabled="checkoutBusy() !== 0" @click="liveCheckout(ticket.id, checkout()[ticket.id]?.offer?.id)" x-text="checkoutBusy() === ticket.id ? 'Submitting…' : 'Confirm $1 purchase'"></button>
+                  <button x-show="checkout()[ticket.id]?.offer" type="button" class="desk-text-action" :disabled="checkoutBusy() !== 0" @click="liveCheckout(ticket.id)">Refresh quote</button>
+                  <p x-show="checkout()[ticket.id]?.state === 'waiting'" class="text-xs muted" role="status">Waiting for a live payout of at least $1.50.</p>
+                  <details class="pick-details">
+                    <summary>Individual leg prices</summary>
+                    <template :for="leg in ticket.legs">
+                      <p class="text-xs muted"><strong x-text="leg.label"></strong> <span x-text="leg.side"></span> <span x-show="leg.book" x-text="' · ' + leg.book"></span></p>
+                    </template>
+                  </details>
+                </article>
+              </template>
+            </div>
           </section>
 
           <div x-show="panel() === 'positions'" id="real-positions" class="desk-panel">

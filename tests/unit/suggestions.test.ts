@@ -3,6 +3,7 @@ import type { LiveLine } from '../../app/Services/trading/line-snapshots'
 import { afterEach, describe, expect, it } from 'bun:test'
 import { rmSync } from 'node:fs'
 import { toMarketInfo } from '../../app/Services/prediction-markets/kalshi-public'
+import { buyableCombos } from '../../app/Services/trading/live-combo-checkout'
 import { prepareExactCombo } from '../../app/Services/trading/suggestion-kalshi'
 import { suggestionPrices } from '../../app/Services/trading/suggestion-prices'
 import { approveSuggestion, dismissSuggestion, generateSuggestions, listSuggestions } from '../../app/Services/trading/suggestions'
@@ -10,7 +11,7 @@ import { parlayPayout } from '../../app/Services/trading/paper-parlays'
 import { VenueError } from '../../app/Services/trading/venue'
 import { schemaFor } from '../support/schema'
 
-const TABLES = ['suggestion_slates', 'bet_suggestions', 'paper_parlays', 'trading_strategies', 'prediction_markets', 'trade_decisions', 'exchange_orders', 'exchange_positions']
+const TABLES = ['suggestion_slates', 'bet_suggestions', 'suggestion_checkouts', 'paper_parlays', 'trading_strategies', 'prediction_markets', 'trade_decisions', 'exchange_orders', 'exchange_positions']
 const paths: string[] = []
 afterEach(() => {
   for (const path of paths.splice(0)) {
@@ -178,6 +179,30 @@ describe('suggestions', () => {
     markets.delete(parlay.legs[0]!.ticker)
     expect((await suggestionPrices([parlay], load, NOW))[parlay.id]).toMatchObject({ flag: 'missing', paperPayout: null })
     expect(await suggestionPrices([parlay], load, Date.parse(soon) + 1)).toEqual({})
+  })
+
+  it('only lists unsubmitted $1 combos with current qualifying odds and a supported collection', async () => {
+    const db = freshDb()
+    await generateSuggestions(db, 1, { lines: Array.from({ length: 7 }, (_, i) => line(i)), props: [], now: NOW })
+    const parlay = (await listSuggestions(db, 1, NOW)).pending.find(suggestion => suggestion.kind === 'parlay')!
+    const current = { ...parlay, minReturnMultiple: 1.5 }
+    const submitted = { ...current, id: 101 }
+    const rejectedPrice = { ...current, id: 102 }
+    const expired = { ...current, id: 103, expiresAt: new Date(NOW).toISOString() }
+    const unsupported = { ...current, id: 104, legs: current.legs.map((leg, index) => index ? leg : { ...leg, ticker: 'OTHER-MARKET' }) }
+    const single = { ...current, kind: 'single' as const, id: 105 }
+    const tickets = [current, submitted, rejectedPrice, expired, unsupported, single]
+    await db.insertOrIgnore('suggestion_checkouts', { bet_suggestion_id: submitted.id, payload: JSON.stringify({ phase: 'submitting' }) })
+    const load = async (tickers: string[]) => new Map(tickers.map(ticker => [ticker, toMarketInfo({
+      status: 'active', event_ticker: ticker, yes_bid_dollars: 0.7, yes_ask_dollars: 0.71,
+    })]))
+    const prices = await suggestionPrices(tickets, load, NOW)
+    prices[rejectedPrice.id]!.flag = 'payout'
+    const collections = async () => [{
+      collection_ticker: 'COMBOS', associated_events: current.legs.map(leg => ({ ticker: leg.ticker })),
+      size_min: 2, size_max: 4, is_all_yes: false, is_single_market_per_event: true,
+    }]
+    expect((await buyableCombos(db, tickets, prices, collections, NOW)).map(ticket => ticket.id)).toEqual([current.id])
   })
 
   it('prepares the exact Kalshi combo and rejects a changed side from the venue', async () => {
