@@ -1,9 +1,15 @@
 name: Production Realtime Check
+run-name: ${{ inputs.scheduled_at && format('Production Realtime Check · AWS {0}', inputs.scheduled_at) || 'Production Realtime Check' }}
 
 on:
   schedule:
     - cron: '3/15 * * * *'
   workflow_dispatch:
+    inputs:
+      scheduled_at:
+        description: EventBridge event time for an AWS-triggered check
+        required: false
+        type: string
 
 permissions:
   contents: read
