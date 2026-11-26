@@ -1,7 +1,7 @@
 import type { Database } from '../Support/db'
 import { log } from '@stacksjs/logging'
 import { useDatabase } from '@stacksjs/notifications'
-import { channel } from '@stacksjs/realtime'
+import { publishRealtime } from '../Support/realtime'
 
 /**
  * Noticing when the data stops arriving.
@@ -228,7 +228,7 @@ async function announce(db: Database, stall: Stall): Promise<void> {
   }
 
   try {
-    await channel('alerts').broadcast('ingest_stalled', payload)
+    await publishRealtime('alerts', 'ingest_stalled', payload)
   }
   catch (error) {
     log.warn(`[watchdog] could not broadcast the stall: ${message(error)}`)

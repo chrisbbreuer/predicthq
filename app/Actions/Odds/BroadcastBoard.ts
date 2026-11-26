@@ -1,4 +1,4 @@
-import { channel } from '@stacksjs/realtime'
+import { publishRealtime } from '../../Support/realtime'
 import { loadBoard } from '../../Support/odds'
 
 /**
@@ -23,7 +23,7 @@ export default {
     const payload = { at: new Date().toISOString(), summary: board.summary, events: board.events }
 
     try {
-      await channel('odds').public('board:updated', payload)
+      await publishRealtime('odds', 'board:updated', payload)
       return { broadcast: true, channel: 'odds', event: 'board:updated', markets: board.events.length }
     }
     catch (err) {

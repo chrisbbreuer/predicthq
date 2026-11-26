@@ -1,10 +1,10 @@
 import type { ServerConfig } from '@stacksjs/realtime'
-import { readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import process from 'node:process'
+import { fileURLToPath } from 'node:url'
 import { log } from '@stacksjs/logging'
 import { createServer, stopServer } from '@stacksjs/realtime'
-import { runScheduler, Schedule } from '@stacksjs/scheduler'
 import realtime from '../../config/realtime'
+import { isRealtimeBroadcast, publishRealtime } from '../Support/realtime'
 
 const server = realtime.server
 
@@ -41,86 +41,51 @@ const config: ServerConfig = {
   debug: realtime.debug,
 }
 
-/**
- * One scheduler at a time, across releases.
- *
- * Deploys are zero-downtime: the new release starts beside the old one and
- * takes over only once it is healthy. That is right for the socket server
- * and wrong for the scheduler, where two instances would fire every job
- * twice for the length of the overlap. So the socket server starts at once,
- * and the scheduler waits for this lock, which the old release lets go of
- * as it stops. The file lives in storage shared by every release.
- */
-const LOCK = process.env.SCHEDULER_LOCK_PATH || 'storage/ingest/.scheduler.lock'
+// Keep the public listener off the event loop that runs ingest and database
+// jobs. This process still owns the broadcast server and serves the same API.
+export async function startRealtimeScheduler(workerPath = fileURLToPath(new URL('./SchedulerWorker.ts', import.meta.url))): Promise<void> {
+  await createServer(config)
+  log.info(`[realtime] socket ready on ${server.host}:${server.port}`)
 
-/** The live process holding the lock, or null when it is free or stale. */
-function lockHolder(): number | null {
-  let pid = 0
-  try {
-    pid = Number(readFileSync(LOCK, 'utf8').trim())
-  }
-  catch {
-    return null
-  }
-  if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid)
-    return null
-  try {
-    process.kill(pid, 0)
-    return pid
-  }
-  catch (error) {
-    // EPERM: alive but someone else's. ESRCH: gone, so the lock is stale.
-    return (error as NodeJS.ErrnoException).code === 'EPERM' ? pid : null
-  }
-}
+  let stopping = false
+  const scheduler = Bun.spawn([process.execPath, workerPath], {
+    env: { ...process.env, PREDICTHQ_SCHEDULER_WORKER: '1' },
+    stdout: 'inherit',
+    stderr: 'inherit',
+    ipc(message) {
+      if (isRealtimeBroadcast(message)) {
+        void publishRealtime(message.channel, message.event, message.data)
+          .catch(error => log.warn(`[realtime] could not publish ${message.channel}/${message.event}: ${error}`))
+      }
+    },
+  })
 
-async function acquireSchedulerLock(): Promise<void> {
-  let announced = false
-  for (;;) {
-    const holder = lockHolder()
-    if (holder === null) {
-      writeFileSync(LOCK, String(process.pid))
+  async function shutdown(code: number): Promise<void> {
+    if (stopping)
       return
+
+    stopping = true
+    if (scheduler.exitCode === null && scheduler.signalCode === null)
+      scheduler.kill('SIGTERM')
+    await scheduler.exited
+    try {
+      await stopServer()
     }
-    if (!announced) {
-      log.info(`[realtime] socket ready; scheduler waits for the previous release (pid ${holder}) to stop`)
-      announced = true
+    finally {
+      process.exit(code)
     }
-    await Bun.sleep(500)
   }
+
+  process.on('SIGINT', () => void shutdown(0))
+  process.on('SIGTERM', () => void shutdown(0))
+
+  void scheduler.exited.then((code) => {
+    if (!stopping) {
+      log.error(`[realtime] scheduler worker exited with code ${code}`)
+      void shutdown(1)
+    }
+  })
 }
 
-function releaseSchedulerLock(): void {
-  try {
-    if (readFileSync(LOCK, 'utf8').trim() === String(process.pid))
-      unlinkSync(LOCK)
-  }
-  catch {}
-}
-
-let scheduling = false
-
-await createServer(config)
-log.info(`[realtime] socket ready on ${server.host}:${server.port}`)
-await acquireSchedulerLock()
-await runScheduler()
-scheduling = true
-log.info(`[realtime] scheduler running (pid ${process.pid})`)
-
-let stopping = false
-async function shutdown(signal: string): Promise<void> {
-  if (stopping)
-    return
-
-  stopping = true
-  log.info(`[realtime] ${signal} received; draining scheduler and sockets`)
-  if (scheduling)
-    await Schedule.gracefulShutdown()
-  // Let the next release's scheduler start as soon as this one has stopped.
-  releaseSchedulerLock()
-  await stopServer()
-  process.exit(0)
-}
-
-process.on('SIGINT', () => void shutdown('SIGINT'))
-process.on('SIGTERM', () => void shutdown('SIGTERM'))
+if (import.meta.main)
+  await startRealtimeScheduler()

@@ -1,5 +1,5 @@
 import { Database } from '../../Support/db'
-import { channel } from '@stacksjs/realtime'
+import { publishRealtime } from '../../Support/realtime'
 import { runAnalytics } from '../../Services/prediction-markets/analytics'
 import { KalshiProvider } from '../../Services/prediction-markets/kalshi'
 import { PolymarketProvider } from '../../Services/prediction-markets/polymarket'
@@ -135,7 +135,7 @@ export default {
     // settlement have committed. Realtime being unavailable must not turn
     // a successful ingest into a failed job; REST remains the fallback.
     try {
-      await channel('prediction-markets').public('flow:updated', result)
+      await publishRealtime('prediction-markets', 'flow:updated', result)
       return { ...result, broadcast: true }
     }
     catch {

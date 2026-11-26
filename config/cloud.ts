@@ -782,10 +782,9 @@ export const tsCloud: TsCloudConfig = {
       },
     },
 
-    // The realtime socket and scheduler deliberately share one process.
-    // Stacks broadcasts use a process-local server instance, so this is what
-    // lets a completed scheduled ingest push immediately to subscribers. It
-    // also leaves exactly one scheduler daemon writing market data.
+    // The realtime listener and scheduler worker share a service. The worker
+    // owns the scheduler lock and sends broadcasts to the listener over IPC,
+    // so database and ingestion work cannot block the public socket.
     scheduler: {
       root: '.',
       domain: 'realtime.predicthq.org',

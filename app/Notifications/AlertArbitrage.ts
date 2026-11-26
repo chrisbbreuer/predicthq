@@ -1,7 +1,7 @@
 import { Database } from '../Support/db'
 import { log } from '@stacksjs/logging'
 import { useDatabase } from '@stacksjs/notifications'
-import { channel } from '@stacksjs/realtime'
+import { publishRealtime } from '../Support/realtime'
 import { deliverAlert } from '../Services/alerts'
 
 export interface ArbitrageAlert {
@@ -42,7 +42,7 @@ export async function alertArbitrage(arb: ArbitrageAlert): Promise<void> {
   }
 
   try {
-    await channel('alerts').public('arbitrage', arb)
+    await publishRealtime('alerts', 'arbitrage', arb)
   }
   catch (error) {
     log.warn(`[alerts] could not broadcast the arbitrage on ${arb.title}: ${message(error)}`)
