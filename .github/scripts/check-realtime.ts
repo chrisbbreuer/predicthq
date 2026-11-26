@@ -62,6 +62,8 @@ async function checkHttp() {
     { name: 'request', at: ready },
     { name: 'first-byte', at: firstByte },
   ]
+  const completedPhase = phases.findLastIndex(phase => phase.at > 0)
+  const timeoutPhase = exitCode === 28 ? phases[completedPhase + 1]?.name ?? 'response-body' : null
   const ok = exitCode === 0 && timings.http_code === 200 && timings.http_version === '2'
   return {
     ok,
@@ -71,7 +73,8 @@ async function checkHttp() {
     status: timings.http_code,
     protocol: timings.http_version,
     remoteIp: timings.remote_ip || null,
-    lastCompletedPhase: phases.findLast(phase => phase.at > 0)?.name ?? null,
+    lastCompletedPhase: phases[completedPhase]?.name ?? null,
+    timeoutPhase,
     timingsMs: {
       dns: dns > 0 ? milliseconds(dns) : null,
       tcp: tcp > 0 ? milliseconds(tcp - dns) : null,
@@ -93,7 +96,9 @@ function checkWebSocket(): Promise<WebSocketResult> {
   let subscribedAt = 0
 
   return new Promise((resolve) => {
-    let timer = setTimeout(() => finish('Connection or subscription timed out'), 10_000)
+    let timer = setTimeout(() => finish(connectedMs === null
+      ? 'WebSocket connection timed out'
+      : 'WebSocket odds subscription timed out'), 10_000)
 
     function finish(error: string | null, update?: BoardUpdate) {
       clearTimeout(timer)
@@ -136,7 +141,7 @@ function checkWebSocket(): Promise<WebSocketResult> {
         subscribedAt = Date.now()
         clearTimeout(timer)
         // The board is broadcast every minute, with headroom for slow scheduled jobs.
-        timer = setTimeout(() => finish('No fresh odds update after subscription'), 120_000)
+        timer = setTimeout(() => finish('WebSocket odds update missing after 120 seconds'), 120_000)
       }
       const board = message.data
       if (message.event !== 'board:updated' || subscribedMs === null || !board?.at || !Array.isArray(board.events))
